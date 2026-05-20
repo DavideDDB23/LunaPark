@@ -1,0 +1,15 @@
+[gd_resource type="StandardMaterial3D" load_steps=5 format=3 uid="acg_rz859gsl"]
+
+[ext_resource type="Texture2D" uid="uid://acg_bvfq1u5i" id="Color" path="./PaintedWood003_2K-JPG_Color.jpg"]
+[ext_resource type="Texture2D" uid="uid://acg_u49pitxn" id="Displacement" path="./PaintedWood003_2K-JPG_Displacement.jpg"]
+[ext_resource type="Texture2D" uid="uid://acg_0nd6rm38" id="Roughness" path="./PaintedWood003_2K-JPG_Roughness.jpg"]
+[ext_resource type="Texture2D" uid="uid://acg_jvgquylb" id="NormalGL" path="./PaintedWood003_2K-JPG_NormalGL.jpg"]
+[resource]
+albedo_texture = ExtResource("Color")
+roughness_texture = ExtResource("Roughness")
+roughness_texture_channel = 4
+normal_texture = ExtResource("NormalGL")
+normal_enabled = true
+heightmap_texture = ExtResource("Displacement")
+heightmap_scale = 1.0
+heightmap_enabled = true
