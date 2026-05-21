@@ -1,0 +1,8 @@
+[      98ms] [LOG] buildSky @ http://localhost:8765/js/main.js?1779276054:53
+[     175ms] [LOG] buildPaths @ http://localhost:8765/js/main.js?1779276054:58
+[     275ms] [LOG] buildFence @ http://localhost:8765/js/main.js?1779276054:61
+[     296ms] [LOG] buildLampposts @ http://localhost:8765/js/main.js?1779276054:64
+[     342ms] [LOG] buildFoodStalls @ http://localhost:8765/js/main.js?1779276054:67
+[     354ms] [LOG] buildVegetation @ http://localhost:8765/js/main.js?1779276054:70
+[     379ms] [LOG] buildBenches @ http://localhost:8765/js/main.js?1779276054:73
+[     469ms] [LOG] hiding loader @ http://localhost:8765/js/main.js?1779276054:79

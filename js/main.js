@@ -10,7 +10,8 @@ import { buildFoodStalls } from './environment/FoodStalls.js';
 import { buildStage } from './environment/Stage.js';
 import { buildVegetation } from './environment/Vegetation.js';
 import { buildBenches } from './environment/Benches.js';
-import { buildEntranceGate } from './environment/Props.js';
+import { buildEntranceGate } from "./environment/Props.js";
+import { buildRiver } from "./environment/River.js";
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -48,6 +49,17 @@ const environmentGroup = new THREE.Group();
 environmentGroup.name = 'environment';
 scene.add(environmentGroup);
 
+const windInput = document.getElementById('wind');
+const windValEl = document.getElementById('windVal');
+function getWindSpeed() {
+  return windInput ? parseFloat(windInput.value) : 1.0;
+}
+if (windInput && windValEl) {
+  windInput.addEventListener('input', () => {
+    windValEl.textContent = parseFloat(windInput.value).toFixed(2);
+  });
+}
+
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
@@ -58,6 +70,9 @@ async function init() {
   
   console.log("buildPaths"); const paths = await buildPaths({ anisotropy: maxAniso });
   environmentGroup.add(paths);
+
+  console.log("buildRiver"); const river = await buildRiver();
+  environmentGroup.add(river);
 
   console.log("buildFence"); const fence = await buildFence({ anisotropy: maxAniso });
   environmentGroup.add(fence);
@@ -89,7 +104,19 @@ window.addEventListener('resize', onResize);
 
 function animate() {
   const delta = clock.getDelta();
+  const time = clock.getElapsedTime();
+  const wind = getWindSpeed();
   controls.update(delta);
+
+  const river = environmentGroup.getObjectByName('river');
+  if (river && river.userData.update) river.userData.update(delta, time);
+
+  const vegetation = environmentGroup.getObjectByName('vegetation');
+  if (vegetation && vegetation.userData.tick) vegetation.userData.tick(delta, time, wind);
+
+  const gate = environmentGroup.getObjectByName('entranceGate');
+  if (gate && gate.userData.tick) gate.userData.tick(delta, time, wind);
+
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

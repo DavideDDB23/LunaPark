@@ -29,6 +29,12 @@ function bakeSourceToSingleMesh(root) {
     }
   }
   const merged = mergeGeometries(geos, false);
+  // Recenter on XZ — source model may have its origin at one end of the segment.
+  // Without this, segment world origin is not the segment centre and adjacent placements leave gaps.
+  const cbb = new THREE.Box3().setFromBufferAttribute(merged.attributes.position);
+  const cx = (cbb.min.x + cbb.max.x) / 2;
+  const cz = (cbb.min.z + cbb.max.z) / 2;
+  merged.translate(-cx, 0, -cz);
   return { geometry: merged, material: mat };
 }
 
@@ -78,8 +84,8 @@ export async function buildFence() {
   for (let i = 0; i < count; i++) {
     const t = start + i * SEG_LEN;
     
-    // leave a gap at the south entrance (z = HALF, x near 0)
-    if (Math.abs(t) < 8) {
+    // Wider gap at the south entrance — entrance gate sits here, must not overlap fence.
+    if (Math.abs(t) < 12) {
         place(t, -HALF, 0); // only build north wall here
         place( HALF, t, Math.PI / 2); // east wall
         place(-HALF, t, Math.PI / 2); // west wall
@@ -94,5 +100,18 @@ export async function buildFence() {
   inst.count = idx; // Update actual instance count
   inst.instanceMatrix.needsUpdate = true;
   group.add(inst);
+
+  // Corner posts — close the gap at each of the 4 corners.
+  const cornerHeight = (bbox.max.y - bbox.min.y) * scale * 1.15;
+  const cornerMat = new THREE.MeshStandardMaterial({ color: 0xa67b4a, roughness: 0.9, metalness: 0.0 });
+  const cornerGeo = new THREE.BoxGeometry(0.5, cornerHeight, 0.5);
+  for (const [cx, cz] of [[-HALF, -HALF], [HALF, -HALF], [-HALF, HALF], [HALF, HALF]]) {
+    const post = new THREE.Mesh(cornerGeo, cornerMat);
+    post.position.set(cx, cornerHeight / 2, cz);
+    post.castShadow = true;
+    post.receiveShadow = true;
+    group.add(post);
+  }
+
   return group;
 }

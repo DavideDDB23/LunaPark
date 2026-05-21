@@ -4,9 +4,9 @@ import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 const STALL_URL = 'assets/models/stylized_carnival_booth.glb';
 
 const PLACEMENTS = [
-  // Hub area stalls (around the central circle)
-  ['stall_1',  12, -12, -Math.PI * 0.75], // NE quadrant
-  ['stall_2', -12,  12,  Math.PI * 0.25], // SW quadrant
+  // Hub area stalls — kept clear of river band (|z|<15) and NS path (|x|<5).
+  ['stall_1',  14, -22, -Math.PI * 0.75], // NE quadrant
+  ['stall_2', -14,  22,  Math.PI * 0.25], // SW quadrant
 ];
 
 function enableShadows(root) {
@@ -30,7 +30,7 @@ export async function buildFoodStalls() {
   const size = new THREE.Vector3();
   bbox.getSize(size);
 
-  const targetHeight = 4.0;
+  const targetHeight = 6.5;
   const scale = size.y > 0 ? targetHeight / size.y : 1;
   const groundOffset = -bbox.min.y * scale;
 

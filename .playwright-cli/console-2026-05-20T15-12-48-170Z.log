@@ -1,0 +1,11 @@
+[     427ms] [LOG] buildSky @ http://localhost:8765/js/main.js?1779276054:58
+[     447ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8765/favicon.ico:0
+[     523ms] [LOG] buildPaths @ http://localhost:8765/js/main.js?1779276054:63
+[     704ms] [LOG] buildFence @ http://localhost:8765/js/main.js?1779276054:66
+[     708ms] [LOG] buildLampposts @ http://localhost:8765/js/main.js?1779276054:69
+[     754ms] [LOG] buildFoodStalls @ http://localhost:8765/js/main.js?1779276054:72
+[     769ms] [LOG] buildVegetation @ http://localhost:8765/js/main.js?1779276054:75
+[     803ms] [LOG] buildBenches @ http://localhost:8765/js/main.js?1779276054:78
+[     902ms] [LOG] buildWater @ http://localhost:8765/js/main.js?1779276054:84
+[     903ms] [LOG] buildRocks @ http://localhost:8765/js/main.js?1779276054:88
+[     910ms] [LOG] hiding loader @ http://localhost:8765/js/main.js?1779276054:91

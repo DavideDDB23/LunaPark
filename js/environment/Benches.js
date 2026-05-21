@@ -24,7 +24,7 @@ export async function buildBenches() {
   const size = new THREE.Vector3();
   bbox.getSize(size);
 
-  const targetHeight = 1.2; // Benches normal size
+  const targetHeight = 1.8; // larger benches per user feedback
   const scale = size.y > 0 ? targetHeight / size.y : 1;
   const groundOffset = -bbox.min.y * scale;
 

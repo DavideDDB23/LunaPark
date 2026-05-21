@@ -1,0 +1,12 @@
+[     724ms] [LOG] buildSky @ http://localhost:8765/js/main.js?1779276054:57
+[     825ms] [LOG] buildPaths @ http://localhost:8765/js/main.js?1779276054:62
+[     860ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8765/favicon.ico:0
+[     997ms] [LOG] buildFence @ http://localhost:8765/js/main.js?1779276054:65
+[    1002ms] [LOG] buildLampposts @ http://localhost:8765/js/main.js?1779276054:68
+[    1051ms] [LOG] buildFoodStalls @ http://localhost:8765/js/main.js?1779276054:71
+[    1066ms] [LOG] buildVegetation @ http://localhost:8765/js/main.js?1779276054:74
+[    1101ms] [LOG] buildBenches @ http://localhost:8765/js/main.js?1779276054:77
+[    1208ms] [LOG] buildWater @ http://localhost:8765/js/main.js?1779276054:83
+[    1248ms] [WARNING] THREE.GLTFLoader: Unknown extension "KHR_materials_pbrSpecularGlossiness". @ https://unpkg.com/three@0.170.0/examples/jsm/loaders/GLTFLoader.js:414
+[    1256ms] [LOG] buildRocks @ http://localhost:8765/js/main.js?1779276054:87
+[    1262ms] [LOG] hiding loader @ http://localhost:8765/js/main.js?1779276054:90
