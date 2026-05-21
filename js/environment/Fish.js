@@ -10,7 +10,7 @@ import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/
 const WATER_LEVEL = 0.25;
 const FISH_URL = 'assets/models/clown_fish_low_poly_animated.glb';
 const FISH_COUNT = 8;
-const TARGET_FISH_LENGTH = 1.8; // bigger so they read clearly from a normal viewing distance
+const TARGET_FISH_LENGTH = 1.0;
 
 async function loadFishTemplate() {
   const gltf = await loadGLB(FISH_URL);
@@ -35,6 +35,7 @@ async function loadFishTemplate() {
         }
         o.material.toneMapped = true;
       }
+      o.frustumCulled = false; // Disable culling for skinned meshes moved by root groups
     }
   });
 
@@ -65,7 +66,7 @@ export async function buildFish() {
 
   for (let i = 0; i < FISH_COUNT; i++) {
     // Clone the static mesh — no animation mixer, no clipAction.
-    const inst = tmpl.source.clone(true);
+    const inst = cloneSkinned(tmpl.source);
     inst.scale.setScalar(tmpl.scale);
 
     // Three nested groups give us independent control:
@@ -87,62 +88,71 @@ export async function buildFish() {
       inst,
       forwardAxis: tmpl.forwardAxis,
       x: seedX,
-      speed: 2.2 + Math.random() * 1.8,
+      speed: 1.5 + Math.random() * 1.5,
       dir: Math.random() < 0.5 ? -1 : 1,
       lateralPhase: Math.random() * Math.PI * 2,
       bobPhase: Math.random() * Math.PI * 2,
       wagPhase: Math.random() * Math.PI * 2,
-      nextJump: 1.5 + Math.random() * 4, // first jump triggers soon
+      nextJump: 1.5 + Math.random() * 4,
       jumpT: -1,
-      jumpDur: 1.4 + Math.random() * 0.5,
+      jumpDur: 1.2 + Math.random() * 0.4, // Smoother timing
       jumpRoll: 0,
-      jumpHeight: 2.0 + Math.random() * 1.0, // jump well above water surface
+      jumpHeight: 0.2 + Math.random() * 0.2, // Small jumps for small fish
+      depthVariant: -0.10 - Math.random() * 0.05, // 0.10 to 0.15 absolute Y
     });
   }
 
   group.userData.tick = (delta, time, _windSpeed) => {
     for (const f of fishes) {
-      // While jumping, swim faster (escape burst).
-      const speedMul = f.jumpT >= 0 ? 1.6 : 1.0;
+      const speedMul = f.jumpT >= 0 ? 1.4 : 1.0;
       f.x += f.speed * speedMul * f.dir * delta;
       if (f.x > RIVER_X_MAX - 8) { f.dir = -1; f.x = RIVER_X_MAX - 8; }
       if (f.x < RIVER_X_MIN + 8) { f.dir =  1; f.x = RIVER_X_MIN + 8; }
 
       const cz = riverCenter(f.x);
       const hw = riverHalfWidth(f.x);
+      
+      // Smooth lateral movement using pure sine
       const lateral = Math.sin(time * 0.7 + f.lateralPhase) * (hw * 0.55);
       const z = cz + lateral;
 
       // ── Underwater swim ──────────────────────────────────────
-      // baseDepth must keep the fish above the ground plane (y=0) but below
-      // the water surface (y=WATER_LEVEL=0.25). Riverbed sits at y≈0.07, so
-      // we keep the fish around y=0.15 (mid-water).
-      const baseDepth = -0.10;
-      const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.03;
+      // Perfect analytical derivative for smooth banking, independent of delta
+      const lateralVel = Math.cos(time * 0.7 + f.lateralPhase) * (hw * 0.55) * 0.7;
+
+      const baseDepth = f.depthVariant;
+      const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.02;
       let y = WATER_LEVEL + baseDepth + bob;
-      let pitch = 0;
-      let roll = 0;
+      
+      // Base swim pitch gently follows the bob
+      let pitch = Math.cos(time * 1.8 + f.bobPhase) * 0.05;
+      
+      // Roll smoothly into turns
+      let roll = lateralVel * 0.3 * f.dir;
 
       // ── Jump trigger / arc ───────────────────────────────────
       if (f.jumpT < 0 && time >= f.nextJump) {
         f.jumpT = 0;
-        f.jumpRoll = (Math.random() - 0.5) * 1.0;
+        f.jumpRoll = (Math.random() - 0.5) * 0.8;
       }
+      
       if (f.jumpT >= 0) {
         f.jumpT += delta / f.jumpDur;
         if (f.jumpT >= 1) {
           f.jumpT = -1;
-          f.nextJump = time + 5 + Math.random() * 10;
+          f.nextJump = time + 4 + Math.random() * 8;
         } else {
           const t = f.jumpT;
-          // Smooth parabolic arc h(t) = -4t(t-1) → 0..1..0, peak at t=0.5.
-          const arc = -4 * t * (t - 1);
+          
+          // Pure sine wave for the jump arc is perfectly smooth over 0..1
+          const arc = Math.sin(t * Math.PI);
           y = THREE.MathUtils.lerp(WATER_LEVEL + baseDepth, WATER_LEVEL + f.jumpHeight, arc);
-          // Pitch = slope of arc: nose up climbing, level at apex, nose down descending.
-          const slope = -8 * t + 4;
-          pitch = Math.atan(slope * 0.45) * 1.1;
-          // Body roll: peaks at apex via sin(πt).
-          roll = Math.sin(t * Math.PI) * f.jumpRoll;
+          
+          // Pitch perfectly matches the derivative of the sine arc (cosine)
+          pitch = Math.cos(t * Math.PI) * 0.8;
+            
+          // Blend in mid-air flip seamlessly
+          roll = arc * f.jumpRoll;
         }
       }
 
