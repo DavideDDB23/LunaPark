@@ -1,6 +1,22 @@
-// Fish animation is entirely procedural — the imported GLB's keyframe animation
-// is intentionally NOT used. All swimming, body wiggle, jumping arc, pitch and roll
-// are computed here per-frame.
+// Fully procedural fish animation.
+// The clown_fish GLB ships with baked keyframe animation; loadGLB() strips it before
+// we get here, and we never instantiate an AnimationMixer. Everything below is hand-
+// driven sine math layered on the bind-pose skeleton.
+//
+// Skeleton (verified by traversal):
+//   bone_root_00 → bone_spine_front_01 → bone_spine_back_05 → bone_tailfin_06
+//                                       ↳ bone_fin_l_02 (left pectoral)
+//                                       ↳ bone_fin_r_03 (right pectoral)
+//                                       ↳ bone_mouth_04
+//
+// Animation layers, evaluated every frame on every fish:
+//   1. Traveling tail wave — tail leads, spine_back trails by phase, spine_front trails more.
+//      This is what reads as "swimming under its own power" instead of being drifted.
+//   2. Counter-yaw on the head/root  — opposite phase to the tail, very small amplitude.
+//      Real fish "wag" their heads slightly as a reaction to tail thrust.
+//   3. Cyclic propulsion — forward speed pulses with each tail beat (faster on the kick).
+//   4. Pectoral fin idle — left/right fins paddle gently out of phase.
+//   5. Jump arc — sine height arc + tangent pitch + spine curl + amplified wag (escape thrash).
 
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
@@ -12,30 +28,36 @@ const FISH_URL = 'assets/models/clown_fish_low_poly_animated.glb';
 const FISH_COUNT = 8;
 const TARGET_FISH_LENGTH = 1.0;
 
+const BONE_NAMES = {
+  root:       'bone_root_00',
+  spineFront: 'bone_spine_front_01',
+  spineBack:  'bone_spine_back_05',
+  tail:       'bone_tailfin_06',
+  finL:       'bone_fin_l_02',
+  finR:       'bone_fin_r_03',
+};
+
 async function loadFishTemplate() {
-  const gltf = await loadGLB(FISH_URL);
+  const gltf = await loadGLB(FISH_URL); // loadGLB already strips gltf.animations
   const source = gltf.scene;
 
-  // Give the clown-fish a visible orange-white striped look since the GLB ships with a
-  // plain white material (no texture). Add a small emissive tint so they read in shadow.
   source.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = false;
       if (o.material) {
         o.material.side = THREE.DoubleSide;
-        // Boost contrast: orange diffuse + slight emissive so fish are clearly visible
-        // even when partly under the water surface.
         if (o.material.color && o.material.color.getHex() === 0xffffff) {
           o.material.color.setHex(0xff6a1a);
         }
         if ('emissive' in o.material) {
           o.material.emissive = new THREE.Color(0xff3300);
-          o.material.emissiveIntensity = 0.35;
+          o.material.emissiveIntensity = 0.3;
         }
         o.material.toneMapped = true;
       }
-      o.frustumCulled = false; // Disable culling for skinned meshes moved by root groups
+      // SkinnedMesh bounding box ignores skinned deformation — leave culling off.
+      o.frustumCulled = false;
     }
   });
 
@@ -44,10 +66,23 @@ async function loadFishTemplate() {
   bbox.getSize(size);
   const longest = Math.max(size.x, size.y, size.z);
   const scale = longest > 0 ? TARGET_FISH_LENGTH / longest : 1;
-  // Forward axis = longest horizontal extent.
   const forwardAxis = size.x >= size.z ? 'x' : 'z';
 
   return { source, scale, forwardAxis };
+}
+
+function findBones(root) {
+  const found = {};
+  root.traverse((o) => {
+    if (!o.isBone) return;
+    for (const k of Object.keys(BONE_NAMES)) {
+      if (o.name === BONE_NAMES[k]) found[k] = o;
+    }
+  });
+  // Cache bind-pose rotations so we can add wag deltas on top.
+  const rest = {};
+  for (const k of Object.keys(found)) rest[k] = new THREE.Euler().copy(found[k].rotation);
+  return { ...found, rest };
 }
 
 export async function buildFish() {
@@ -65,105 +100,103 @@ export async function buildFish() {
   const fishes = [];
 
   for (let i = 0; i < FISH_COUNT; i++) {
-    // Clone the static mesh — no animation mixer, no clipAction.
     const inst = cloneSkinned(tmpl.source);
     inst.scale.setScalar(tmpl.scale);
 
-    // Three nested groups give us independent control:
-    //  root   — world-space position + yaw (heading)
-    //   wag   — per-frame body yaw (wiggle), so it doesn't fight with heading
-    //    inst — the static GLB mesh
-    const wag = new THREE.Group();
-    wag.add(inst);
-
     const root = new THREE.Group();
-    root.add(wag);
+    root.add(inst);
     group.add(root);
 
+    const bones = findBones(inst);
     const seedX = THREE.MathUtils.lerp(RIVER_X_MIN + 10, RIVER_X_MAX - 10, (i + 0.5) / FISH_COUNT);
 
     fishes.push({
       root,
-      wag,
       inst,
+      bones,
       forwardAxis: tmpl.forwardAxis,
       x: seedX,
-      speed: 1.5 + Math.random() * 1.5,
+      baseSpeed: 1.6 + Math.random() * 1.0,
       dir: Math.random() < 0.5 ? -1 : 1,
       lateralPhase: Math.random() * Math.PI * 2,
-      bobPhase: Math.random() * Math.PI * 2,
-      wagPhase: Math.random() * Math.PI * 2,
-      nextJump: 1.5 + Math.random() * 4,
-      jumpT: -1,
-      jumpDur: 1.2 + Math.random() * 0.4, // Smoother timing
-      jumpRoll: 0,
-      jumpHeight: 0.2 + Math.random() * 0.2, // Small jumps for small fish
-      depthVariant: -0.10 - Math.random() * 0.05, // 0.10 to 0.15 absolute Y
+      bobPhase:     Math.random() * Math.PI * 2,
+      wagPhase:     Math.random() * Math.PI * 2,
+      finPhase:     Math.random() * Math.PI * 2,
+      // Each fish has its own swim cadence (Hz) so they don't beat in sync.
+      swimFreq:     3.6 + Math.random() * 1.2,
+      nextJump:     1.5 + Math.random() * 4,
+      jumpT:        -1,
+      jumpDur:      1.2 + Math.random() * 0.4,
+      jumpRoll:     0,
+      jumpHeight:   0.7 + Math.random() * 0.5,
+      depthVariant: -0.10 - Math.random() * 0.05,
     });
   }
 
   group.userData.tick = (delta, time, _windSpeed) => {
     for (const f of fishes) {
-      const speedMul = f.jumpT >= 0 ? 1.4 : 1.0;
-      f.x += f.speed * speedMul * f.dir * delta;
+      const b = f.bones;
+
+      // ── Swim cycle phase (used by tail wag, head counter-yaw, propulsion pulse) ────
+      const swimFreqHz = f.jumpT >= 0 ? f.swimFreq * 2.2 : f.swimFreq;
+      const swimAmp    = f.jumpT >= 0 ? 0.55 : 0.40;
+      const phase = time * swimFreqHz * 2 * Math.PI + f.wagPhase;
+      const tailPhase = Math.sin(phase);
+
+      // ── Cyclic propulsion: speed pulses with each tail kick (~+25%/-15%). ──────────
+      const propulse = 0.85 + 0.25 * Math.max(0, Math.cos(phase));
+      const speedMul = (f.jumpT >= 0 ? 1.5 : 1.0) * propulse;
+      f.x += f.baseSpeed * speedMul * f.dir * delta;
       if (f.x > RIVER_X_MAX - 8) { f.dir = -1; f.x = RIVER_X_MAX - 8; }
       if (f.x < RIVER_X_MIN + 8) { f.dir =  1; f.x = RIVER_X_MIN + 8; }
 
       const cz = riverCenter(f.x);
       const hw = riverHalfWidth(f.x);
-      
-      // Smooth lateral movement using pure sine
       const lateral = Math.sin(time * 0.7 + f.lateralPhase) * (hw * 0.55);
       const z = cz + lateral;
-
-      // ── Underwater swim ──────────────────────────────────────
-      // Perfect analytical derivative for smooth banking, independent of delta
       const lateralVel = Math.cos(time * 0.7 + f.lateralPhase) * (hw * 0.55) * 0.7;
 
-      const baseDepth = f.depthVariant;
+      // ── Depth (underwater swim) ────────────────────────────────────────────────────
       const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.02;
-      let y = WATER_LEVEL + baseDepth + bob;
-      
-      // Base swim pitch gently follows the bob
-      let pitch = Math.cos(time * 1.8 + f.bobPhase) * 0.05;
-      
-      // Roll smoothly into turns
-      let roll = lateralVel * 0.3 * f.dir;
+      let y = WATER_LEVEL + f.depthVariant + bob;
 
-      // ── Jump trigger / arc ───────────────────────────────────
+      // Cruising pose: very subtle pitch from bob, gentle roll into lateral turn.
+      let pitch = Math.cos(time * 1.8 + f.bobPhase) * 0.04;
+      let roll  = lateralVel * 0.18 * f.dir;
+      let curlBack  = 0;
+      let curlFront = 0;
+
+      // ── Jump trigger ──────────────────────────────────────────────────────────────
       if (f.jumpT < 0 && time >= f.nextJump) {
         f.jumpT = 0;
-        f.jumpRoll = (Math.random() - 0.5) * 0.8;
+        f.jumpRoll = (Math.random() - 0.5) * 0.6;
       }
-      
+
       if (f.jumpT >= 0) {
         f.jumpT += delta / f.jumpDur;
         if (f.jumpT >= 1) {
           f.jumpT = -1;
-          f.nextJump = time + 4 + Math.random() * 8;
+          f.nextJump = time + 5 + Math.random() * 8;
         } else {
           const t = f.jumpT;
-          
-          // Pure sine wave for the jump arc is perfectly smooth over 0..1
           const arc = Math.sin(t * Math.PI);
-          y = THREE.MathUtils.lerp(WATER_LEVEL + baseDepth, WATER_LEVEL + f.jumpHeight, arc);
-          
-          // Pitch perfectly matches the derivative of the sine arc (cosine)
-          pitch = Math.cos(t * Math.PI) * 0.8;
-            
-          // Blend in mid-air flip seamlessly
+          y = THREE.MathUtils.lerp(WATER_LEVEL + f.depthVariant, WATER_LEVEL + f.jumpHeight, arc);
+          // Pitch = arc tangent (cosine) — nose up climbing → level at apex → nose down on descent.
+          pitch = Math.cos(t * Math.PI) * 0.95;
+          // Optional barrel-roll mid-air.
           roll = arc * f.jumpRoll;
+          // Body curl: the whole spine bends into the jump direction.
+          curlBack  = -Math.cos(t * Math.PI) * 0.30;
+          curlFront = -Math.cos(t * Math.PI) * 0.12;
         }
       }
 
+      // ── Root transform (world position + heading) ─────────────────────────────────
       f.root.position.set(f.x, y, z);
-
-      // ── Heading yaw (where the fish faces) + GLB orientation offset ──
       const baseYaw = f.dir > 0 ? 0 : Math.PI;
       const extraYaw = f.forwardAxis === 'z' ? Math.PI / 2 : 0;
       f.root.rotation.set(0, baseYaw + extraYaw, 0);
 
-      // Pitch axis depends on which local axis is "forward" for this GLB.
       const signedPitch = f.dir > 0 ? pitch : -pitch;
       if (f.forwardAxis === 'x') {
         f.root.rotation.z = signedPitch;
@@ -173,16 +206,47 @@ export async function buildFish() {
         f.root.rotation.z = roll;
       }
 
-      // ── Procedural body wiggle (tail wag) ────────────────────
-      // Faster wiggle while jumping (escape thrash); slow lazy wiggle when cruising.
-      const wagFreq  = (f.jumpT >= 0 ? 14.0 : 6.0);
-      const wagAmp   = (f.jumpT >= 0 ? 0.45 : 0.22);
-      const wiggle = Math.sin(time * wagFreq + f.wagPhase) * wagAmp;
-      // Apply around the GLB's vertical axis so body S-curves; axis depends on forward.
-      if (f.forwardAxis === 'x') {
-        f.wag.rotation.set(0, wiggle, 0);
-      } else {
-        f.wag.rotation.set(0, wiggle, 0);
+      // ── Bone-driven swim ──────────────────────────────────────────────────────────
+      // Travelling sine wave along the spine: tail leads, spine_back trails 0.35 rad,
+      // spine_front trails 0.70 rad, root counter-yaws in opposite phase.
+      if (b.tail) {
+        const r = b.rest.tail;
+        b.tail.rotation.set(r.x, r.y, r.z + tailPhase * swimAmp);
+      }
+      if (b.spineBack) {
+        const r = b.rest.spineBack;
+        b.spineBack.rotation.set(
+          r.x + curlBack,
+          r.y,
+          r.z + Math.sin(phase - 0.35) * swimAmp * 0.55
+        );
+      }
+      if (b.spineFront) {
+        const r = b.rest.spineFront;
+        b.spineFront.rotation.set(
+          r.x + curlFront,
+          r.y,
+          r.z + Math.sin(phase - 0.70) * swimAmp * 0.22
+        );
+      }
+      // Counter-yaw on the head/root bone — reaction to tail thrust, opposite phase, tiny amplitude.
+      if (b.root) {
+        const r = b.rest.root;
+        b.root.rotation.set(r.x, r.y, r.z - tailPhase * swimAmp * 0.10);
+      }
+
+      // ── Pectoral fin idle paddle ──────────────────────────────────────────────────
+      // Fins paddle out of phase with each other and 90° off the tail so the steering motion
+      // doesn't visually beat with the swim cycle.
+      const finPhase = time * (swimFreqHz * 0.6) * 2 * Math.PI + f.finPhase;
+      const finAmp = f.jumpT >= 0 ? 0.55 : 0.30;
+      if (b.finL) {
+        const r = b.rest.finL;
+        b.finL.rotation.set(r.x + Math.sin(finPhase) * finAmp, r.y, r.z);
+      }
+      if (b.finR) {
+        const r = b.rest.finR;
+        b.finR.rotation.set(r.x + Math.sin(finPhase + Math.PI) * finAmp, r.y, r.z);
       }
     }
   };

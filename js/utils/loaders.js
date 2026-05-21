@@ -56,9 +56,20 @@ export function sanitizeMaterials(root) {
   });
 }
 
+// Strip any keyframe animations from the imported GLB — this project's policy is that
+// every animation must be written by us (procedural). The bone hierarchy stays so we can
+// still drive bones manually.
 export function loadGLB(url) {
   return new Promise((resolve, reject) => {
-    gltfLoader.load(url, resolve, undefined, reject);
+    gltfLoader.load(
+      url,
+      (gltf) => {
+        gltf.animations = [];
+        resolve(gltf);
+      },
+      undefined,
+      reject
+    );
   });
 }
 
