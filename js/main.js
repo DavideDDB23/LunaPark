@@ -12,6 +12,7 @@ import { buildVegetation } from './environment/Vegetation.js';
 import { buildBenches } from './environment/Benches.js';
 import { buildEntranceGate } from "./environment/Props.js";
 import { buildRiver } from "./environment/River.js";
+import { DayNightCycle } from "./lighting/DayNightCycle.js";
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -60,14 +61,16 @@ if (windInput && windValEl) {
   });
 }
 
+let dayNight = null;
+
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
-  console.log("buildSky"); await buildSky(scene, renderer);
-  buildLights(scene);
+  console.log("buildSky"); const skyInfo = await buildSky(scene, renderer);
+  const lightInfo = buildLights(scene);
 
   environmentGroup.add(buildGround({ anisotropy: maxAniso }));
-  
+
   console.log("buildPaths"); const paths = await buildPaths({ anisotropy: maxAniso });
   environmentGroup.add(paths);
 
@@ -90,9 +93,49 @@ async function init() {
   environmentGroup.add(benches);
 
   environmentGroup.add(buildEntranceGate());
-  environmentGroup.add(buildStage({ anisotropy: maxAniso }));
+  const stage = buildStage({ anisotropy: maxAniso });
+  environmentGroup.add(stage);
+
+  // Day/night controller — slider in HUD drives this.
+  dayNight = new DayNightCycle({
+    scene,
+    renderer,
+    sun: lightInfo.sun,
+    hemi: lightInfo.hemi,
+    setSkyTime: skyInfo.setTime,
+    getLamps: () => lamps.children,
+    getStageSpotLight: () => stage.userData.spotLight,
+    getWaterMaterial: () => {
+      const water = river.getObjectByName('water');
+      const surface = water?.getObjectByName('river_surface');
+      return surface?.material;
+    },
+  });
+
+  setupTimeOfDayUI();
+  // Initial time = noon.
+  dayNight.setHour(12);
 
   console.log("hiding loader"); loaderEl.classList.add("hidden");
+}
+
+function setupTimeOfDayUI() {
+  const timeInput = document.getElementById('timeOfDay');
+  const timeVal = document.getElementById('timeVal');
+  if (!timeInput || !timeVal) return;
+
+  function fmt(h) {
+    const hours = Math.floor(h);
+    const mins = Math.floor((h - hours) * 60);
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  }
+
+  timeInput.addEventListener('input', () => {
+    const h = parseFloat(timeInput.value);
+    timeVal.textContent = fmt(h);
+    if (dayNight) dayNight.setHour(h);
+  });
+  timeVal.textContent = fmt(parseFloat(timeInput.value));
 }
 
 function onResize() {

@@ -3,23 +3,38 @@
 // are computed here per-frame.
 
 import * as THREE from 'three';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { loadGLB } from '../utils/loaders.js';
 import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/river.js';
 
 const WATER_LEVEL = 0.25;
 const FISH_URL = 'assets/models/clown_fish_low_poly_animated.glb';
 const FISH_COUNT = 8;
-const TARGET_FISH_LENGTH = 0.85;
+const TARGET_FISH_LENGTH = 1.8; // bigger so they read clearly from a normal viewing distance
 
 async function loadFishTemplate() {
   const gltf = await loadGLB(FISH_URL);
   const source = gltf.scene;
 
+  // Give the clown-fish a visible orange-white striped look since the GLB ships with a
+  // plain white material (no texture). Add a small emissive tint so they read in shadow.
   source.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = false;
-      if (o.material) o.material.side = THREE.DoubleSide;
+      if (o.material) {
+        o.material.side = THREE.DoubleSide;
+        // Boost contrast: orange diffuse + slight emissive so fish are clearly visible
+        // even when partly under the water surface.
+        if (o.material.color && o.material.color.getHex() === 0xffffff) {
+          o.material.color.setHex(0xff6a1a);
+        }
+        if ('emissive' in o.material) {
+          o.material.emissive = new THREE.Color(0xff3300);
+          o.material.emissiveIntensity = 0.35;
+        }
+        o.material.toneMapped = true;
+      }
     }
   });
 
@@ -77,11 +92,11 @@ export async function buildFish() {
       lateralPhase: Math.random() * Math.PI * 2,
       bobPhase: Math.random() * Math.PI * 2,
       wagPhase: Math.random() * Math.PI * 2,
-      nextJump: 3 + Math.random() * 7,
+      nextJump: 1.5 + Math.random() * 4, // first jump triggers soon
       jumpT: -1,
-      jumpDur: 1.2 + Math.random() * 0.5,
+      jumpDur: 1.4 + Math.random() * 0.5,
       jumpRoll: 0,
-      jumpHeight: 1.5 + Math.random() * 0.8,
+      jumpHeight: 2.0 + Math.random() * 1.0, // jump well above water surface
     });
   }
 
@@ -99,8 +114,11 @@ export async function buildFish() {
       const z = cz + lateral;
 
       // ── Underwater swim ──────────────────────────────────────
-      const baseDepth = -0.32;
-      const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.045;
+      // baseDepth must keep the fish above the ground plane (y=0) but below
+      // the water surface (y=WATER_LEVEL=0.25). Riverbed sits at y≈0.07, so
+      // we keep the fish around y=0.15 (mid-water).
+      const baseDepth = -0.10;
+      const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.03;
       let y = WATER_LEVEL + baseDepth + bob;
       let pitch = 0;
       let roll = 0;

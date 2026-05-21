@@ -78,6 +78,7 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform vec3 uSunDir;
+  uniform float uNight;       // 0 = full day, 1 = full night
   varying vec2 vUv;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -121,6 +122,10 @@ const fragmentShader = /* glsl */ `
     float foamRipple = smoothstep(0.55, 1.0, noise(vec2(vUv.x * 200.0 + uTime * 2.0, vUv.y * 40.0)));
     col = mix(col, foamCol, foamStrip * (0.6 + foamRipple * 0.4));
 
+    // Night dim — push toward a deep moon-tinted blue so river doesn't glow at midnight.
+    vec3 nightTint = vec3(0.02, 0.06, 0.14);
+    col = mix(col, nightTint + col * 0.18, clamp(uNight, 0.0, 1.0));
+
     gl_FragColor = vec4(col, 0.85);
   }
 `;
@@ -133,6 +138,7 @@ export function buildWater() {
     uniforms: {
       uTime: { value: 0 },
       uSunDir: { value: new THREE.Vector3(0.5, 1.0, 0.3).normalize() },
+      uNight: { value: 0.0 },
     },
     vertexShader,
     fragmentShader,
