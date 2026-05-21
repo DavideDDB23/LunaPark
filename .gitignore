@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Playwright CLI cache / runtime artifacts (screenshots, console logs, page snapshots)
+.playwright-cli/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if a build is added later)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# OS / misc
+Thumbs.db
+
+# Local debug helpers — not part of the published app
+debug.js
+
+# Blender / DCC source files shipped inside asset packs (the runtime only loads the GLB/OBJ/JPG/PNG/HDR)
+*.blend
+*.blend1
+*.usdc
+*.usda
+*.mtlx
+*.tres

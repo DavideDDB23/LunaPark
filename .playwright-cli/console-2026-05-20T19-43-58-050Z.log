@@ -1,9 +1,0 @@
-[     205ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8765/js/utils/river.js:0
-[   96791ms] [LOG] buildSky @ http://localhost:8765/js/main.js?1779276054:53
-[   96877ms] [LOG] buildPaths @ http://localhost:8765/js/main.js?1779276054:58
-[   97065ms] [LOG] buildFence @ http://localhost:8765/js/main.js?1779276054:61
-[   97070ms] [LOG] buildLampposts @ http://localhost:8765/js/main.js?1779276054:64
-[   97122ms] [LOG] buildFoodStalls @ http://localhost:8765/js/main.js?1779276054:67
-[   97138ms] [LOG] buildVegetation @ http://localhost:8765/js/main.js?1779276054:70
-[   97177ms] [LOG] buildBenches @ http://localhost:8765/js/main.js?1779276054:73
-[   97307ms] [LOG] hiding loader @ http://localhost:8765/js/main.js?1779276054:79

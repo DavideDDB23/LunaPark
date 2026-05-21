@@ -1,9 +1,0 @@
-- generic [active] [ref=e1]:
-  - generic:
-    - text: Luna Park — Phase 1
-    - text: "Drag: orbit · Scroll: zoom · Right-drag: pan"
-    - generic [ref=e3]:
-      - text: "Wind:"
-      - 'slider "Wind: 1.00" [ref=e4]': "1"
-      - text: "1.00"
-  - generic [ref=e5]: Loading scene…
