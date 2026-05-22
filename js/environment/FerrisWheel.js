@@ -28,53 +28,196 @@
 //   3. Passenger sway — 2 figures per gondola, each leaning on a phase-offset sine.
 
 import * as THREE from 'three';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { loadGLB } from '../utils/loaders.js';
 
 const MODEL_URL = 'assets/models/ferris_wheel-2.glb';
+const HUMANS_DIR = 'assets/models/Humans/';
 
 const TARGET_HEIGHT = 55;          // world units, top-of-wheel to base
 const MAX_SPEED = 0.30;            // rad/s of the ring at full speed
 const RAMP_UP = 1.5;               // s, ease-in   (TODO spec)
 const RAMP_DOWN = 2.0;             // s, ease-out  (TODO spec)
 const PASSENGERS_PER_GONDOLA = 2;
-const SWAY_AMP = 0.10;             // rad
-const SWAY_FREQ = 1.1;             // Hz-ish
+const SWAY_AMP = 0.05;             // rad — gentle seated body lean
+const SWAY_FREQ = 0.8;             // Hz-ish
+const HUMAN_TEMPLATE_COUNT = 8;   // distinct visitor models loaded, then cloned & reused
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
-const PASSENGER_COLORS = [0xd94f4f, 0x4f7fd9, 0x4fd97a, 0xd9b54f, 0x9b4fd9, 0xd97f4f];
+
+// Park-visitor models (Quaternius) — civilian outfits only, no soldiers/zombies/etc.
+const VISITOR_MODELS = [
+  'Casual_Male', 'Casual_Female', 'Casual2_Male', 'Casual2_Female',
+  'Casual3_Male', 'Casual3_Female', 'Casual_Bald', 'Suit_Male', 'Suit_Female',
+  'Kimono_Male', 'Kimono_Female', 'Worker_Male', 'Worker_Female',
+  'OldClassy_Male', 'OldClassy_Female',
+];
 
 const smoothstep = (t) => t * t * (3 - 2 * t);
 
-// ── A tiny seated human: torso, head, two arms. Sways about its own base. ───────────
-function makePassenger(height, colorHex) {
-  const g = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0xe7b59a, roughness: 0.8 });
-  const cloth = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.85 });
-
-  const torsoH = height * 0.55;
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(height * 0.18, torsoH * 0.6, 4, 8), cloth);
-  torso.position.y = torsoH * 0.5;
-  torso.castShadow = true;
-  g.add(torso);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(height * 0.16, 12, 10), skin);
-  head.position.y = torsoH + height * 0.16;
-  head.castShadow = true;
-  g.add(head);
-
-  const armGeo = new THREE.CapsuleGeometry(height * 0.06, torsoH * 0.5, 3, 6);
-  for (const s of [-1, 1]) {
-    const arm = new THREE.Mesh(armGeo, cloth);
-    arm.position.set(s * height * 0.22, torsoH * 0.55, 0);
-    arm.rotation.z = s * 0.25;
-    arm.castShadow = true;
-    g.add(arm);
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return g;
+  return a;
+}
+
+// Load a handful of random visitor models as reusable templates. loadGLB strips the baked
+// keyframe animations, so each arrives in its bind pose (already arms-down / standing).
+async function loadVisitorTemplates(count) {
+  const picks = shuffle(VISITOR_MODELS).slice(0, count);
+  const results = await Promise.allSettled(
+    picks.map((name) => loadGLB(`${HUMANS_DIR}${name}.gltf`))
+  );
+  const templates = [];
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const root = r.value.scene;
+    root.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = false;
+        o.frustumCulled = false; // SkinnedMesh bind-pose bbox ignores deformation
+      }
+    });
+    const h = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y || 3.3;
+    templates.push({ root, height: h });
+  }
+  return templates;
+}
+
+// Bones we drive procedurally (Quaternius rig — dots stripped by GLTFLoader). Verified axes:
+//   UpperArm{L,R}.y  → arm abduction (down→out→up); R uses +, L mirrors with −
+//   UpperLeg.x +1.45 / LowerLeg.x −1.55 → seated; Head.y/Torso.y turn; *.x nod/lean
+const ANIM_BONES = [
+  'UpperArmL', 'UpperArmR', 'LowerArmL', 'LowerArmR', 'Head', 'Torso',
+  'UpperLegL', 'UpperLegR', 'LowerLegL', 'LowerLegR',
+];
+
+function collectBones(fig) {
+  const map = {};
+  for (const n of ANIM_BONES) {
+    const b = fig.getObjectByName(n);
+    if (b) map[n] = { bone: b, rest: b.rotation.clone() };
+  }
+  return map;
+}
+
+// Set a bone to rest-pose + delta Euler (so it works regardless of the bind rotation).
+function pose(bones, name, dx = 0, dy = 0, dz = 0) {
+  const e = bones[name];
+  if (e) e.bone.rotation.set(e.rest.x + dx, e.rest.y + dy, e.rest.z + dz);
+}
+
+// Seated leg pose — applied every frame (legs never gesture). Upper body is driven by the
+// pose state-machine below.
+function applySeatedLegs(B) {
+  pose(B, 'UpperLegL', 1.45, 0, 0.10);
+  pose(B, 'UpperLegR', 1.45, 0, -0.10);
+  pose(B, 'LowerLegL', -1.55, 0, 0);
+  pose(B, 'LowerLegR', -1.55, 0, 0);
+}
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const UPPER_BONES = ['UpperArmR', 'UpperArmL', 'LowerArmR', 'LowerArmL', 'Head', 'Torso'];
+
+// Resting upper body (hands toward the lap / safety bar). Every named pose below is layered
+// over this, so any bone a pose doesn't mention eases back to rest.
+const REST_UPPER = {
+  UpperArmR: [0.55, 0, 0.10], UpperArmL: [0.55, 0, -0.10],
+  LowerArmR: [0.45, 0, 0], LowerArmL: [0.45, 0, 0],
+  Head: [0, 0, 0], Torso: [0, 0, 0],
+};
+
+// Static pose "shapes" (deltas from the rig's rest). Verified axes: UpperArm.y = abduction
+// (R +, L −); Head/Torso.y = turn, .x = nod/lean. Dynamic flair (wag, breathing) is added
+// live in updateRider so the held poses still feel alive.
+const POSE_DEFS = {
+  rest:   {},
+  lookL:  { Head: [0.05, 0.6, 0], Torso: [0, 0.18, 0] },
+  lookR:  { Head: [0.05, -0.6, 0], Torso: [0, -0.18, 0] },
+  lookUp: { Head: [-0.45, 0.1, 0], Torso: [-0.08, 0, 0] },
+  wave:   { UpperArmR: [0, 2.5, 0], LowerArmR: [0, 0, 0.2], Head: [0, 0.12, 0] },
+  cheer:  { UpperArmR: [0, 2.45, 0], UpperArmL: [0, -2.45, 0], Head: [-0.06, 0, 0] },
+  point:  { UpperArmR: [0.1, 1.45, 0], Head: [0, 0.32, 0], Torso: [0, 0.1, 0] },
+  photo:  { UpperArmR: [1.0, 0.4, 0.25], UpperArmL: [1.0, -0.4, -0.25],
+            LowerArmR: [0.8, 0, 0], LowerArmL: [0.8, 0, 0], Head: [-0.12, 0, 0] },
+  relax:  { UpperArmR: [0.15, 1.05, 0], Head: [0.06, -0.2, 0], Torso: [0.05, -0.05, 0] },
+  chatL:  { UpperArmR: [0.7, 0.35, 0], LowerArmR: [0.6, 0, 0], Head: [0, 0.5, 0], Torso: [0, 0.14, 0] },
+  chatR:  { UpperArmL: [0.7, -0.35, 0], LowerArmL: [0.6, 0, 0], Head: [0, -0.5, 0], Torso: [0, -0.14, 0] },
+};
+
+// Merge every pose over REST_UPPER so all six upper bones always have a target → clean blends.
+const POSES = {};
+for (const k in POSE_DEFS) {
+  POSES[k] = { ...REST_UPPER };
+  for (const b in POSE_DEFS[k]) POSES[k][b] = POSE_DEFS[k][b];
+}
+
+const ACTIONS_GENERAL = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'wave', 'point', 'photo', 'cheer', 'relax'];
+const ACTIONS_CHAT_L = ['chatL', 'chatL', 'rest', 'lookR'];   // neighbour sits to this rider's left
+const ACTIONS_CHAT_R = ['chatR', 'chatR', 'rest', 'lookL'];
+
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// One seated rider with a pose state-machine: it holds an action, then eases to the next.
+function makeRider(template, height, { pool, facingY = 0, phase = 0 }) {
+  const pivot = new THREE.Group();             // gentle body sway lives here
+  const fig = cloneSkinned(template.root);
+  fig.scale.setScalar(height / template.height);
+  fig.rotation.y = facingY + (Math.random() - 0.5) * 0.25;
+  pivot.add(fig);
+  return {
+    pivot, fig, bones: collectBones(fig), pool, phase,
+    from: 'rest', to: pick(pool), tStart: 0, transDur: 0.7,
+    nextSwitch: phase * 0.7 + Math.random() * 3, // stagger first switch
+    restZ: pivot.rotation.z,
+  };
+}
+
+// Advance the rider's state-machine and pose its bones for absolute time t.
+function updateRider(r, t) {
+  if (t >= r.nextSwitch) {
+    r.from = r.to;
+    r.to = pick(r.pool);
+    r.tStart = t;
+    r.nextSwitch = t + r.transDur + 2.5 + Math.random() * 4; // hold 2.5–6.5 s
+  }
+  const k = smoothstep(Math.min((t - r.tStart) / r.transDur, 1)); // eased blend
+  const B = r.bones;
+  applySeatedLegs(B);
+
+  const A = POSES[r.from], C = POSES[r.to];
+  for (const bn of UPPER_BONES) {
+    const a = A[bn], c = C[bn];
+    let dx = lerp(a[0], c[0], k), dy = lerp(a[1], c[1], k), dz = lerp(a[2], c[2], k);
+    if (bn === 'Torso') dx += Math.sin(t * 1.1 + r.phase) * 0.02;  // breathing
+    if (bn === 'Head') dy += Math.sin(t * 0.5 + r.phase) * 0.04;   // idle micro-glance
+    pose(B, bn, dx, dy, dz);
+  }
+
+  // Live flair on the active action (eased in by k so it doesn't pop on transition).
+  if (r.to === 'wave') {
+    pose(B, 'UpperArmR', 0, 2.5 + Math.sin(t * 7) * 0.12 * k, (0.2 + Math.sin(t * 7) * 0.3) * k);
+  } else if (r.to === 'cheer') {
+    const bob = Math.sin(t * 4) * 0.16 * k;
+    pose(B, 'UpperArmR', 0, 2.45 + bob, 0);
+    pose(B, 'UpperArmL', 0, -(2.45 + bob), 0);
+  } else if (r.to === 'chatL') {
+    pose(B, 'LowerArmR', 0.6 + Math.sin(t * 2.6 + r.phase) * 0.3 * k, 0, 0);
+  } else if (r.to === 'chatR') {
+    pose(B, 'LowerArmL', 0.6 + Math.sin(t * 2.6 + r.phase) * 0.3 * k, 0, 0);
+  }
 }
 
 export async function buildFerrisWheel({ position = [-50, 0, -50], camera, renderer } = {}) {
-  const gltf = await loadGLB(MODEL_URL); // animations already stripped here
+  // Wheel + visitor templates load in parallel; loadGLB strips animations from both.
+  const [gltf, visitors] = await Promise.all([
+    loadGLB(MODEL_URL),
+    loadVisitorTemplates(HUMAN_TEMPLATE_COUNT),
+  ]);
   const model = gltf.scene;
 
   // Shadows on, and drop the imported ground plane + imported lights so they don't
@@ -96,17 +239,23 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     throw new Error('FerrisWheel: expected "wheel" node and "cabin" gondolas in the GLB');
   }
 
-  // ── Measure the hub (centre of the gondola circle) and the axle (plane normal). ──
-  const worldOf = (o) => o.getWorldPosition(new THREE.Vector3());
-  const hub = new THREE.Vector3();
-  gondolaNodes.forEach((g) => hub.add(worldOf(g)));
-  hub.divideScalar(gondolaNodes.length);
+  // Each gondola node's ORIGIN is a pivot offset far from where its cabin actually renders,
+  // so we work from each cabin's true geometric centre instead. Counter-rotating around the
+  // node origin would fling the cabins across the sky.
+  const cabinCenters = gondolaNodes.map(
+    (g) => new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3())
+  );
+  const cabinSizeY = new THREE.Box3().setFromObject(gondolaNodes[0]).getSize(new THREE.Vector3()).y;
 
-  // Axle = normal of the plane the gondolas lie in. Cross two distinct radial vectors.
-  const r0 = worldOf(gondolaNodes[0]).sub(hub);
+  // ── Hub = centre of the cabin circle; axle = normal of the plane the cabins lie in. ──
+  const hub = new THREE.Vector3();
+  cabinCenters.forEach((c) => hub.add(c));
+  hub.divideScalar(cabinCenters.length);
+
+  const r0 = cabinCenters[0].clone().sub(hub);
   let axis = null;
-  for (let i = 1; i < gondolaNodes.length && !axis; i++) {
-    const ri = worldOf(gondolaNodes[i]).sub(hub);
+  for (let i = 1; i < cabinCenters.length && !axis; i++) {
+    const ri = cabinCenters[i].clone().sub(hub);
     const n = new THREE.Vector3().crossVectors(r0, ri);
     if (n.lengthSq() > 1e-6) axis = n.normalize();
   }
@@ -128,38 +277,43 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   wheelSpin.attach(wheelNode); // the visual ring now spins with us
 
-  // ── Gondolas: one orbiting mount each, gondola counter-rotated to stay upright. ──
+  // ── Gondolas: a mount at each cabin centre orbits with the wheel; a pivot at that same
+  //    point is counter-rotated so the cabin stays level AND stays put (rotates in place). ──
   const gondolaMounts = [];
+  const passH = cabinSizeY * 0.5;
   for (let i = 0; i < gondolaNodes.length; i++) {
     const gNode = gondolaNodes[i];
 
     const mount = new THREE.Group();
     mount.name = `gondola_mount_${i}`;
     wheelSpin.add(mount);
-    mount.position.copy(wheelSpin.worldToLocal(worldOf(gNode)));
+    mount.position.copy(wheelSpin.worldToLocal(cabinCenters[i].clone()));
     mount.updateMatrixWorld(true);
 
-    mount.attach(gNode); // gondola keeps world pose, now a child of its mount
-    const baseQuat = gNode.quaternion.clone(); // upright bind orientation at α = 0
+    const pivot = new THREE.Group(); // counter-rotated; sits exactly at the cabin centre
+    mount.add(pivot);
+    pivot.updateMatrixWorld(true);
+    pivot.attach(gNode); // cabin keeps world pose; its centre now coincides with the pivot
+    const baseQuat = pivot.quaternion.clone();
 
-    // Seat the passengers at the gondola's own centre (measured in its local frame).
-    const box = new THREE.Box3().setFromObject(gNode);
-    const seatWorld = box.getCenter(new THREE.Vector3());
-    const seatLocal = gNode.worldToLocal(seatWorld.clone());
-    const gh = box.getSize(new THREE.Vector3()).y; // gondola height in world units
-    const passH = gh * 0.42;
-
+    // Seat riders at the cabin centre (in the gondola's own frame), dropped onto the floor.
+    // Roughly a third of the gondolas are "chatting pairs": the two riders turn to each other
+    // and gesture; the rest each run the general action set facing outward.
+    const seatLocal = gNode.worldToLocal(cabinCenters[i].clone());
+    const chatting = Math.random() < 0.34;
     const passengers = [];
-    for (let p = 0; p < PASSENGERS_PER_GONDOLA; p++) {
-      const fig = makePassenger(passH, PASSENGER_COLORS[(i + p) % PASSENGER_COLORS.length]);
-      fig.position.copy(seatLocal);
-      fig.position.x += (p - (PASSENGERS_PER_GONDOLA - 1) / 2) * gh * 0.28;
-      fig.position.y -= gh * 0.18; // drop onto the seat
-      gNode.add(fig);
-      passengers.push({ fig, phase: i * 1.7 + p * 2.3, rest: fig.rotation.z });
+    for (let p = 0; p < PASSENGERS_PER_GONDOLA && visitors.length > 0; p++) {
+      const tmpl = visitors[Math.floor(Math.random() * visitors.length)];
+      const pool = chatting ? (p === 0 ? ACTIONS_CHAT_L : ACTIONS_CHAT_R) : ACTIONS_GENERAL;
+      const rider = makeRider(tmpl, passH, { pool, facingY: 0, phase: i * 1.7 + p * 2.3 });
+      rider.pivot.position.copy(seatLocal);
+      rider.pivot.position.x += (p - (PASSENGERS_PER_GONDOLA - 1) / 2) * cabinSizeY * 0.28;
+      rider.pivot.position.y -= cabinSizeY * 0.5; // drop feet onto the gondola floor
+      gNode.add(rider.pivot);
+      passengers.push(rider);
     }
 
-    gondolaMounts.push({ mount, gondolaMesh: gNode, baseQuat, passengers });
+    gondolaMounts.push({ mount, pivot, gondolaMesh: gNode, baseQuat, passengers });
   }
 
   // ── Top group: ride is auto-fit-scaled inside; panel stays at world (human) scale. ──
@@ -171,25 +325,35 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   rideScaled.add(model);
   group.add(rideScaled);
 
-  // Auto-fit: scale to TARGET_HEIGHT, drop base to y=0, centre horizontally on the group.
-  let bbox = new THREE.Box3().setFromObject(model);
-  const size = bbox.getSize(new THREE.Vector3());
-  const scale = TARGET_HEIGHT / size.y;
-  rideScaled.scale.setScalar(scale);
-  rideScaled.updateMatrixWorld(true);
-  bbox = new THREE.Box3().setFromObject(rideScaled);
-  const center = bbox.getCenter(new THREE.Vector3());
-  rideScaled.position.set(-center.x, -bbox.min.y, -center.z);
-
-  const radiusFinal = (Math.max(size.x, size.y) * scale) / 2;
-
+  // Place the group at its world spot first, then measure in world space. Each measurement
+  // is preceded by a forced matrix flush so the re-parented gondolas report true bounds
+  // (otherwise the lowest gondolas end up buried below the ground).
   group.position.set(position[0], position[1], position[2]);
+  group.updateMatrixWorld(true);
 
-  // ── Control panel (semaphore + lever), human-scaled, in front of the ride. ──
+  // Auto-fit: scale the whole ride to TARGET_HEIGHT.
+  let bbox = new THREE.Box3().setFromObject(rideScaled);
+  const scale = TARGET_HEIGHT / (bbox.getSize(new THREE.Vector3()).y || 1);
+  rideScaled.scale.setScalar(scale);
+  group.updateMatrixWorld(true);
+
+  // Re-measure, then shift so the ride is centred on X/Z and its base rests on the ground.
+  bbox = new THREE.Box3().setFromObject(rideScaled);
+  const size = bbox.getSize(new THREE.Vector3());
+  const center = bbox.getCenter(new THREE.Vector3());
+  rideScaled.position.x += position[0] - center.x;
+  rideScaled.position.y += position[1] - bbox.min.y;
+  rideScaled.position.z += position[2] - center.z;
+  group.updateMatrixWorld(true);
+
+  const radiusFinal = Math.max(size.x, size.y) / 2;
+
+  // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
   const panel = buildControlPanel();
   panel.position.set(radiusFinal * 0.55, 0, radiusFinal * 0.95);
-  panel.lookAt(0, panel.position.y + 1.4, 0); // face the wheel centre
   group.add(panel);
+  group.updateMatrixWorld(true);
+  panel.lookAt(position[0], position[1] + 8, position[2]); // face the wheel centre
 
   // ── Controller / state machine ──
   const controller = {
@@ -197,7 +361,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     wheelSpin,
     spinHub,
     panel,
-    running: false,        // starts paused
+    running: true,         // auto-start so the ride is visibly turning on load (panel toggles)
     angle: 0,
     phase: 0,              // 0 = stopped, 1 = full speed (eased)
     maxSpeed: MAX_SPEED,
@@ -221,12 +385,14 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     controller.angle += controller.maxSpeed * ease * delta;
     wheelSpin.rotation.z = controller.angle;
 
-    // Counter-rotate every gondola by -angle so its world orientation is frozen upright.
+    // Counter-rotate every gondola by -angle (about its cabin centre) so its world
+    // orientation is frozen upright while it rides around the wheel.
     counterQuat.setFromAxisAngle(Z_AXIS, -controller.angle);
     for (const gm of gondolaMounts) {
-      gm.gondolaMesh.quaternion.copy(counterQuat).multiply(gm.baseQuat);
-      for (const p of gm.passengers) {
-        p.fig.rotation.z = p.rest + Math.sin(time * SWAY_FREQ * Math.PI * 2 + p.phase) * SWAY_AMP;
+      gm.pivot.quaternion.copy(counterQuat).multiply(gm.baseQuat);
+      for (const r of gm.passengers) {
+        updateRider(r, time + r.phase);      // state-machine: blends between varied actions
+        r.pivot.rotation.z = r.restZ + Math.sin(time * SWAY_FREQ * Math.PI * 2 + r.phase) * SWAY_AMP;
       }
     }
 

@@ -1,34 +1,48 @@
-<!DOCTYPE html><html><head><meta charset="utf-8">
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;background:#556677}</style>
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
   "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
 } }
 </script></head><body>
+<canvas id="c" width="1400" height="500"></canvas>
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias:true });
+renderer.setClearColor(0x556677);
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(35, 2.8, 0.1, 100);
+cam.position.set(11, 3.2, 13); cam.lookAt(0, 2.0, 0);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.2));
+const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(4,8,6); scene.add(d);
+
 const loader = new GLTFLoader();
 const gltf = await new Promise((res, rej) => loader.load('assets/models/Humans/Casual_Male.gltf', res, undefined, rej));
-const root = gltf.scene;
-window.__root = root;
-function widthOf() {
-  const b = new THREE.Box3().setFromObject(root);
-  const s = b.getSize(new THREE.Vector3());
-  return { x: +s.x.toFixed(2), y: +s.y.toFixed(2), z: +s.z.toFixed(2) };
-}
-// reset all relevant bones, then apply one rotation, measure width
-window.testArm = (bone, axis, angle) => {
-  const l = root.getObjectByName('UpperArm.L'), r = root.getObjectByName('UpperArm.R');
-  l.rotation.set(0,0,0); r.rotation.set(0,0,0);
-  const b = root.getObjectByName(bone);
-  b.rotation.set(0,0,0);
-  b.rotation[axis] = angle;
-  root.updateMatrixWorld(true);
-  return widthOf();
+const tmpl = gltf.scene;
+
+// renderPose(specs): specs = [{ bones: { BoneName:[rx,ry,rz], ... } }, ...]
+// lays figures left→right, applies the per-bone Euler rotations, renders.
+window.renderPose = (specs) => {
+  for (let i = scene.children.length - 1; i >= 0; i--) {
+    const ch = scene.children[i];
+    if (ch.isLight) continue;
+    scene.remove(ch);
+  }
+  specs.forEach((spec, i) => {
+    const fig = cloneSkinned(tmpl);
+    fig.position.x = (i - (specs.length - 1) / 2) * 3.2;
+    for (const [bn, rot] of Object.entries(spec.bones || {})) {
+      const b = fig.getObjectByName(bn);
+      if (b) b.rotation.set(rot[0] || 0, rot[1] || 0, rot[2] || 0);
+    }
+    scene.add(fig);
+  });
+  renderer.render(scene, cam);
+  return true;
 };
 window.__ready = true;
-window.__baseWidth = widthOf();
-window.__bones = root.children.map(c=>c.name);
 </script>
 </body></html>
