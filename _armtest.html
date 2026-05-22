@@ -1,0 +1,34 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const loader = new GLTFLoader();
+const gltf = await new Promise((res, rej) => loader.load('assets/models/Humans/Casual_Male.gltf', res, undefined, rej));
+const root = gltf.scene;
+window.__root = root;
+function widthOf() {
+  const b = new THREE.Box3().setFromObject(root);
+  const s = b.getSize(new THREE.Vector3());
+  return { x: +s.x.toFixed(2), y: +s.y.toFixed(2), z: +s.z.toFixed(2) };
+}
+// reset all relevant bones, then apply one rotation, measure width
+window.testArm = (bone, axis, angle) => {
+  const l = root.getObjectByName('UpperArm.L'), r = root.getObjectByName('UpperArm.R');
+  l.rotation.set(0,0,0); r.rotation.set(0,0,0);
+  const b = root.getObjectByName(bone);
+  b.rotation.set(0,0,0);
+  b.rotation[axis] = angle;
+  root.updateMatrixWorld(true);
+  return widthOf();
+};
+window.__ready = true;
+window.__baseWidth = widthOf();
+window.__bones = root.children.map(c=>c.name);
+</script>
+</body></html>

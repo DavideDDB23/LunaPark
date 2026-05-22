@@ -12,6 +12,7 @@ import { buildVegetation } from './environment/Vegetation.js';
 import { buildBenches } from './environment/Benches.js';
 import { buildEntranceGate } from "./environment/Props.js";
 import { buildRiver } from "./environment/River.js";
+import { buildFerrisWheel } from "./environment/FerrisWheel.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 
 const canvas = document.getElementById('c');
@@ -96,6 +97,11 @@ async function init() {
   const stage = buildStage({ anisotropy: maxAniso });
   environmentGroup.add(stage);
 
+  console.log("buildFerrisWheel");
+  const ferrisWheel = await buildFerrisWheel({ position: [-50, 0, -50], camera, renderer });
+  environmentGroup.add(ferrisWheel);
+  window.__lp.ferrisWheel = ferrisWheel.userData.controller;
+
   // Day/night controller — slider in HUD drives this.
   dayNight = new DayNightCycle({
     scene,
@@ -159,6 +165,9 @@ function animate() {
 
   const gate = environmentGroup.getObjectByName('entranceGate');
   if (gate && gate.userData.tick) gate.userData.tick(delta, time, wind);
+
+  const ferris = environmentGroup.getObjectByName('ferrisWheel');
+  if (ferris && ferris.userData.tick) ferris.userData.tick(delta, time);
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
