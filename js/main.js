@@ -13,6 +13,7 @@ import { buildBenches } from './environment/Benches.js';
 import { buildEntranceGate } from "./environment/Props.js";
 import { buildRiver } from "./environment/River.js";
 import { buildFerrisWheel } from "./environment/FerrisWheel.js";
+import { buildCarousel } from "./environment/Carousel.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 
 const canvas = document.getElementById('c');
@@ -102,6 +103,11 @@ async function init() {
   environmentGroup.add(ferrisWheel);
   window.__lp.ferrisWheel = ferrisWheel.userData.controller;
 
+  console.log("buildCarousel");
+  const carousel = await buildCarousel({ position: [40, 0, -40], camera, renderer, anisotropy: maxAniso });
+  environmentGroup.add(carousel);
+  window.__lp.carousel = carousel.userData.controller;
+
   // Day/night controller — slider in HUD drives this.
   dayNight = new DayNightCycle({
     scene,
@@ -168,6 +174,9 @@ function animate() {
 
   const ferris = environmentGroup.getObjectByName('ferrisWheel');
   if (ferris && ferris.userData.tick) ferris.userData.tick(delta, time);
+
+  const carousel = environmentGroup.getObjectByName('carousel');
+  if (carousel && carousel.userData.tick) carousel.userData.tick(delta, time);
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

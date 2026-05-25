@@ -22,6 +22,8 @@
 - [x] River with animated water shader (waves, caustics, foam, specular)
 - [x] Fish in the river (animated clown fish with skeleton)
 - [x] Rocks
+- [x] Ferris Wheel (counter-rotating gondolas, 8 gondolas, 2 passengers each, passenger sway)
+- [x] Carousel (rotating platform, cone canopy, 8 horses with phase-offset bobbing, jockeys, control panel)
 
 ---
 
@@ -30,18 +32,18 @@
 All four rides must be built from scratch using Three.js geometry.
 No imported animations — all motion is JavaScript math.
 
-### 1. Ferris Wheel
+### 1. Ferris Wheel ✅
 - [x] Large rotating ring with 8 gondolas hanging from it
 - [x] The gondolas must stay upright while the ring spins — **counter-rotation**: each gondola rotates in the opposite direction of the ring by the exact same amount, so it always stays level
 - [x] 2 passengers per gondola, gently swaying
-- [x] Placed in the **northwest** area of the park
+- [x] Placed in the **northwest** area of the park (around −40, 0, −40)
 
-### 2. Carousel
-- [ ] Rotating platform with a decorated canopy (cone roof) on top
-- [ ] 8 horses mounted on poles around the platform
-- [ ] Horses bob up and down as the carousel spins — each horse at a different phase so they form a wave
-- [ ] A small jockey figure sitting on each horse, moving with it
-- [ ] Placed in the **northeast** area (around +40, 0, −40)
+### 2. Carousel ✅
+- [x] Rotating platform with a decorated canopy (cone roof) on top
+- [x] 8 horses mounted on poles around the platform
+- [x] Horses bob up and down as the carousel spins — each horse at a different phase so they form a wave
+- [x] A small jockey figure sitting on each horse, moving with it
+- [x] Placed in the **northeast** area (around +40, 0, −40)
 
 ### 3. Roller Coaster
 - [ ] A looping curved track built from a smooth mathematical curve (CatmullRom spline)
