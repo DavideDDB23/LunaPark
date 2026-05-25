@@ -31,10 +31,10 @@ All four rides must be built from scratch using Three.js geometry.
 No imported animations — all motion is JavaScript math.
 
 ### 1. Ferris Wheel
-- [ ] Large rotating ring with 8 gondolas hanging from it
-- [ ] The gondolas must stay upright while the ring spins — **counter-rotation**: each gondola rotates in the opposite direction of the ring by the exact same amount, so it always stays level
-- [ ] 2 passengers per gondola, gently swaying
-- [ ] Placed in the **northwest** area of the park (around −40, 0, −40)
+- [x] Large rotating ring with 8 gondolas hanging from it
+- [x] The gondolas must stay upright while the ring spins — **counter-rotation**: each gondola rotates in the opposite direction of the ring by the exact same amount, so it always stays level
+- [x] 2 passengers per gondola, gently swaying
+- [x] Placed in the **northwest** area of the park
 
 ### 2. Carousel
 - [ ] Rotating platform with a decorated canopy (cone roof) on top

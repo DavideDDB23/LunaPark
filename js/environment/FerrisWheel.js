@@ -80,6 +80,16 @@ async function loadVisitorTemplates(count) {
         o.castShadow = true;
         o.receiveShadow = false;
         o.frustumCulled = false; // SkinnedMesh bind-pose bbox ignores deformation
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((mat) => {
+            if (mat.name === 'Skin') {
+              mat.color.setRGB(1.0, 0.88, 0.82); // Light Caucasian skin tone
+              mat.roughness = 0.6;
+              mat.metalness = 0.0;
+            }
+          });
+        }
       }
     });
     const h = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y || 3.3;
@@ -147,6 +157,33 @@ const POSE_DEFS = {
   relax:  { UpperArmR: [0.15, 1.05, 0], Head: [0.06, -0.2, 0], Torso: [0.05, -0.05, 0] },
   chatL:  { UpperArmR: [0.7, 0.35, 0], LowerArmR: [0.6, 0, 0], Head: [0, 0.5, 0], Torso: [0, 0.14, 0] },
   chatR:  { UpperArmL: [0.7, -0.35, 0], LowerArmL: [0.6, 0, 0], Head: [0, -0.5, 0], Torso: [0, -0.14, 0] },
+
+  // Standing poses
+  standRest: {
+    Torso: [0.15, 0, 0], Head: [0.05, 0, 0],
+    UpperArmR: [0.4, 0.2, 0], UpperArmL: [0.4, -0.2, 0],
+    LowerArmR: [0.5, 0, 0], LowerArmL: [0.5, 0, 0]
+  },
+  standWave: {
+    Torso: [0.10, 0, 0], Head: [0, 0.12, 0],
+    UpperArmR: [0, 2.5, 0], LowerArmR: [0, 0, 0.2],
+    UpperArmL: [0.4, -0.2, 0], LowerArmL: [0.5, 0, 0]
+  },
+  standCheer: {
+    Torso: [0.05, 0, 0], Head: [-0.06, 0, 0],
+    UpperArmR: [0, 2.45, 0], UpperArmL: [0, -2.45, 0],
+    LowerArmR: [0.2, 0, 0], LowerArmL: [0.2, 0, 0]
+  },
+  standPoint: {
+    Torso: [0.12, 0.1, 0], Head: [0, 0.32, 0],
+    UpperArmR: [0.1, 1.45, 0],
+    UpperArmL: [0.4, -0.2, 0], LowerArmL: [0.5, 0, 0]
+  },
+  standLook: {
+    Torso: [0.28, 0, 0], Head: [0.25, 0.4, 0],
+    UpperArmR: [0.5, 0.15, 0], UpperArmL: [0.5, -0.15, 0],
+    LowerArmR: [0.6, 0, 0], LowerArmL: [0.6, 0, 0]
+  }
 };
 
 // Merge every pose over REST_UPPER so all six upper bones always have a target → clean blends.
@@ -156,22 +193,24 @@ for (const k in POSE_DEFS) {
   for (const b in POSE_DEFS[k]) POSES[k][b] = POSE_DEFS[k][b];
 }
 
-const ACTIONS_GENERAL = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'wave', 'point', 'photo', 'cheer', 'relax'];
-const ACTIONS_CHAT_L = ['chatL', 'chatL', 'rest', 'lookR'];   // neighbour sits to this rider's left
-const ACTIONS_CHAT_R = ['chatR', 'chatR', 'rest', 'lookL'];
+const ACTIONS_SEATED_GENERAL = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'wave', 'point', 'photo', 'cheer', 'relax'];
+const ACTIONS_SEATED_CHAT_L = ['chatL', 'chatL', 'rest', 'lookR'];   // neighbour sits to this rider's left
+const ACTIONS_SEATED_CHAT_R = ['chatR', 'chatR', 'rest', 'lookL'];
+const ACTIONS_STANDING = ['standRest', 'standRest', 'standWave', 'standCheer', 'standPoint', 'standLook'];
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-// One seated rider with a pose state-machine: it holds an action, then eases to the next.
-function makeRider(template, height, { pool, facingY = 0, phase = 0 }) {
+// One rider with a pose state-machine: it holds an action, then eases to the next.
+function makeRider(template, height, { pool, facingY = 0, phase = 0, standing = false }) {
   const pivot = new THREE.Group();             // gentle body sway lives here
   const fig = cloneSkinned(template.root);
   fig.scale.setScalar(height / template.height);
-  fig.rotation.y = facingY + (Math.random() - 0.5) * 0.25;
+  fig.rotation.y = facingY;
   pivot.add(fig);
   return {
-    pivot, fig, bones: collectBones(fig), pool, phase,
-    from: 'rest', to: pick(pool), tStart: 0, transDur: 0.7,
+    pivot, fig, bones: collectBones(fig), pool, phase, standing,
+    from: pool.includes('rest') || pool.includes('standRest') ? (pool.includes('standRest') ? 'standRest' : 'rest') : pool[0],
+    to: pick(pool), tStart: 0, transDur: 0.7,
     nextSwitch: phase * 0.7 + Math.random() * 3, // stagger first switch
     restZ: pivot.rotation.z,
   };
@@ -187,7 +226,17 @@ function updateRider(r, t) {
   }
   const k = smoothstep(Math.min((t - r.tStart) / r.transDur, 1)); // eased blend
   const B = r.bones;
-  applySeatedLegs(B);
+
+  if (r.standing) {
+    // Standing legs (straight)
+    pose(B, 'UpperLegL', 0, 0, 0);
+    pose(B, 'UpperLegR', 0, 0, 0);
+    pose(B, 'LowerLegL', 0, 0, 0);
+    pose(B, 'LowerLegR', 0, 0, 0);
+  } else {
+    // Seated legs
+    applySeatedLegs(B);
+  }
 
   const A = POSES[r.from], C = POSES[r.to];
   for (const bn of UPPER_BONES) {
@@ -199,9 +248,9 @@ function updateRider(r, t) {
   }
 
   // Live flair on the active action (eased in by k so it doesn't pop on transition).
-  if (r.to === 'wave') {
-    pose(B, 'UpperArmR', 0, 2.5 + Math.sin(t * 7) * 0.12 * k, (0.2 + Math.sin(t * 7) * 0.3) * k);
-  } else if (r.to === 'cheer') {
+  if (r.to === 'wave' || r.to === 'standWave') {
+    pose(B, 'UpperArmR', 0, 2.5 + Math.sin(t * 8) * 0.15 * k, (0.2 + Math.sin(t * 8) * 0.3) * k);
+  } else if (r.to === 'cheer' || r.to === 'standCheer') {
     const bob = Math.sin(t * 4) * 0.16 * k;
     pose(B, 'UpperArmR', 0, 2.45 + bob, 0);
     pose(B, 'UpperArmL', 0, -(2.45 + bob), 0);
@@ -209,6 +258,14 @@ function updateRider(r, t) {
     pose(B, 'LowerArmR', 0.6 + Math.sin(t * 2.6 + r.phase) * 0.3 * k, 0, 0);
   } else if (r.to === 'chatR') {
     pose(B, 'LowerArmL', 0.6 + Math.sin(t * 2.6 + r.phase) * 0.3 * k, 0, 0);
+  } else if (r.to === 'standLook') {
+    pose(B, 'Head', 0.25, 0.4 + Math.sin(t * 1.5) * 0.3 * k, 0);
+    pose(B, 'Torso', 0.28 + Math.sin(t * 1.0) * 0.04 * k, 0, 0);
+  } else if (r.to === 'standRest') {
+    pose(B, 'Head', 0.05 + Math.sin(t * 0.8) * 0.05 * k, Math.sin(t * 0.4) * 0.1 * k, 0);
+  } else if (r.to === 'standPoint') {
+    pose(B, 'UpperArmR', 0.1 + Math.sin(t * 2) * 0.05 * k, 1.45 + Math.sin(t * 1.5) * 0.1 * k, 0);
+    pose(B, 'Head', 0, 0.32 + Math.sin(t * 1.5) * 0.1 * k, 0);
   }
 }
 
@@ -289,7 +346,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   // ── Gondolas: a mount at each cabin hanger orbits with the wheel; a pivot at that same
   //    point is counter-rotated so the cabin stays level AND stays put (rotates in place). ──
   const gondolaMounts = [];
-  const passH = cabinSizeY * 0.5;
+  const passH = cabinSizeY * 0.5; // Restore original human size scale
   for (let i = 0; i < gondolaNodes.length; i++) {
     const gNode = gondolaNodes[i];
 
@@ -305,19 +362,45 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     pivot.attach(gNode); // cabin keeps world pose; its hanger now coincides with the pivot
     const baseQuat = pivot.quaternion.clone();
 
-    // Seat riders at the cabin centre (in the gondola's own frame), dropped onto the floor.
+    // Seat/stand riders at the cabin centre (in the gondola's own frame), dropped onto the floor.
     // Roughly a third of the gondolas are "chatting pairs": the two riders turn to each other
-    // and gesture; the rest each run the general action set facing outward.
+    // and gesture; the rest can either sit or stand up, facing outward to wave.
     const seatLocal = gNode.worldToLocal(cabinCenters[i].clone());
     const chatting = Math.random() < 0.34;
     const passengers = [];
     for (let p = 0; p < PASSENGERS_PER_GONDOLA && visitors.length > 0; p++) {
       const tmpl = visitors[Math.floor(Math.random() * visitors.length)];
-      const pool = chatting ? (p === 0 ? ACTIONS_CHAT_L : ACTIONS_CHAT_R) : ACTIONS_GENERAL;
-      const rider = makeRider(tmpl, passH, { pool, facingY: 0, phase: i * 1.7 + p * 2.3 });
+      
+      let standing = false;
+      let pool = [];
+      let facingY = 0;
+      let zSign = 0;
+
+      if (chatting) {
+        standing = false;
+        pool = p === 0 ? ACTIONS_SEATED_CHAT_L : ACTIONS_SEATED_CHAT_R;
+        facingY = p === 0 ? Math.PI / 2 - 0.2 : -Math.PI / 2 + 0.2;
+      } else {
+        standing = Math.random() < 0.35; // 35% chance to stand
+        pool = standing ? ACTIONS_STANDING : ACTIONS_SEATED_GENERAL;
+        if (standing) {
+          zSign = Math.random() > 0.5 ? 1 : -1;
+          facingY = (zSign > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.15;
+        } else {
+          facingY = (Math.random() - 0.5) * 0.2;
+        }
+      }
+
+      const rider = makeRider(tmpl, passH, { pool, facingY, phase: i * 1.7 + p * 2.3, standing });
       rider.pivot.position.copy(seatLocal);
-      rider.pivot.position.x += (p - (PASSENGERS_PER_GONDOLA - 1) / 2) * cabinSizeY * 0.28;
-      rider.pivot.position.y -= cabinSizeY * 0.5; // drop feet onto the gondola floor
+      rider.pivot.position.x += (p - (PASSENGERS_PER_GONDOLA - 1) / 2) * cabinSizeY * 0.22; // Proportional X separation
+      rider.pivot.position.y -= cabinSizeY * 0.28; // Raise pivot to align feet/hips with the actual cabin floor/seats
+      
+      if (standing) {
+        // Shift standing riders closer to the handrail/fence but stay safely within Z bounds
+        rider.pivot.position.z += zSign * cabinSizeY * 0.10;
+      }
+
       gNode.add(rider.pivot);
       passengers.push(rider);
     }
