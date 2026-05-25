@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
+import { loadVisitorTemplates, makeRider, updateRider, ACTIONS_SEATED_GENERAL, getPassengerWorldHeight } from './Passengers.js';
 
 const HORSE_MODEL_URL = 'assets/models/carousel_horse.glb';
 
 // Animation constants
 const PLATFORM_OMEGA = 0.8;      // rad/s platform rotation at full speed
 const HORSE_BOB_FREQ = 1.5;      // Bob cycles/s
-const BOB_AMP = 0.6;             // Bob amplitude in meters
-const HORSE_BASE_Y = 1.8;        // Default height on pole
+const BOB_AMP = 0.53;            // Bob amplitude in meters
+const HORSE_BASE_Y = 2.73;       // Default height on pole
 
 const RAMP_UP = 1.5;             // s, ease-in
 const RAMP_DOWN = 2.0;           // s, ease-out
@@ -43,97 +44,17 @@ function createStripedTexture() {
   return texture;
 }
 
-// Procedural jockey made from simple Three.js primitives
-function buildProceduralJockey(index) {
-  const jockeyGroup = new THREE.Group();
-  jockeyGroup.name = `jockey_${index}`;
-
-  const colors = [0x3a86c8, 0xc83a3a, 0x3ac85c, 0xc8a23a, 0x863ac8, 0x3ac8b8, 0xc86a3a, 0x8bc83a];
-  const jacketColor = colors[index % colors.length];
-
-  const jacketMat = new THREE.MeshStandardMaterial({ color: jacketColor, roughness: 0.5, metalness: 0.1 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: 0xfbfbfb, roughness: 0.7 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xffe0bd, roughness: 0.6 });
-  const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
-  const helmetMat = new THREE.MeshStandardMaterial({ color: jacketColor, roughness: 0.2, metalness: 0.7 });
-  const goggleMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.1, metalness: 0.9 });
-
-  // Torso
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.07, 0.32, 8), jacketMat);
-  torso.position.y = 0.16;
-  torso.castShadow = true;
-  jockeyGroup.add(torso);
-
-  // Head
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), skinMat);
-  head.position.y = 0.36;
-  head.castShadow = true;
-  jockeyGroup.add(head);
-
-  // Helmet
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10, 0, Math.PI * 2, 0, Math.PI * 0.65), helmetMat);
-  helmet.position.y = 0.375;
-  helmet.rotation.x = 0.15;
-  helmet.castShadow = true;
-  jockeyGroup.add(helmet);
-
-  // Visor / Goggles
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.025, 0.06), goggleMat);
-  visor.position.set(0, 0.38, 0.05);
-  jockeyGroup.add(visor);
-
-  // Left leg
-  const leftThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.22, 6), pantsMat);
-  leftThigh.position.set(-0.08, 0.08, -0.02);
-  leftThigh.rotation.z = Math.PI / 4;
-  leftThigh.rotation.x = -Math.PI / 6;
-  jockeyGroup.add(leftThigh);
-  
-  const leftShin = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.18, 6), pantsMat);
-  leftShin.position.set(-0.14, -0.04, 0.02);
-  leftShin.rotation.x = Math.PI / 6;
-  jockeyGroup.add(leftShin);
-  
-  const leftBoot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.08), bootMat);
-  leftBoot.position.set(-0.14, -0.13, 0.04);
-  jockeyGroup.add(leftBoot);
-
-  // Right leg
-  const rightThigh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.22, 6), pantsMat);
-  rightThigh.position.set(0.08, 0.08, -0.02);
-  rightThigh.rotation.z = -Math.PI / 4;
-  rightThigh.rotation.x = -Math.PI / 6;
-  jockeyGroup.add(rightThigh);
-  
-  const rightShin = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.18, 6), pantsMat);
-  rightShin.position.set(0.14, -0.04, 0.02);
-  rightShin.rotation.x = Math.PI / 6;
-  jockeyGroup.add(rightShin);
-  
-  const rightBoot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.08), bootMat);
-  rightBoot.position.set(0.14, -0.13, 0.04);
-  jockeyGroup.add(rightBoot);
-
-  // Arms leaning forward (grasping the pole)
-  const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.22, 6), jacketMat);
-  leftArm.position.set(-0.09, 0.2, 0.07);
-  leftArm.rotation.x = Math.PI / 3;
-  leftArm.rotation.z = -Math.PI / 8;
-  jockeyGroup.add(leftArm);
-
-  const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.22, 6), jacketMat);
-  rightArm.position.set(0.09, 0.2, 0.07);
-  rightArm.rotation.x = Math.PI / 3;
-  rightArm.rotation.z = Math.PI / 8;
-  jockeyGroup.add(rightArm);
-
-  return jockeyGroup;
-}
-
 export async function buildCarousel({ position = [40, 0, -40], camera, renderer, anisotropy = 8 } = {}) {
-  // Load horse GLB
-  const gltf = await loadGLB(HORSE_MODEL_URL);
+  // Load horse GLB and visitor templates in parallel
+  const [gltf, visitors] = await Promise.all([
+    loadGLB(HORSE_MODEL_URL),
+    loadVisitorTemplates(8)
+  ]);
   const rawHorse = gltf.scene;
+
+  // Filter out kimono models which have single-skirt geometry and cannot spread their legs
+  const carouselVisitors = visitors ? visitors.filter(v => !v.name.toLowerCase().includes('kimono')) : [];
+  const activeVisitors = carouselVisitors.length > 0 ? carouselVisitors : visitors;
 
   // Configure raw model shadows
   rawHorse.traverse((o) => {
@@ -143,11 +64,13 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     }
   });
 
+  hideEmbeddedPole(rawHorse);
+
   // Calculate horse bounding box and scale
   const horseBbox = new THREE.Box3().setFromObject(rawHorse);
   const horseSize = new THREE.Vector3();
   horseBbox.getSize(horseSize);
-  const targetHorseY = 2.4; // target height in world units
+  const targetHorseY = 4.0; // target height in world units
   const horseScale = horseSize.y > 0 ? targetHorseY / horseSize.y : 1;
 
   // Find center of horse to offset it correctly
@@ -198,8 +121,8 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   rotatingAssembly.name = 'carousel_rotating_assembly';
   group.add(rotatingAssembly);
 
-  // Platform: Cylinder of radius 12, thickness 0.6
-  const platformMesh = new THREE.Mesh(new THREE.CylinderGeometry(12, 12, 0.6, 48), platformMat);
+  // Platform: Cylinder of radius 12.0, thickness 0.6
+  const platformMesh = new THREE.Mesh(new THREE.CylinderGeometry(12.0, 12.0, 0.6, 48), platformMat);
   platformMesh.position.y = 0.3; // resting on ground
   platformMesh.receiveShadow = true;
   platformMesh.castShadow = true;
@@ -210,7 +133,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   trimMesh.position.y = 0.3;
   rotatingAssembly.add(trimMesh);
 
-  // Central column: Mirror-finished main support cylinder
+  // Central column: Mirror-finished main support cylinder (radius 2.0, height 5.5)
   const columnMesh = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 5.5, 24), mirrorMat);
   columnMesh.position.y = 0.3 + 0.3 + 2.75; // above base
   columnMesh.castShadow = true;
@@ -218,30 +141,30 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   rotatingAssembly.add(columnMesh);
 
   // Column gold moldings (decorative bands)
-  const bottomBand = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 0.4, 24), goldMat);
-  bottomBand.position.y = 0.3 + 0.3 + 0.2;
+  const bottomBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
+  bottomBand.position.y = 0.3 + 0.3 + 0.1;
   rotatingAssembly.add(bottomBand);
 
-  const topBand = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 0.4, 24), goldMat);
-  topBand.position.y = 0.3 + 0.3 + 5.3;
+  const topBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
+  topBand.position.y = 0.3 + 0.3 + 5.4;
   rotatingAssembly.add(topBand);
 
-  // Canopy conical roof: Cone of radius 13, height 3.5
+  // Canopy conical roof: Cone of radius 13.2, height 3.5
   const canopyMesh = new THREE.Mesh(new THREE.ConeGeometry(13.2, 3.5, 32), canopyMat);
-  canopyMesh.position.y = 0.3 + 0.3 + 5.5 + 1.75;
+  canopyMesh.position.y = 0.3 + 0.3 + 5.5 + 1.75; // 0.6 + 5.5 + 1.75 = 7.85
   canopyMesh.castShadow = true;
   canopyMesh.receiveShadow = true;
   rotatingAssembly.add(canopyMesh);
 
   // Canopy valance/rim
   const canopyRim = new THREE.Mesh(new THREE.CylinderGeometry(13.2, 13.2, 0.4, 32), goldMat);
-  canopyRim.position.y = 0.3 + 0.3 + 5.5;
+  canopyRim.position.y = 0.3 + 0.3 + 5.5; // 0.6 + 5.5 = 6.1
   canopyRim.castShadow = true;
   rotatingAssembly.add(canopyRim);
 
   // ── Poles & Horses ──
   const horses = [];
-  const poles = [];
+
   const poleRadius = 8.5; // distance from center
 
   // Build emissive bulbs for night lighting
@@ -278,12 +201,14 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     mountGroup.rotation.y = -angle + MODEL_ROTATION_OFFSET;
     rotatingAssembly.add(mountGroup);
 
-    // Vertical pole (gold): Cylinder of radius 0.08, height 5.8
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 5.8, 8), goldMat);
-    pole.position.y = 2.9; // centered on mount
+    // Stationary pole (gold) — horse slides up/down on it via horseContainer bobbing.
+    // Slightly thicker than GLB's built-in pole to conceal it during bob.
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 6.2, 12), goldMat
+    );
+    pole.position.y = 3.1; // centered: spans Y 0–6.2 in mountGroup space
     pole.castShadow = true;
     mountGroup.add(pole);
-    poles.push(pole);
 
     // Horse container group (for Y-bobbing)
     const horseContainer = new THREE.Group();
@@ -298,18 +223,69 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     horse.position.copy(horseCenter).multiplyScalar(-horseScale);
     horseContainer.add(horse);
 
-    // Add jockey sitting on the horse
-    const jockey = buildProceduralJockey(i);
-    // Position jockey on horse back
-    jockey.position.set(0.0, 0.28, -0.05); // local coordinates relative to horse center
-    jockey.rotation.y = Math.PI; // Face forward along with horse (raw horse faces backward compared to rider bind)
-    jockey.scale.setScalar(2.4);
-    horseContainer.add(jockey);
+    // Add Quaternius human rider sitting on the horse
+    if (activeVisitors && activeVisitors.length > 0) {
+      const tmpl = activeVisitors[i % activeVisitors.length];
+      const currentHeight = getPassengerWorldHeight();
+      const rider = makeRider(tmpl, currentHeight, {
+        pool: ACTIONS_SEATED_GENERAL,
+        facingY: 0,
+        phase: i * (Math.PI / 4)
+      });
+      rider.index = i;
+      
+      // Position rider realistically on the horse saddle:
+      // Since rider origin is at the feet, we offset the pivot so that the rider's
+      // hips (approx 28% of height) align with the horse's saddle
+      const saddleHeight = 0.42 * (targetHorseY / 2.4);
+      const riderY = saddleHeight - currentHeight * 0.28;
+      const riderZ = -0.10 * (targetHorseY / 2.4);
+      rider.pivot.position.set(-0.3, riderY, riderZ); // offset toward tail, away from pole axis
+      
+      // Update skeleton matrix to compute correct bone positions
+      rider.fig.updateMatrixWorld(true);
+      
+      const scale = currentHeight / tmpl.height;
+      const targetHipX = 0.32 + 0.35 * scale;
+      
+      const hipBone = rider.fig.getObjectByName('Hips');
+      if (hipBone) {
+        const localHip = new THREE.Vector3();
+        hipBone.getWorldPosition(localHip);
+        rider.fig.worldToLocal(localHip);
+        
+        // Scale the local hip offset by the rider's scale factor
+        const scaledHip = localHip.clone().multiplyScalar(scale);
+        
+        // Since rider.fig has rotation.y = -Math.PI / 2 (aligning rider +Z with horse -X),
+        // we rotate scaledHip vector by -Math.PI / 2 around Y axis to get its position in pivot space
+        const hipInPivot = scaledHip.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+        
+        // We want the Hips bone (hips/pelvis) to sit exactly at (targetHipX, saddleHeight, 0.0) in the horse container space.
+        // Therefore, we position the pivot such that: pivot.position + hipInPivot = (targetHipX, saddleHeight, 0.0)
+        rider.pivot.position.set(targetHipX - hipInPivot.x, saddleHeight - hipInPivot.y, -hipInPivot.z);
+        
+      } else {
+        const riderY = saddleHeight - currentHeight * 0.28;
+        rider.pivot.position.set(targetHipX, riderY, 0.0);
+      }
+      
+      rider.pivot.rotation.y = - Math.PI / 2; // Face forward along with horse (aligns rider +Z with horse -X)
+      rider.height = currentHeight;
+      horseContainer.add(rider.pivot);
 
-    horses.push({
-      container: horseContainer,
-      phaseOffset: i * (Math.PI / 4) // phase-offset wave pattern
-    });
+      horses.push({
+        container: horseContainer,
+        rider: rider,
+        phaseOffset: i * (Math.PI / 4) // phase-offset wave pattern
+      });
+    } else {
+      horses.push({
+        container: horseContainer,
+        rider: null,
+        phaseOffset: i * (Math.PI / 4)
+      });
+    }
   }
 
   // ── Control Panel (semaphore + lever) ──
@@ -343,13 +319,27 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
     // 1. Platform rotation
     controller.angle += controller.maxSpeed * ease * delta;
-    rotatingAssembly.rotation.y = controller.angle;
+    rotatingAssembly.rotation.y = - controller.angle;
 
-    // 2. Horse bobbing (each horse has phase offset)
+    // 2. Horse bobbing (each horse has phase offset) and rider updates
     const speed = controller.maxSpeed * ease;
+    const platformY = 0.6;
+    const maxWorldHeadY = 5.8;
     for (const h of horses) {
       const wave = Math.sin(time * HORSE_BOB_FREQ + h.phaseOffset) * BOB_AMP;
-      h.container.position.y = HORSE_BASE_Y + wave * ease;
+      
+      let maxContainerY = Infinity;
+      if (h.rider) {
+        const riderY = h.rider.pivot.position.y;
+        const riderHeight = h.rider.height;
+        maxContainerY = maxWorldHeadY - platformY - (riderY + riderHeight);
+      }
+      
+      h.container.position.y = Math.min(HORSE_BASE_Y + wave * ease, maxContainerY);
+      
+      if (h.rider) {
+        updateRider(h.rider, time + h.rider.phase);
+      }
     }
 
     // 3. Emissive bulbs blink at night (read night state from scene lights)
@@ -397,6 +387,88 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
   group.userData.controller = controller;
   return group;
+}
+
+function hideEmbeddedPole(root) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const geom = o.geometry;
+    
+    const posAttr = geom.getAttribute('position');
+    if (!posAttr) return;
+
+    const normalAttr = geom.getAttribute('normal');
+    const uvAttr = geom.getAttribute('uv');
+    const tangentAttr = geom.getAttribute('tangent');
+
+    const keptIndices = [];
+    const newPositions = [];
+    const newNormals = [];
+    const newUvs = [];
+    const newTangents = [];
+
+    const indexMap = new Map();
+    let newIdx = 0;
+    
+    const vertexCount = posAttr.count;
+    for (let i = 0; i < vertexCount; i++) {
+      const x = posAttr.getX(i);
+      const y = posAttr.getY(i);
+      const z = posAttr.getZ(i);
+      
+      // The pole is centered at (0, 0) in local X-Y, with radius approx 3.683.
+      // We filter out any vertices that are close to the pole axis (X^2 + Y^2 < 4.5^2).
+      const isPole = (x * x + y * y < 4.5 * 4.5);
+      if (!isPole) {
+        newPositions.push(x, y, z);
+        if (normalAttr) {
+          newNormals.push(normalAttr.getX(i), normalAttr.getY(i), normalAttr.getZ(i));
+        }
+        if (uvAttr) {
+          newUvs.push(uvAttr.getX(i), uvAttr.getY(i));
+        }
+        if (tangentAttr) {
+          newTangents.push(tangentAttr.getX(i), tangentAttr.getY(i), tangentAttr.getZ(i), tangentAttr.getW(i));
+        }
+        indexMap.set(i, newIdx++);
+      }
+    }
+    
+    const indexAttr = geom.getIndex();
+    const newIndexData = [];
+    if (indexAttr) {
+      const arr = indexAttr.array;
+      const len = arr.length;
+      for (let i = 0; i < len; i += 3) {
+        const idx0 = arr[i];
+        const idx1 = arr[i + 1];
+        const idx2 = arr[i + 2];
+        if (indexMap.has(idx0) && indexMap.has(idx1) && indexMap.has(idx2)) {
+          newIndexData.push(indexMap.get(idx0), indexMap.get(idx1), indexMap.get(idx2));
+        }
+      }
+    }
+    
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+    if (newNormals.length > 0) {
+      newGeom.setAttribute('normal', new THREE.Float32BufferAttribute(newNormals, 3));
+    }
+    if (newUvs.length > 0) {
+      newGeom.setAttribute('uv', new THREE.Float32BufferAttribute(newUvs, 2));
+    }
+    if (newTangents.length > 0) {
+      newGeom.setAttribute('tangent', new THREE.Float32BufferAttribute(newTangents, 4));
+    }
+    if (newIndexData.length > 0) {
+      newGeom.setIndex(newIndexData);
+    }
+    
+    newGeom.computeBoundingBox();
+    newGeom.computeBoundingSphere();
+    
+    o.geometry = newGeom;
+  });
 }
 
 // ── 3D Control Panel Geometry ──
