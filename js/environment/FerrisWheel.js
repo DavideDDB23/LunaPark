@@ -239,34 +239,43 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     throw new Error('FerrisWheel: expected "wheel" node and "cabin" gondolas in the GLB');
   }
 
-  // Each gondola node's ORIGIN is a pivot offset far from where its cabin actually renders,
-  // so we work from each cabin's true geometric centre instead. Counter-rotating around the
-  // node origin would fling the cabins across the sky.
-  const cabinCenters = gondolaNodes.map(
-    (g) => new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3())
-  );
-  const cabinSizeY = new THREE.Box3().setFromObject(gondolaNodes[0]).getSize(new THREE.Vector3()).y;
+  const gondolaBboxes  = gondolaNodes.map((g) => new THREE.Box3().setFromObject(g));
+  const cabinCenters   = gondolaBboxes.map((b) => b.getCenter(new THREE.Vector3()));
+  const cabinSizeY = gondolaBboxes[0].getSize(new THREE.Vector3()).y;
 
-  // ── Hub = centre of the cabin circle; axle = normal of the plane the cabins lie in. ──
+  // ── Hub = center of the wheel axle (from the model's wheel node) ──
   const hub = new THREE.Vector3();
-  cabinCenters.forEach((c) => hub.add(c));
-  hub.divideScalar(cabinCenters.length);
+  wheelNode.getWorldPosition(hub);
 
-  const r0 = cabinCenters[0].clone().sub(hub);
-  let axis = null;
-  for (let i = 1; i < cabinCenters.length && !axis; i++) {
-    const ri = cabinCenters[i].clone().sub(hub);
-    const n = new THREE.Vector3().crossVectors(r0, ri);
-    if (n.lengthSq() > 1e-6) axis = n.normalize();
-  }
-  axis = axis || new THREE.Vector3(0, 0, 1);
+  // ── Axis = normal of the wheel rotation plane (from local Z axis of wheel node) ──
+  const axis = new THREE.Vector3(0, 0, 1)
+    .applyQuaternion(wheelNode.getWorldQuaternion(new THREE.Quaternion()))
+    .normalize();
+
+  // ── Compute hanger points concentric with the hub ──
+  // Average of the cabin centers gives the center of the cabin circle
+  const cabinCircleCenter = new THREE.Vector3();
+  cabinCenters.forEach((c) => cabinCircleCenter.add(c));
+  cabinCircleCenter.divideScalar(cabinCenters.length);
+
+  // The Y-offset from the cabin circle center to the wheel axle (hub)
+  const yOffset = hub.y - cabinCircleCenter.y;
+
+  // Hanger points are directly above each cabin center by yOffset
+  const hangerPoints = cabinCenters.map((c) => {
+    return new THREE.Vector3(c.x, c.y + yOffset, c.z);
+  });
+
 
   // ── Build the spin rig. spinHub orients local Z onto the axle (static); wheelSpin
   //    rotates about its local Z (the axle). attach() preserves world poses. ──
+  // hub and axis are in world space; spinHub is a child of model (which has a baked
+  // root rotation), so both must be converted to model-local space before use.
+  const modelInvQ = model.quaternion.clone().conjugate();
   const spinHub = new THREE.Group();
   spinHub.name = 'ferris_spinHub';
-  spinHub.position.copy(hub);
-  spinHub.quaternion.setFromUnitVectors(Z_AXIS, axis);
+  spinHub.position.copy(model.worldToLocal(hub.clone()));
+  spinHub.quaternion.setFromUnitVectors(Z_AXIS, axis.clone().applyQuaternion(modelInvQ));
   model.add(spinHub);
   spinHub.updateMatrixWorld(true);
 
@@ -277,7 +286,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   wheelSpin.attach(wheelNode); // the visual ring now spins with us
 
-  // ── Gondolas: a mount at each cabin centre orbits with the wheel; a pivot at that same
+  // ── Gondolas: a mount at each cabin hanger orbits with the wheel; a pivot at that same
   //    point is counter-rotated so the cabin stays level AND stays put (rotates in place). ──
   const gondolaMounts = [];
   const passH = cabinSizeY * 0.5;
@@ -287,13 +296,13 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     const mount = new THREE.Group();
     mount.name = `gondola_mount_${i}`;
     wheelSpin.add(mount);
-    mount.position.copy(wheelSpin.worldToLocal(cabinCenters[i].clone()));
+    mount.position.copy(wheelSpin.worldToLocal(hangerPoints[i].clone()));
     mount.updateMatrixWorld(true);
 
-    const pivot = new THREE.Group(); // counter-rotated; sits exactly at the cabin centre
+    const pivot = new THREE.Group(); // counter-rotated; sits exactly at the hanger point
     mount.add(pivot);
     pivot.updateMatrixWorld(true);
-    pivot.attach(gNode); // cabin keeps world pose; its centre now coincides with the pivot
+    pivot.attach(gNode); // cabin keeps world pose; its hanger now coincides with the pivot
     const baseQuat = pivot.quaternion.clone();
 
     // Seat riders at the cabin centre (in the gondola's own frame), dropped onto the floor.
