@@ -180,4 +180,4 @@ init()
     loaderEl.textContent = 'Failed to load scene — see console.';
   });
 
-window.__lp = { scene, camera, renderer, controls };
+window.__lp = { THREE, scene, camera, renderer, controls };

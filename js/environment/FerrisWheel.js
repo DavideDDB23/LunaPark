@@ -30,6 +30,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { loadGLB } from '../utils/loaders.js';
+import { ControlPanel } from './ControlPanel.js';
 
 const MODEL_URL = 'assets/models/ferris_wheel-2.glb';
 const HUMANS_DIR = 'assets/models/Humans/';
@@ -149,14 +150,14 @@ const POSE_DEFS = {
   lookL:  { Head: [0.05, 0.6, 0], Torso: [0, 0.18, 0] },
   lookR:  { Head: [0.05, -0.6, 0], Torso: [0, -0.18, 0] },
   lookUp: { Head: [-0.45, 0.1, 0], Torso: [-0.08, 0, 0] },
-  wave:   { UpperArmR: [0, 2.5, 0], LowerArmR: [0, 0, 0.2], Head: [0, 0.12, 0] },
-  cheer:  { UpperArmR: [0, 2.45, 0], UpperArmL: [0, -2.45, 0], Head: [-0.06, 0, 0] },
+  wave:   { UpperArmR: [0.2, 1.9, -0.2], LowerArmR: [1.1, 0, 0], Head: [0, 0.2, 0] },
+  cheer:  { UpperArmR: [0.2, 2.2, -0.2], UpperArmL: [-0.2, -2.2, 0.2], LowerArmR: [0.8, 0, 0], LowerArmL: [0.8, 0, 0], Head: [-0.06, 0, 0] },
   point:  { UpperArmR: [0.1, 1.45, 0], Head: [0, 0.32, 0], Torso: [0, 0.1, 0] },
   photo:  { UpperArmR: [1.0, 0.4, 0.25], UpperArmL: [1.0, -0.4, -0.25],
             LowerArmR: [0.8, 0, 0], LowerArmL: [0.8, 0, 0], Head: [-0.12, 0, 0] },
   relax:  { UpperArmR: [0.15, 1.05, 0], Head: [0.06, -0.2, 0], Torso: [0.05, -0.05, 0] },
-  chatL:  { UpperArmR: [0.7, 0.35, 0], LowerArmR: [0.6, 0, 0], Head: [0, 0.5, 0], Torso: [0, 0.14, 0] },
-  chatR:  { UpperArmL: [0.7, -0.35, 0], LowerArmL: [0.6, 0, 0], Head: [0, -0.5, 0], Torso: [0, -0.14, 0] },
+  chatL:  { UpperArmR: [0.4, 0.8, 0], LowerArmR: [0.8, 0, 0], Head: [0.1, 0.5, 0], Torso: [0.1, 0.14, 0] },
+  chatR:  { UpperArmL: [-0.4, -0.8, 0], LowerArmL: [0.8, 0, 0], Head: [0.1, -0.5, 0], Torso: [0.1, -0.14, 0] },
 
   // Standing poses
   standRest: {
@@ -165,14 +166,14 @@ const POSE_DEFS = {
     LowerArmR: [0.5, 0, 0], LowerArmL: [0.5, 0, 0]
   },
   standWave: {
-    Torso: [0.10, 0, 0], Head: [0, 0.12, 0],
-    UpperArmR: [0, 2.5, 0], LowerArmR: [0, 0, 0.2],
+    Torso: [0.10, 0, 0], Head: [0, 0.2, 0],
+    UpperArmR: [0.2, 1.9, -0.2], LowerArmR: [1.1, 0, 0],
     UpperArmL: [0.4, -0.2, 0], LowerArmL: [0.5, 0, 0]
   },
   standCheer: {
     Torso: [0.05, 0, 0], Head: [-0.06, 0, 0],
-    UpperArmR: [0, 2.45, 0], UpperArmL: [0, -2.45, 0],
-    LowerArmR: [0.2, 0, 0], LowerArmL: [0.2, 0, 0]
+    UpperArmR: [0.2, 2.2, -0.2], UpperArmL: [-0.2, -2.2, 0.2],
+    LowerArmR: [0.8, 0, 0], LowerArmL: [0.8, 0, 0]
   },
   standPoint: {
     Torso: [0.12, 0.1, 0], Head: [0, 0.32, 0],
@@ -249,23 +250,37 @@ function updateRider(r, t) {
 
   // Live flair on the active action (eased in by k so it doesn't pop on transition).
   if (r.to === 'wave' || r.to === 'standWave') {
-    pose(B, 'UpperArmR', 0, 2.5 + Math.sin(t * 8) * 0.15 * k, (0.2 + Math.sin(t * 8) * 0.3) * k);
+    pose(B, 'UpperArmR', 0.2 + Math.sin(t * 3) * 0.05 * k, 1.9 + Math.sin(t * 3) * 0.05 * k, -0.2);
+    pose(B, 'LowerArmR', 1.1, Math.sin(t * 10) * 0.35 * k, Math.sin(t * 10) * 0.35 * k);
+    pose(B, 'Head', 0, 0.2 + Math.sin(t * 2) * 0.08 * k, 0);
   } else if (r.to === 'cheer' || r.to === 'standCheer') {
-    const bob = Math.sin(t * 4) * 0.16 * k;
-    pose(B, 'UpperArmR', 0, 2.45 + bob, 0);
-    pose(B, 'UpperArmL', 0, -(2.45 + bob), 0);
+    const pump = Math.sin(t * 8) * 0.2 * k;
+    pose(B, 'UpperArmR', 0.2 + pump, 2.2 + pump * 0.5, -0.2);
+    pose(B, 'UpperArmL', -0.2 - pump, -2.2 - pump * 0.5, 0.2);
+    pose(B, 'LowerArmR', 0.8 + pump, 0, 0);
+    pose(B, 'LowerArmL', 0.8 + pump, 0, 0);
+    pose(B, 'Torso', 0.05 + Math.sin(t * 8) * 0.04 * k, 0, 0);
   } else if (r.to === 'chatL') {
-    pose(B, 'LowerArmR', 0.6 + Math.sin(t * 2.6 + r.phase) * 0.3 * k, 0, 0);
+    pose(B, 'UpperArmR', 0.4 + Math.sin(t * 2.0) * 0.1 * k, 0.8 + Math.sin(t * 2.0) * 0.1 * k, 0);
+    pose(B, 'LowerArmR', 0.8 + Math.sin(t * 4.0) * 0.3 * k, 0, 0);
+    pose(B, 'Head', 0.1, 0.5 + Math.sin(t * 2.0) * 0.1 * k, Math.sin(t * 3.0) * 0.05 * k);
+    pose(B, 'Torso', 0.1 + Math.sin(t * 1.0) * 0.03 * k, 0.14, 0);
   } else if (r.to === 'chatR') {
-    pose(B, 'LowerArmL', 0.6 + Math.sin(t * 2.6 + r.phase) * 0.3 * k, 0, 0);
+    pose(B, 'UpperArmL', -0.4 - Math.sin(t * 2.0) * 0.1 * k, -0.8 - Math.sin(t * 2.0) * 0.1 * k, 0);
+    pose(B, 'LowerArmL', 0.8 + Math.sin(t * 4.0) * 0.3 * k, 0, 0);
+    pose(B, 'Head', 0.1, -0.5 - Math.sin(t * 2.0) * 0.1 * k, Math.sin(t * 3.0) * 0.05 * k);
+    pose(B, 'Torso', 0.1 + Math.sin(t * 1.0) * 0.03 * k, -0.14, 0);
   } else if (r.to === 'standLook') {
     pose(B, 'Head', 0.25, 0.4 + Math.sin(t * 1.5) * 0.3 * k, 0);
     pose(B, 'Torso', 0.28 + Math.sin(t * 1.0) * 0.04 * k, 0, 0);
   } else if (r.to === 'standRest') {
     pose(B, 'Head', 0.05 + Math.sin(t * 0.8) * 0.05 * k, Math.sin(t * 0.4) * 0.1 * k, 0);
   } else if (r.to === 'standPoint') {
-    pose(B, 'UpperArmR', 0.1 + Math.sin(t * 2) * 0.05 * k, 1.45 + Math.sin(t * 1.5) * 0.1 * k, 0);
-    pose(B, 'Head', 0, 0.32 + Math.sin(t * 1.5) * 0.1 * k, 0);
+    pose(B, 'UpperArmR', 0.1, 1.5 + Math.sin(t * 2.5) * 0.04 * k, -0.1);
+    pose(B, 'LowerArmR', 0.2, 0, 0);
+    pose(B, 'UpperArmL', 0.3, -0.3, 0);
+    pose(B, 'LowerArmL', 0.6, 0, 0);
+    pose(B, 'Head', 0.1, 0.35 + Math.sin(t * 2.5) * 0.05 * k, 0);
   }
 }
 
@@ -394,11 +409,13 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
       const rider = makeRider(tmpl, passH, { pool, facingY, phase: i * 1.7 + p * 2.3, standing });
       rider.pivot.position.copy(seatLocal);
       rider.pivot.position.x += (p - (PASSENGERS_PER_GONDOLA - 1) / 2) * cabinSizeY * 0.22; // Proportional X separation
-      rider.pivot.position.y -= cabinSizeY * 0.28; // Raise pivot to align feet/hips with the actual cabin floor/seats
       
       if (standing) {
+        rider.pivot.position.y -= cabinSizeY * 0.33; // Lower standing passengers so feet rest on floor
         // Shift standing riders closer to the handrail/fence but stay safely within Z bounds
         rider.pivot.position.z += zSign * cabinSizeY * 0.10;
+      } else {
+        rider.pivot.position.y -= cabinSizeY * 0.44; // Lower sitting passengers more so hips rest on the seats
       }
 
       gNode.add(rider.pivot);
@@ -441,38 +458,36 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   const radiusFinal = Math.max(size.x, size.y) / 2;
 
   // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
-  const panel = buildControlPanel();
-  panel.position.set(radiusFinal * 0.55, 0, radiusFinal * 0.95);
-  group.add(panel);
+  const controlPanel = new ControlPanel({ initialRunning: true });
+  controlPanel.group.position.set(radiusFinal * 0.42, 0, radiusFinal * 0.72);
+  group.add(controlPanel.group);
   group.updateMatrixWorld(true);
-  panel.lookAt(position[0], position[1] + 8, position[2]); // face the wheel centre
+  controlPanel.group.lookAt(position[0], position[1], position[2]); // face the wheel centre horizontally (prevents post tilt)
+  controlPanel.group.rotateY(Math.PI); // face away from the wheel (di spalle)
 
   // ── Controller / state machine ──
   const controller = {
     gondolaMounts,
     wheelSpin,
     spinHub,
-    panel,
-    running: true,         // auto-start so the ride is visibly turning on load (panel toggles)
+    panel: controlPanel.group,
+    get running() { return controlPanel.running; },
+    set running(v) { controlPanel.running = v; },
+    get phase() { return controlPanel.phase; },
+    set phase(v) { controlPanel.phase = v; },
     angle: 0,
-    phase: 0,              // 0 = stopped, 1 = full speed (eased)
     maxSpeed: MAX_SPEED,
-    toggle() { this.running = !this.running; },
-    start() { this.running = true; },
-    stop() { this.running = false; },
+    toggle() { controlPanel.toggle(); },
+    start() { controlPanel.running = true; },
+    stop() { controlPanel.running = false; },
     setSpeed(v) { this.maxSpeed = Math.max(0, v); },
   };
 
   const counterQuat = new THREE.Quaternion();
 
   group.userData.tick = (delta, time) => {
-    // Ease the speed factor toward the target (1 running / 0 stopped); smoothstep gives
-    // ease-in on start and ease-out on stop, with different ramp durations.
-    const dur = controller.running ? RAMP_UP : RAMP_DOWN;
-    controller.phase = THREE.MathUtils.clamp(
-      controller.phase + (controller.running ? 1 : -1) * (delta / dur), 0, 1
-    );
-    const ease = smoothstep(controller.phase);
+    // Ease the speed factor using our reusable ControlPanel's tick
+    const ease = controlPanel.tick(delta);
 
     controller.angle += controller.maxSpeed * ease * delta;
     wheelSpin.rotation.z = controller.angle;
@@ -487,9 +502,6 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
         r.pivot.rotation.z = r.restZ + Math.sin(time * SWAY_FREQ * Math.PI * 2 + r.phase) * SWAY_AMP;
       }
     }
-
-    // Panel feedback: lever tips forward and the semaphore goes red→green with the ramp.
-    panel.userData.setState(ease);
   };
 
   // ── Click-to-toggle via raycasting on the panel. ──
@@ -501,7 +513,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
       const r = dom.getBoundingClientRect();
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(panel, true).length > 0;
+      return ray.intersectObject(controlPanel.group, true).length > 0;
     };
     dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
     dom.addEventListener('pointermove', (ev) => {
@@ -512,65 +524,4 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   group.userData.controller = controller;
   return group;
-}
-
-// ── 3D control kiosk: post, angled console, two-light semaphore, tilting lever. ──
-function buildControlPanel() {
-  const g = new THREE.Group();
-  g.name = 'ferris_controlPanel';
-
-  const metal = new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 0.5, metalness: 0.6 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x1c2027, roughness: 0.7, metalness: 0.3 });
-
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.1, 12), metal);
-  post.position.y = 0.55;
-  post.castShadow = true;
-  g.add(post);
-
-  const console_ = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.18), dark);
-  console_.position.y = 1.35;
-  console_.rotation.x = -0.5;
-  console_.castShadow = true;
-  g.add(console_);
-
-  // Semaphore housing + red (top) / green (bottom) lamps.
-  const housing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.7, 0.2), dark);
-  housing.position.set(0.0, 2.0, -0.05);
-  housing.castShadow = true;
-  g.add(housing);
-
-  const redMat = new THREE.MeshStandardMaterial({ color: 0x3a0000, emissive: 0xff2222, emissiveIntensity: 1.0 });
-  const greenMat = new THREE.MeshStandardMaterial({ color: 0x003a00, emissive: 0x22ff44, emissiveIntensity: 0.0 });
-  const lampGeo = new THREE.SphereGeometry(0.12, 14, 12);
-  const red = new THREE.Mesh(lampGeo, redMat);
-  red.position.set(0, 2.18, 0.06);
-  g.add(red);
-  const green = new THREE.Mesh(lampGeo, greenMat);
-  green.position.set(0, 1.86, 0.06);
-  g.add(green);
-
-  // Lever: pivot at the console top, tips forward when the ride runs.
-  const lever = new THREE.Group();
-  lever.position.set(0.0, 1.5, 0.12);
-  g.add(lever);
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8), metal);
-  stick.position.y = 0.27;
-  stick.castShadow = true;
-  lever.add(stick);
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10),
-    new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.4 }));
-  knob.position.y = 0.55;
-  lever.add(knob);
-
-  const LEVER_REST = -0.5;   // pulled back (off)
-  const LEVER_ON = 0.6;      // tipped forward (on)
-  lever.rotation.x = LEVER_REST;
-
-  g.userData.setState = (ease) => {
-    redMat.emissiveIntensity = 1.0 - ease;
-    greenMat.emissiveIntensity = ease;
-    lever.rotation.x = THREE.MathUtils.lerp(LEVER_REST, LEVER_ON, ease);
-  };
-
-  return g;
 }
