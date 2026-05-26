@@ -73,6 +73,12 @@ export function buildEntranceGate() {
   const pillarH = 11.0;
   const baseH = 1.6;
 
+  // Animation arrays
+  const lanternLights = [];
+  const lanterns = [];
+  const uplights = [];
+  const archBulbs = [];
+
   // ─── Materials ────────────────────────────────────────────────
   const stoneMat = new THREE.MeshStandardMaterial({ color: 0xada088, roughness: 0.92, metalness: 0.0 });
   const stoneDarkMat = new THREE.MeshStandardMaterial({ color: 0x6c5d48, roughness: 0.95, metalness: 0.0 });
@@ -81,6 +87,13 @@ export function buildEntranceGate() {
   const archMat = new THREE.MeshStandardMaterial({ color: 0x8a1a1a, roughness: 0.75, metalness: 0.15 });
   const bulbMat = new THREE.MeshStandardMaterial({
     color: 0xfff2b0, emissive: 0xffd060, emissiveIntensity: 1.4, roughness: 0.3,
+  });
+  const neonMat = new THREE.MeshStandardMaterial({
+    color: 0xff4500,
+    emissive: 0xff3300,
+    emissiveIntensity: 2.0,
+    roughness: 0.15,
+    metalness: 0.1
   });
   const signTex = makeWelcomeTexture();
   const signMat = new THREE.MeshStandardMaterial({
@@ -132,6 +145,98 @@ export function buildEntranceGate() {
       group.add(inlay);
     }
 
+    // Climbing ivy vines (foliage detailing) around the column
+    let prevX = null, prevY = null, prevZ = null;
+    const ivySteps = 30;
+    // Simple deterministic LCG random generator for local variation
+    let lcgSeed = sx * 100;
+    function localRandom() {
+      lcgSeed = (lcgSeed * 1664525 + 1013904223) % 4294967296;
+      return lcgSeed / 4294967296;
+    }
+
+    for (let j = 0; j < ivySteps; j++) {
+      const t = j / (ivySteps - 1);
+      const ivyY = baseH + t * (pillarH - 1.5);
+      const angle = t * Math.PI * 5.0 + sx * 0.8;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const maxVal = Math.max(Math.abs(cos), Math.abs(sin));
+      
+      const px = (cos / maxVal) * 0.6;
+      const pz = (sin / maxVal) * 0.6;
+      
+      // Face normal
+      let nx = 0, nz = 0;
+      if (Math.abs(cos) > Math.abs(sin)) {
+        nx = Math.sign(cos);
+      } else {
+        nz = Math.sign(sin);
+      }
+      
+      const leafX = x + px + nx * 0.04;
+      const leafZ = Z + pz + nz * 0.04;
+      
+      // Draw vine stem segment
+      if (prevX !== null) {
+        const dx = leafX - prevX;
+        const dy = ivyY - prevY;
+        const dz = leafZ - prevZ;
+        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        
+        const stemGeo = new THREE.CylinderGeometry(0.02, 0.02, dist, 4);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 });
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        
+        // Position at midpoint
+        stem.position.set((leafX + prevX)/2, (ivyY + prevY)/2, (leafZ + prevZ)/2);
+        
+        // Align cylinder with direction vector
+        const direction = new THREE.Vector3(dx, dy, dz).normalize();
+        const alignAxis = new THREE.Vector3(0, 1, 0);
+        stem.quaternion.setFromUnitVectors(alignAxis, direction);
+        stem.castShadow = true;
+        group.add(stem);
+      }
+      prevX = leafX;
+      prevY = ivyY;
+      prevZ = leafZ;
+      
+      // Leaf cluster at this node
+      const clusterSize = 1 + Math.floor(localRandom() * 3); // 1 to 3 leaves per node
+      for (let k = 0; k < clusterSize; k++) {
+        // Vary color slightly
+        const colors = [0x1a451d, 0x2e6e33, 0x3c8a41, 0x225c28];
+        const color = colors[Math.floor(localRandom() * colors.length)];
+        const leafMat = new THREE.MeshStandardMaterial({
+          color: color,
+          roughness: 0.85,
+          metalness: 0.05
+        });
+        
+        const leafScale = 0.8 + localRandom() * 0.7;
+        const leafW = 0.11 * leafScale;
+        const leafH = 0.28 * leafScale;
+        const leafGeo = new THREE.ConeGeometry(leafW, leafH, 4);
+        const leaf = new THREE.Mesh(leafGeo, leafMat);
+        
+        // Offset leaf slightly from stem
+        const offX = nx * 0.06 + (localRandom() - 0.5) * 0.15;
+        const offY = (localRandom() - 0.5) * 0.1;
+        const offZ = nz * 0.06 + (localRandom() - 0.5) * 0.15;
+        
+        leaf.position.set(leafX + offX, ivyY + offY, leafZ + offZ);
+        
+        // Point the leaf outwards and slightly up
+        leaf.rotation.x = 0.5 + localRandom() * 0.4;
+        leaf.rotation.y = Math.atan2(nz, nx) + (localRandom() - 0.5) * 0.5;
+        leaf.rotation.z = (localRandom() - 0.5) * 0.4;
+        
+        leaf.castShadow = true;
+        group.add(leaf);
+      }
+    }
+
     // Carved gold rings at 1/3 and 2/3 height
     for (const ry of [pillarH * 0.33, pillarH * 0.66]) {
       const ring = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.18, 1.36), goldMat);
@@ -154,30 +259,74 @@ export function buildEntranceGate() {
     finialSpire.rotation.y = Math.PI / 4;
     group.add(finialSpire);
 
-    // Hanging lantern on each pillar (interior side)
-    const lanternY = baseH + pillarH - 1.5;
-    const lanternX = x + (-sx) * 0.85; // hang on inside of gate
+    // Double-sided lanterns (Front Z+0.7, Back Z-0.7) hanging from ornate wooden/metal brackets
+    for (const sz of [-1, 1]) {
+      const lanternX = x + (-sx) * 0.95; // hang on interior side
+      const lanternY = baseH + pillarH - 1.8;
+      const lanternZ = Z + sz * 0.7;
 
-    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6), woodMat);
-    rope.position.set(lanternX, lanternY + 0.4, Z);
-    group.add(rope);
+      // Horizontal bracket beam
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 0.1), woodMat);
+      beam.position.set(x + (-sx) * 0.45, lanternY + 0.5, lanternZ);
+      beam.castShadow = true;
+      group.add(beam);
 
-    const lanternBody = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.32, 0.32, 0.7, 16),
-      new THREE.MeshStandardMaterial({
-        color: 0xfff2a0, emissive: 0xffc060, emissiveIntensity: 1.8, roughness: 0.4,
-      })
-    );
-    lanternBody.position.set(lanternX, lanternY, Z);
-    group.add(lanternBody);
+      // Diagonal bracket brace
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.65, 0.1), woodMat);
+      brace.position.set(x + (-sx) * 0.75, lanternY + 0.2, lanternZ);
+      brace.rotation.z = sx * Math.PI / 4;
+      brace.castShadow = true;
+      group.add(brace);
 
-    const lanternCap = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.3, 8), goldMat);
-    lanternCap.position.set(lanternX, lanternY + 0.5, Z);
-    group.add(lanternCap);
+      // Gold chain/rope hanging the lantern
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.35, 6), goldMat);
+      chain.position.set(lanternX, lanternY + 0.35, lanternZ);
+      chain.castShadow = true;
+      group.add(chain);
 
-    const lanternLight = new THREE.PointLight(0xffd080, 2.5, 14, 2);
-    lanternLight.position.set(lanternX, lanternY, Z);
-    group.add(lanternLight);
+      // Ornate Lantern Body
+      const lanternBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.16, 0.5, 12),
+        new THREE.MeshStandardMaterial({
+          color: 0xfff2a0,
+          emissive: 0xff9800,
+          emissiveIntensity: 1.5,
+          roughness: 0.3,
+          metalness: 0.1
+        })
+      );
+      lanternBody.position.set(lanternX, lanternY, lanternZ);
+      lanternBody.castShadow = true;
+      group.add(lanternBody);
+      lanterns.push(lanternBody);
+
+      // Lantern Cap
+      const lanternCap = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.22, 8), goldMat);
+      lanternCap.position.set(lanternX, lanternY + 0.3, lanternZ);
+      lanternCap.castShadow = true;
+      group.add(lanternCap);
+
+      // Point Light inside the lantern
+      const lanternLight = new THREE.PointLight(0xffa726, 0, 12, 1.8);
+      lanternLight.position.set(lanternX, lanternY, lanternZ);
+      group.add(lanternLight);
+      lanternLights.push(lanternLight);
+    }
+
+    // Architectural Column Spotlights at the base pointing up
+    const uplight = new THREE.SpotLight(0xffb74d, 0, 16, Math.PI / 5, 0.5, 1);
+    uplight.position.set(x, baseH + 0.25, Z + 0.5);
+    uplight.target = col;
+    group.add(uplight);
+    group.add(uplight.target);
+    uplights.push(uplight);
+
+    const uplightBack = new THREE.SpotLight(0xffb74d, 0, 16, Math.PI / 5, 0.5, 1);
+    uplightBack.position.set(x, baseH + 0.25, Z - 0.5);
+    uplightBack.target = col;
+    group.add(uplightBack);
+    group.add(uplightBack.target);
+    uplights.push(uplightBack);
   }
 
   // ─── Arch (extruded curve connecting the pillars) ────────────
@@ -202,6 +351,20 @@ export function buildEntranceGate() {
   const trim = new THREE.Mesh(new THREE.BoxGeometry(archW + 0.4, 0.22, archDepth + 0.2), goldMat);
   trim.position.set(0, baseH + pillarH + 0.7, Z);
   group.add(trim);
+
+  // Central Arch Medallion (Golden Crest)
+  const medallion = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.18, 16), goldMat);
+  medallion.position.set(0, baseH + pillarH + 2.7, Z + archDepth / 2 + 0.08);
+  medallion.rotation.x = Math.PI / 2;
+  medallion.castShadow = true;
+  group.add(medallion);
+
+  // 3D Star on medallion
+  const starCone = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 4), goldMat);
+  starCone.position.set(0, baseH + pillarH + 2.7, Z + archDepth / 2 + 0.2);
+  starCone.rotation.x = Math.PI / 2;
+  starCone.castShadow = true;
+  group.add(starCone);
 
   // ─── Welcome sign — floats in front and behind the arch as a billboard ─
   const signW = archW * 0.78;
@@ -232,6 +395,30 @@ export function buildEntranceGate() {
       group.add(h);
     }
 
+    // Glowing neon tube border (StandardMaterial with emissive intensity animated dynamically)
+    const neonGeo = new THREE.CylinderGeometry(0.04, 0.04, signW + 0.3, 8);
+    const neonLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, signH + 0.3, 8), neonMat);
+    neonLeft.position.set(-signW / 2 - 0.09, signY, zPos + 0.09);
+    neonLeft.castShadow = true;
+    group.add(neonLeft);
+
+    const neonRight = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, signH + 0.3, 8), neonMat);
+    neonRight.position.set(signW / 2 + 0.09, signY, zPos + 0.09);
+    neonRight.castShadow = true;
+    group.add(neonRight);
+
+    const neonTop = new THREE.Mesh(neonGeo, neonMat);
+    neonTop.position.set(0, signY + signH / 2 + 0.09, zPos + 0.09);
+    neonTop.rotation.z = Math.PI / 2;
+    neonTop.castShadow = true;
+    group.add(neonTop);
+
+    const neonBottom = new THREE.Mesh(neonGeo, neonMat);
+    neonBottom.position.set(0, signY - signH / 2 - 0.09, zPos + 0.09);
+    neonBottom.rotation.z = Math.PI / 2;
+    neonBottom.castShadow = true;
+    group.add(neonBottom);
+
     // Decorative chains hanging the sign from the arch
     for (const side of [-1, 1]) {
       const chain = new THREE.Mesh(
@@ -246,37 +433,32 @@ export function buildEntranceGate() {
   // Only the outward-facing sign (entrance side). The inside should not show the welcome text.
   makeSignAssembly(true);
 
-  // Spotlights illuminating sign at night-equivalent
-  for (const sx of [-1, 1]) {
-    const sLight = new THREE.SpotLight(0xfff1c0, 2.5, 18, Math.PI / 5, 0.4, 1);
-    sLight.position.set(sx * 3.5, baseH + pillarH + 5.5, Z + 3);
-    sLight.target.position.set(0, baseH + pillarH + 1.9, Z);
-    group.add(sLight);
-    group.add(sLight.target);
-  }
-
   // ─── Marquee bulbs running along underside of arch ───────────
   const bulbGeo = new THREE.SphereGeometry(0.16, 12, 10);
   const bulbCount = 13;
   for (let i = 0; i < bulbCount; i++) {
     const t = i / (bulbCount - 1);
     const lx = THREE.MathUtils.lerp(-archW / 2 + 0.6, archW / 2 - 0.6, t);
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+
+    // Front Bulbs (cloned materials for individual chasing)
+    const bulbMatInstance = bulbMat.clone();
+    const bulb = new THREE.Mesh(bulbGeo, bulbMatInstance);
     bulb.position.set(lx, baseH + pillarH + 0.55, Z + archDepth / 2 + 0.18);
     group.add(bulb);
-    const bulbBack = new THREE.Mesh(bulbGeo, bulbMat);
+    archBulbs.push(bulb);
+
+    // Back Bulbs
+    const bulbMatInstanceBack = bulbMat.clone();
+    const bulbBack = new THREE.Mesh(bulbGeo, bulbMatInstanceBack);
     bulbBack.position.set(lx, baseH + pillarH + 0.55, Z - archDepth / 2 - 0.18);
     group.add(bulbBack);
+    archBulbs.push(bulbBack);
   }
 
-  // ─── Decorative flags — sit right ON the arch top (no longer floating high above) ──
+  // ─── Decorative flags — sit right ON the arch top ──
   const flagColors = [0xe04040, 0x40a0e0, 0xf0c040, 0x40c060, 0xb050d0];
-  // Quadratic Bézier from (±archW/2, archH*0.35) with control (0, archH*1.55):
-  // actual apex at t=0.5 is y = 0.5*(0.35 + 1.55)*archH = 0.95*archH.
-  // (Using the control-point Y here put the flags ~2m above the real arch.)
   const archTopY = baseH + pillarH + 0.7 + archH * 0.95;
   const swayingFlags = [];
-  // Flags sit just above the arch — pole rooted slightly into the arch top.
   const poleBaseY = archTopY - 0.3;  // a touch lower than before
   const poleH = 1.5;
   for (let i = -2; i <= 2; i++) {
@@ -298,7 +480,6 @@ export function buildEntranceGate() {
 
     // Segmented plane so we can ripple the cloth per-vertex.
     const flagGeo = new THREE.PlaneGeometry(0.95, 0.65, 16, 5);
-    // Cache the rest-pose vertex positions so we can re-displace from them every frame.
     const restPos = new Float32Array(flagGeo.attributes.position.array);
     const flag = new THREE.Mesh(
       flagGeo,
@@ -323,19 +504,49 @@ export function buildEntranceGate() {
     swayingFlags.push(pivot);
   }
 
-  // No more side fence wings — they were overlapping the park perimeter fence.
-
-  // ─── Wind animation tick — flags ──────────────────────────────────
-  // Three coupled motions:
-  //   1. Pivot yaw  — whole flag swings around the pole (gust direction)
-  //   2. Pivot roll — slight tilt (cloth catching breeze)
-  //   3. Per-vertex cloth ripple — sine wave travelling along the flag's length,
-  //      attenuated at the pole-side edge (vertices clamped near the hoist).
+  // ─── Wind and Light animation tick ──────────────────────────────
   group.userData.tick = (delta, time, windSpeed) => {
+    // 1. LIGHTS ANIMATION (Flicker, Chasing, Uplighting, Neon)
+    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
+    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+
+    const targetLanternIntensity = isNight ? 2.5 : 0.0;
+    const targetUplightIntensity = isNight ? 2.2 : 0.0;
+
+    // Flicker lantern lights
+    for (let i = 0; i < lanternLights.length; i++) {
+      const l = lanternLights[i];
+      const flicker = isNight ? (Math.sin(time * 18.0 + i) * 0.15 + Math.sin(time * 38.0 + i * 2.3) * 0.08) : 0;
+      l.intensity = THREE.MathUtils.lerp(l.intensity, targetLanternIntensity + flicker, 0.1);
+      lanterns[i].material.emissiveIntensity = l.intensity * 0.7;
+    }
+
+    // Smooth uplight activation
+    for (const u of uplights) {
+      u.intensity = THREE.MathUtils.lerp(u.intensity, targetUplightIntensity, 0.08);
+    }
+
+    // Neon sign pulsing
+    const neonIntensity = isNight ? (1.8 + Math.sin(time * 3.5) * 0.6) : 0.0;
+    neonMat.emissiveIntensity = neonIntensity;
+
+    // Chasing marquee bulbs sequence
+    for (let i = 0; i < archBulbs.length; i++) {
+      const b = archBulbs[i];
+      if (isNight) {
+        // 3-phase chasing lights
+        const step = Math.floor(time * 5.0) % 3;
+        const isOn = (i % 3) === step;
+        b.material.emissiveIntensity = isOn ? 3.0 : 0.25;
+      } else {
+        b.material.emissiveIntensity = 0.0;
+      }
+    }
+
+    // 2. WIND FLAG ANIMATION
     if (!windSpeed) {
       for (const f of swayingFlags) {
         f.rotation.set(0, 0, 0);
-        // Restore flag to rest pose.
         const d = f.userData.flag;
         d.geo.attributes.position.array.set(d.restPos);
         d.geo.attributes.position.needsUpdate = true;
@@ -343,38 +554,32 @@ export function buildEntranceGate() {
       return;
     }
 
-    // Saturating wind intensity (matches trees) — gentle at 0.2, near-max at 3.
     const baseIntensity = 1.0 - Math.exp(-windSpeed * 0.7);
 
     for (const f of swayingFlags) {
       const d = f.userData.flag;
       const t = time * (1.0 + windSpeed * 0.5);
 
-      // Gust — low-freq surge that modulates the overall amplitude.
       const gust = 0.65 + 0.45 * Math.sin(time * 0.7 + d.gustPhase);
       const intensity = baseIntensity * gust;
 
-      // Subtle pivot motions — kept small so the hoist edge stays attached to the pole.
       f.rotation.y = Math.sin(t * 3.0 + d.phase) * 0.28 * intensity;
       f.rotation.z = Math.sin(t * 2.2 + d.phase + 1.0) * 0.12 * intensity;
       f.rotation.x = Math.sin(t * 1.7 + d.phase * 1.3) * 0.05 * intensity;
 
-      // ── Per-vertex cloth ripple ────────────────────────────────────
       const arr = d.geo.attributes.position.array;
       const rest = d.restPos;
       const width = d.width;
       const W = windSpeed;
-      const amp = 0.07 * intensity;   // ripple amplitude
-      const k1 = 11.0 / width;        // primary wave number
-      const k2 = 6.5  / width;        // secondary
+      const amp = 0.07 * intensity;
+      const k1 = 11.0 / width;
+      const k2 = 6.5  / width;
       const sp1 = 5.5 * (0.5 + W * 0.3);
       const sp2 = 3.2 * (0.5 + W * 0.3);
       for (let v = 0; v < arr.length; v += 3) {
         const rx = rest[v];
         const ry = rest[v + 1];
-        // Distance along the cloth from the hoist edge (x = -width/2 → 0; x = +width/2 → 1).
-        const distAlong = (rx + width / 2) / width; // 0..1
-        // Clamp ripple to ~0 near the hoist edge so cloth stays attached to pole.
+        const distAlong = (rx + width / 2) / width;
         const clothMask = distAlong * distAlong;
         const wave =
           Math.sin(rx * k1 - t * sp1 + d.phase) * 0.6 +

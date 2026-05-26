@@ -17,13 +17,21 @@ const DECOR_MODELS = [
 
 const BASE_URL = 'assets/models/Environment/';
 
-const BOOTH_RADIUS = 11; // booths are larger now → wider tree-free skirt around them
-const LAMP_RADIUS = 2.5;
+const BOOTH_RADIUS = 11.0; // booths are larger now → wider tree-free skirt around them
+const LAMP_RADIUS = 5.5;  // larger exclusion zone to prevent tree canopies from clipping/overlapping lampposts
 const BOOTHS = [[14, -22], [-14, 22]];
 const LAMPS = [
-  [-4, -25], [-4, -50], [-4, -75], [4, 25], [4, 50], [4, 75],
-  [25, -4], [50, -4], [75, -4], [-25, 4], [-50, 4], [-75, 4],
+  [-5, -25], [-5, -50], [-5, -75], [5, -25], [5, -50], [5, -75],
+  [-5, 25], [-5, 50], [-5, 75], [5, 25], [5, 50], [5, 75],
 ];
+
+function createSeededRandom(seed) {
+  let s = seed;
+  return function() {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
 
 function modelHeight(name) {
   if (name.includes('Pine')) return 12.0;
@@ -61,15 +69,40 @@ async function loadAll(names) {
 }
 
 function inExclusionZone(x, z, blockLamps) {
+  // Paths (North-South corridor)
   if (Math.abs(x) < 5) return true;
+
+  // River
   const dz = z - riverCenter(x);
   if (Math.abs(dz) < riverHalfWidth(x) + 3) return true;
+
+  // Central circle plaza
   if (x * x + z * z < 15 * 15) return true;
+
+  // Stage area (North end)
   if (Math.abs(x) < 15 && z < -65) return true;
-  if (Math.hypot(Math.abs(x) - 50, Math.abs(z) - 50) < 30) return true;
+
+  // South entrance plaza (around Z=100)
+  if (Math.abs(x) < 12 && z > 80) return true;
+
+  // 4 Rides + Control Panels exclusion zones (leaving space for the rides and line of sight to panels)
+  const RIDES = [
+    [-50, -50, 28],    // Ferris Wheel (NW)
+    [-38.5, -30.2, 14], // Ferris Wheel Control Panel front area
+    [40, -40, 22],     // Carousel (NE)
+    [40, 40, 28],      // Roller Coaster (SE)
+    [-40, 40, 25],     // Tagada (SW)
+  ];
+  for (const [rx, rz, rRad] of RIDES) {
+    if (Math.hypot(x - rx, z - rz) < rRad) return true;
+  }
+
+  // Food stalls (Kiosks)
   for (const [bx, bz] of BOOTHS) {
     if (Math.hypot(x - bx, z - bz) < BOOTH_RADIUS) return true;
   }
+
+  // Lampposts
   if (blockLamps) {
     for (const [lx, lz] of LAMPS) {
       if (Math.hypot(x - lx, z - lz) < LAMP_RADIUS) return true;
@@ -81,6 +114,8 @@ function inExclusionZone(x, z, blockLamps) {
 export async function buildVegetation() {
   const group = new THREE.Group();
   group.name = 'vegetation';
+
+  const random = createSeededRandom(42); // Seeded random for deterministic layout
 
   const [trees, bushes, decor] = await Promise.all([
     loadAll(TREE_MODELS),
@@ -109,17 +144,17 @@ export async function buildVegetation() {
     let placed = 0;
     while (placed < count && attempts < count * 12) {
       attempts++;
-      const x = (Math.random() - 0.5) * 190;
-      const z = (Math.random() - 0.5) * 190;
+      const x = (random() - 0.5) * 190;
+      const z = (random() - 0.5) * 190;
       if (inExclusionZone(x, z, blockLamps)) continue;
       if (minSpacing > 0 && tooCloseToTree(x, z, minSpacing)) continue;
-      const source = list[Math.floor(Math.random() * list.length)];
+      const source = list[Math.floor(random() * list.length)];
       if (!source) continue;
 
       const instance = source.clone(true);
-      const yaw = Math.random() * Math.PI * 2;
+      const yaw = random() * Math.PI * 2;
       instance.rotation.y = yaw;
-      const scaleVar = 0.8 + Math.random() * 0.4;
+      const scaleVar = 0.8 + random() * 0.4;
       instance.scale.multiplyScalar(scaleVar);
       instance.position.set(x, source.userData.yOffset * scaleVar, z);
       group.add(instance);
@@ -128,8 +163,8 @@ export async function buildVegetation() {
       if (sway) {
         instance.userData.sway = {
           yaw,
-          phase: Math.random() * Math.PI * 2,
-          amp: 0.018 + Math.random() * 0.018,
+          phase: random() * Math.PI * 2,
+          amp: 0.018 + random() * 0.018,
         };
         swayables.push(instance);
         treePositions.push([x, z]);

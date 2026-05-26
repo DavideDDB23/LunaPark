@@ -4,7 +4,7 @@ import { loadGLB } from '../utils/loaders.js';
 
 const HUMANS_DIR = 'assets/models/Humans/';
 
-export let passengerWorldHeight = 1.6; // Default fallback height in world units
+export let passengerWorldHeight = 3.28; // Default fallback height in world units
 
 export function setPassengerWorldHeight(h) {
   passengerWorldHeight = h;

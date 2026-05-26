@@ -219,8 +219,9 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   rideScaled.scale.setScalar(scale);
   group.updateMatrixWorld(true);
 
-  // Set the dynamic passenger height for sharing
-  setPassengerWorldHeight(passH * scale);
+  // The Ferris Wheel passengers are scaled locally inside the scaled wheel group.
+  // The global walking visitor and carousel rider height remains 3.28 (human template height).
+  setPassengerWorldHeight(3.28);
 
   // Re-measure, then shift so the ride is centred on X/Z and its base rests on the ground.
   bbox = new THREE.Box3().setFromObject(rideScaled);
@@ -235,7 +236,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
   const controlPanel = new ControlPanel({ initialRunning: true });
-  controlPanel.group.position.set(radiusFinal * 0.42, 0, radiusFinal * 0.72);
+  controlPanel.group.position.set(radiusFinal * 0.36, 0, radiusFinal * 0.61);
   group.add(controlPanel.group);
   group.updateMatrixWorld(true);
   controlPanel.group.lookAt(position[0], position[1], position[2]); // face the wheel centre horizontally (prevents post tilt)

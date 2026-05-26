@@ -44,7 +44,7 @@ export async function buildLampposts() {
   const size = new THREE.Vector3();
   bbox.getSize(size);
 
-  const targetHeight = 6.0; // taller lamps
+  const targetHeight = 6.0;
   const scale = size.y > 0 ? targetHeight / size.y : 1;
   const groundOffset = -bbox.min.y * scale;
   const lampHeadY = bbox.max.y * scale * 0.9;

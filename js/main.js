@@ -172,6 +172,9 @@ function animate() {
   const gate = environmentGroup.getObjectByName('entranceGate');
   if (gate && gate.userData.tick) gate.userData.tick(delta, time, wind);
 
+  const stage = environmentGroup.getObjectByName('stage');
+  if (stage && stage.userData.tick) stage.userData.tick(delta, time);
+
   const ferris = environmentGroup.getObjectByName('ferrisWheel');
   if (ferris && ferris.userData.tick) ferris.userData.tick(delta, time);
 
