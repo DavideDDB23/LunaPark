@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
 import { loadVisitorTemplates, makeRider, updateRider, ACTIONS_SEATED_GENERAL, getPassengerWorldHeight } from './Passengers.js';
+import { ControlPanel } from './ControlPanel.js';
 
 const HORSE_MODEL_URL = 'assets/models/carousel_horse.glb';
 
@@ -9,11 +10,6 @@ const PLATFORM_OMEGA = 0.8;      // rad/s platform rotation at full speed
 const HORSE_BOB_FREQ = 1.5;      // Bob cycles/s
 const BOB_AMP = 0.9;            // Bob amplitude in meters
 const HORSE_BASE_Y = 2.53;       // Default height on pole
-
-const RAMP_UP = 1.5;             // s, ease-in
-const RAMP_DOWN = 2.0;           // s, ease-out
-
-const smoothstep = (t) => t * t * (3 - 2 * t);
 
 // Procedural texture for the canopy (stripes of deep red and cream white separated by gold lines)
 function createStripedTexture() {
@@ -289,33 +285,29 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   }
 
   // ── Control Panel (semaphore + lever) ──
-  const panel = buildControlPanel();
-  panel.position.set(-15, 0, 0); // West of carousel platform
-  group.add(panel);
-  panel.lookAt(0, 1.35, 0); // face the carousel column center
+  const controlPanel = new ControlPanel({ initialRunning: true });
+  controlPanel.group.position.set(-15, 0, 15); // Southwest of carousel, toward park center (mirrors FerrisWheel panel)
+  group.add(controlPanel.group);
+  controlPanel.group.lookAt(0, 1.35, 0); // controls face the park center (where the operator approaches from)
 
   // ── Controller / State ──
   const controller = {
     rotatingAssembly,
     horses,
-    panel,
-    running: true,         // auto-start
+    panel: controlPanel.group,
+    get running() { return controlPanel.running; },
+    set running(v) { controlPanel.running = v; },
     angle: 0,
-    phase: 0,              // speed multiplier [0, 1]
     maxSpeed: PLATFORM_OMEGA,
-    toggle() { this.running = !this.running; },
-    start() { this.running = true; },
-    stop() { this.running = false; },
+    toggle() { controlPanel.toggle(); },
+    start() { controlPanel.running = true; },
+    stop() { controlPanel.running = false; },
     setSpeed(v) { this.maxSpeed = Math.max(0, v); },
   };
 
   group.userData.tick = (delta, time) => {
-    // Gradual start/stop transitions
-    const dur = controller.running ? RAMP_UP : RAMP_DOWN;
-    controller.phase = THREE.MathUtils.clamp(
-      controller.phase + (controller.running ? 1 : -1) * (delta / dur), 0, 1
-    );
-    const ease = smoothstep(controller.phase);
+    // Gradual start/stop transitions driven by the shared ControlPanel
+    const ease = controlPanel.tick(delta);
 
     // 1. Platform rotation
     controller.angle += controller.maxSpeed * ease * delta;
@@ -360,8 +352,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       });
     }
 
-    // 4. Panel feedback update
-    panel.userData.setState(ease);
+    // 4. Panel feedback update (handled by ControlPanel.tick)
   };
 
   // ── Raycast Toggle Handler ──
@@ -374,7 +365,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       const r = dom.getBoundingClientRect();
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(panel, true).length > 0;
+      return ray.intersectObject(controlPanel.group, true).length > 0;
     };
 
     dom.addEventListener('pointerdown', (ev) => {
@@ -471,72 +462,4 @@ function hideEmbeddedPole(root) {
     
     o.geometry = newGeom;
   });
-}
-
-// ── 3D Control Panel Geometry ──
-function buildControlPanel() {
-  const g = new THREE.Group();
-  g.name = 'carousel_controlPanel';
-
-  const metal = new THREE.MeshStandardMaterial({ color: 0x3d4452, roughness: 0.5, metalness: 0.6 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x1f232b, roughness: 0.7, metalness: 0.3 });
-
-  // Post
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.1, 12), metal);
-  post.position.y = 0.55;
-  post.castShadow = true;
-  g.add(post);
-
-  // Slanted Console
-  const console_ = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.18), dark);
-  console_.position.y = 1.35;
-  console_.rotation.x = -0.5;
-  console_.castShadow = true;
-  g.add(console_);
-
-  // Semaphore housing
-  const housing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.7, 0.2), dark);
-  housing.position.set(0.0, 2.0, -0.05);
-  housing.castShadow = true;
-  g.add(housing);
-
-  // Semaphore lights
-  const redMat = new THREE.MeshStandardMaterial({ color: 0x3a0000, emissive: 0xff2222, emissiveIntensity: 1.0 });
-  const greenMat = new THREE.MeshStandardMaterial({ color: 0x003a00, emissive: 0x22ff44, emissiveIntensity: 0.0 });
-  const lampGeo = new THREE.SphereGeometry(0.12, 14, 12);
-  
-  const red = new THREE.Mesh(lampGeo, redMat);
-  red.position.set(0, 2.18, 0.06);
-  g.add(red);
-  
-  const green = new THREE.Mesh(lampGeo, greenMat);
-  green.position.set(0, 1.86, 0.06);
-  g.add(green);
-
-  // Control Lever
-  const lever = new THREE.Group();
-  lever.position.set(0.0, 1.5, 0.12);
-  g.add(lever);
-  
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8), metal);
-  stick.position.y = 0.27;
-  stick.castShadow = true;
-  lever.add(stick);
-  
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10),
-    new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.4 }));
-  knob.position.y = 0.55;
-  lever.add(knob);
-
-  const LEVER_REST = -0.5;
-  const LEVER_ON = 0.6;
-  lever.rotation.x = LEVER_REST;
-
-  g.userData.setState = (ease) => {
-    redMat.emissiveIntensity = 1.0 - ease;
-    greenMat.emissiveIntensity = ease;
-    lever.rotation.x = THREE.MathUtils.lerp(LEVER_REST, LEVER_ON, ease);
-  };
-
-  return g;
 }
