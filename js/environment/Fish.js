@@ -26,7 +26,7 @@ import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/
 const WATER_LEVEL = 0.25;
 const FISH_URL = 'assets/models/clown_fish_low_poly_animated.glb';
 const FISH_COUNT = 8;
-const TARGET_FISH_LENGTH = 1.0;
+const TARGET_FISH_LENGTH = 0.65;
 
 const BONE_NAMES = {
   root:       'bone_root_00',
@@ -99,6 +99,46 @@ export async function buildFish() {
 
   const fishes = [];
 
+  // ─── Ripple Pool ──────────────────────────────────────────────
+  const rippleCount = 8;
+  const ripples = [];
+  const rippleGeo = new THREE.RingGeometry(0.8, 1.0, 24);
+  
+  for (let i = 0; i < rippleCount; i++) {
+    const rMat = new THREE.MeshBasicMaterial({
+      color: 0xcce6ff,
+      transparent: true,
+      opacity: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const rMesh = new THREE.Mesh(rippleGeo, rMat);
+    rMesh.rotation.x = -Math.PI / 2;
+    rMesh.visible = false;
+    group.add(rMesh);
+    
+    ripples.push({
+      mesh: rMesh,
+      active: false,
+      time: 0,
+      duration: 1.0,
+      maxScale: 2.5
+    });
+  }
+
+  function spawnRipple(x, z) {
+    const rip = ripples.find(r => !r.active);
+    if (rip) {
+      rip.active = true;
+      rip.time = 0;
+      rip.mesh.position.set(x, WATER_LEVEL + 0.005, z);
+      rip.mesh.scale.set(0.01, 0.01, 0.01);
+      rip.mesh.visible = true;
+      rip.mesh.material.opacity = 0.65;
+    }
+  }
+
   for (let i = 0; i < FISH_COUNT; i++) {
     const inst = cloneSkinned(tmpl.source);
     inst.scale.setScalar(tmpl.scale);
@@ -122,31 +162,97 @@ export async function buildFish() {
       bobPhase:     Math.random() * Math.PI * 2,
       wagPhase:     Math.random() * Math.PI * 2,
       finPhase:     Math.random() * Math.PI * 2,
-      // Each fish has its own swim cadence (Hz) so they don't beat in sync.
-      swimFreq:     3.6 + Math.random() * 1.2,
-      nextJump:     1.5 + Math.random() * 4,
+      // Dynamic motion state
+      baseFreq:     3.6 + Math.random() * 1.2,
+      nextJump:     4.0 + Math.random() * 8.0, // jump less often so it's more special
       jumpT:        -1,
       jumpDur:      1.2 + Math.random() * 0.4,
       jumpRoll:     0,
       jumpHeight:   0.7 + Math.random() * 0.5,
-      depthVariant: -0.10 - Math.random() * 0.05,
+      depthVariant: -0.13 - Math.random() * 0.04,
+      // Swim state variables (Burst-and-Coast)
+      swimState:    Math.random() < 0.5 ? 'burst' : 'coast',
+      stateTimer:   1.0 + Math.random() * 2.0,
+      activeSpeed:  1.0,
+      activeFreq:   3.6,
+      activeAmp:    0.35,
+      activeFinAmp: 0.30,
+      phaseAccumulator: 0,
+      wasUnderwater: true
     });
   }
 
   group.userData.tick = (delta, time, _windSpeed) => {
+    // ── Update Ripples ──────────────────────────────────────────
+    for (const rip of ripples) {
+      if (!rip.active) continue;
+      rip.time += delta;
+      const progress = rip.time / rip.duration;
+      if (progress >= 1.0) {
+        rip.active = false;
+        rip.mesh.visible = false;
+      } else {
+        const s = THREE.MathUtils.lerp(0.01, rip.maxScale, progress);
+        rip.mesh.scale.set(s, s, s);
+        rip.mesh.material.opacity = 0.65 * (1.0 - progress);
+      }
+    }
+
     for (const f of fishes) {
       const b = f.bones;
 
-      // ── Swim cycle phase (used by tail wag, head counter-yaw, propulsion pulse) ────
-      const swimFreqHz = f.jumpT >= 0 ? f.swimFreq * 2.2 : f.swimFreq;
-      const swimAmp    = f.jumpT >= 0 ? 0.55 : 0.40;
-      const phase = time * swimFreqHz * 2 * Math.PI + f.wagPhase;
+      // ── Swim state machine (Burst-and-Coast) ──────────────────
+      f.stateTimer -= delta;
+      if (f.stateTimer <= 0) {
+        if (f.swimState === 'burst') {
+          f.swimState = 'coast';
+          f.stateTimer = 2.0 + Math.random() * 3.0; // coast longer
+        } else {
+          f.swimState = 'burst';
+          f.stateTimer = 1.0 + Math.random() * 1.5; // burst shorter
+        }
+      }
+
+      // Determine target values
+      let targetSpeedMultiplier = 1.0;
+      let targetFreq = f.baseFreq;
+      let targetAmp = 0.35;
+      let targetFinAmp = 0.30;
+
+      if (f.jumpT >= 0) {
+        targetSpeedMultiplier = 2.2;
+        targetFreq = f.baseFreq * 2.5;
+        targetAmp = 0.65;
+        targetFinAmp = 0.10;
+      } else if (f.swimState === 'burst') {
+        targetSpeedMultiplier = 1.6 + Math.random() * 0.2;
+        targetFreq = f.baseFreq * 1.6;
+        targetAmp = 0.50;
+        targetFinAmp = 0.05; // tuck fins during burst
+      } else {
+        // Coasting / drifting
+        targetSpeedMultiplier = 0.35 + Math.sin(time * 0.5 + f.bobPhase) * 0.15;
+        targetFreq = f.baseFreq * 0.3;
+        targetAmp = 0.12; // very gentle wag
+        targetFinAmp = 0.45; // flare fins to stabilize
+      }
+
+      // Smoothly interpolate active state values
+      f.activeSpeed = THREE.MathUtils.lerp(f.activeSpeed, targetSpeedMultiplier, 0.08);
+      f.activeFreq = THREE.MathUtils.lerp(f.activeFreq, targetFreq, 0.08);
+      f.activeAmp = THREE.MathUtils.lerp(f.activeAmp, targetAmp, 0.08);
+      f.activeFinAmp = THREE.MathUtils.lerp(f.activeFinAmp, targetFinAmp, 0.08);
+
+      // Accumulate phase smoothly to avoid frequency change jumps
+      f.phaseAccumulator += delta * f.activeFreq * 2 * Math.PI;
+      const phase = f.phaseAccumulator + f.wagPhase;
       const tailPhase = Math.sin(phase);
 
-      // ── Cyclic propulsion: speed pulses with each tail kick (~+25%/-15%). ──────────
+      // ── Cyclic propulsion speed modification ───────────────────
       const propulse = 0.85 + 0.25 * Math.max(0, Math.cos(phase));
-      const speedMul = (f.jumpT >= 0 ? 1.5 : 1.0) * propulse;
+      const speedMul = f.activeSpeed * propulse;
       f.x += f.baseSpeed * speedMul * f.dir * delta;
+      
       if (f.x > RIVER_X_MAX - 8) { f.dir = -1; f.x = RIVER_X_MAX - 8; }
       if (f.x < RIVER_X_MIN + 8) { f.dir =  1; f.x = RIVER_X_MIN + 8; }
 
@@ -155,43 +261,54 @@ export async function buildFish() {
       const lateral = Math.sin(time * 0.7 + f.lateralPhase) * (hw * 0.55);
       const z = cz + lateral;
       const lateralVel = Math.cos(time * 0.7 + f.lateralPhase) * (hw * 0.55) * 0.7;
+      // Turn rate / curvature is proportional to lateral acceleration
+      const lateralAcc = -Math.sin(time * 0.7 + f.lateralPhase) * (hw * 0.55) * 0.49;
 
-      // ── Depth (underwater swim) ────────────────────────────────────────────────────
+      // ── Depth and Jumps ────────────────────────────────────────
       const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.02;
       let y = WATER_LEVEL + f.depthVariant + bob;
 
-      // Cruising pose: very subtle pitch from bob, gentle roll into lateral turn.
       let pitch = Math.cos(time * 1.8 + f.bobPhase) * 0.04;
       let roll  = lateralVel * 0.18 * f.dir;
       let curlBack  = 0;
       let curlFront = 0;
 
-      // ── Jump trigger ──────────────────────────────────────────────────────────────
+      // Jump trigger check
       if (f.jumpT < 0 && time >= f.nextJump) {
         f.jumpT = 0;
-        f.jumpRoll = (Math.random() - 0.5) * 0.6;
+        f.jumpRoll = (Math.random() - 0.5) * 1.5; // roll in air
       }
 
       if (f.jumpT >= 0) {
         f.jumpT += delta / f.jumpDur;
         if (f.jumpT >= 1) {
           f.jumpT = -1;
-          f.nextJump = time + 5 + Math.random() * 8;
+          f.nextJump = time + 6 + Math.random() * 10;
         } else {
           const t = f.jumpT;
           const arc = Math.sin(t * Math.PI);
+          // Height arc
           y = THREE.MathUtils.lerp(WATER_LEVEL + f.depthVariant, WATER_LEVEL + f.jumpHeight, arc);
-          // Pitch = arc tangent (cosine) — nose up climbing → level at apex → nose down on descent.
+          
+          // Trajectory Pitch: positive on ascent, zero at apex, negative on descent
           pitch = Math.cos(t * Math.PI) * 0.95;
-          // Optional barrel-roll mid-air.
+          // Add roll rotation
           roll = arc * f.jumpRoll;
-          // Body curl: the whole spine bends into the jump direction.
-          curlBack  = -Math.cos(t * Math.PI) * 0.30;
-          curlFront = -Math.cos(t * Math.PI) * 0.12;
+          
+          // Frantic air thrashing curl
+          curlBack  = -Math.cos(t * Math.PI) * 0.35 + Math.sin(time * 15.0) * 0.10;
+          curlFront = -Math.cos(t * Math.PI) * 0.15 + Math.sin(time * 15.0) * 0.05;
         }
       }
 
-      // ── Root transform (world position + heading) ─────────────────────────────────
+      // ── Entry/Exit boundary crossings (Ripples) ──────────────────
+      const isUnderwater = y < WATER_LEVEL;
+      if (f.wasUnderwater !== isUnderwater) {
+        spawnRipple(f.x, z);
+        f.wasUnderwater = isUnderwater;
+      }
+
+      // ── Root transform (world position + heading) ───────────────
       f.root.position.set(f.x, y, z);
       const baseYaw = f.dir > 0 ? 0 : Math.PI;
       const extraYaw = f.forwardAxis === 'z' ? Math.PI / 2 : 0;
@@ -206,47 +323,54 @@ export async function buildFish() {
         f.root.rotation.z = roll;
       }
 
-      // ── Bone-driven swim ──────────────────────────────────────────────────────────
-      // Travelling sine wave along the spine: tail leads, spine_back trails 0.35 rad,
-      // spine_front trails 0.70 rad, root counter-yaws in opposite phase.
+      // ── Spine Turn-Bending ─────────────────────────────────────
+      // Flex spine front and back yaw rotation based on turn acceleration
+      const spineYaw = lateralAcc * 0.12 * f.dir;
+
+      // ── Bone rotations ─────────────────────────────────────────
       if (b.tail) {
         const r = b.rest.tail;
-        b.tail.rotation.set(r.x, r.y, r.z + tailPhase * swimAmp);
+        // Thrash frantically if in the air
+        const amp = f.activeAmp;
+        const wag = f.jumpT >= 0 ? Math.sin(phase * 1.5) * amp * 1.3 : tailPhase * amp;
+        b.tail.rotation.set(r.x, r.y, r.z + wag);
       }
       if (b.spineBack) {
         const r = b.rest.spineBack;
+        const wag = Math.sin(phase - 0.35) * f.activeAmp * 0.55;
         b.spineBack.rotation.set(
           r.x + curlBack,
-          r.y,
-          r.z + Math.sin(phase - 0.35) * swimAmp * 0.55
+          r.y + spineYaw * 0.5,
+          r.z + wag
         );
       }
       if (b.spineFront) {
         const r = b.rest.spineFront;
+        const wag = Math.sin(phase - 0.70) * f.activeAmp * 0.22;
         b.spineFront.rotation.set(
           r.x + curlFront,
-          r.y,
-          r.z + Math.sin(phase - 0.70) * swimAmp * 0.22
+          r.y + spineYaw * 0.8,
+          r.z + wag
         );
       }
-      // Counter-yaw on the head/root bone — reaction to tail thrust, opposite phase, tiny amplitude.
       if (b.root) {
         const r = b.rest.root;
-        b.root.rotation.set(r.x, r.y, r.z - tailPhase * swimAmp * 0.10);
+        b.root.rotation.set(r.x, r.y, r.z - tailPhase * f.activeAmp * 0.10);
       }
 
-      // ── Pectoral fin idle paddle ──────────────────────────────────────────────────
-      // Fins paddle out of phase with each other and 90° off the tail so the steering motion
-      // doesn't visually beat with the swim cycle.
-      const finPhase = time * (swimFreqHz * 0.6) * 2 * Math.PI + f.finPhase;
-      const finAmp = f.jumpT >= 0 ? 0.55 : 0.30;
+      // ── Pectoral fin idle paddle & steer ───────────────────────
+      const finPhase = time * (f.activeFreq * 0.6) * 2 * Math.PI + f.finPhase;
+      const finAmp = f.activeFinAmp;
       if (b.finL) {
         const r = b.rest.finL;
-        b.finL.rotation.set(r.x + Math.sin(finPhase) * finAmp, r.y, r.z);
+        // Pectoral steering: flare the inside fin, tuck the outside fin
+        const steerTuck = Math.max(0, -lateralVel * f.dir) * 0.4;
+        b.finL.rotation.set(r.x + Math.sin(finPhase) * finAmp, r.y + steerTuck, r.z);
       }
       if (b.finR) {
         const r = b.rest.finR;
-        b.finR.rotation.set(r.x + Math.sin(finPhase + Math.PI) * finAmp, r.y, r.z);
+        const steerTuck = Math.max(0, lateralVel * f.dir) * 0.4;
+        b.finR.rotation.set(r.x + Math.sin(finPhase + Math.PI) * finAmp, r.y + steerTuck, r.z);
       }
     }
   };

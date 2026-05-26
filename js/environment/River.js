@@ -34,7 +34,7 @@ function buildRiverBed() {
 
   const mat = new THREE.MeshStandardMaterial({ color: 0x1a2a3a, roughness: 0.95, metalness: 0.0 });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.y = 0.07;
+  mesh.position.y = -0.05;
   mesh.receiveShadow = true;
   mesh.name = 'river_bed';
   return mesh;
