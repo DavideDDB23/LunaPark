@@ -7,8 +7,8 @@ const HORSE_MODEL_URL = 'assets/models/carousel_horse.glb';
 // Animation constants
 const PLATFORM_OMEGA = 0.8;      // rad/s platform rotation at full speed
 const HORSE_BOB_FREQ = 1.5;      // Bob cycles/s
-const BOB_AMP = 0.53;            // Bob amplitude in meters
-const HORSE_BASE_Y = 2.73;       // Default height on pole
+const BOB_AMP = 0.9;            // Bob amplitude in meters
+const HORSE_BASE_Y = 2.53;       // Default height on pole
 
 const RAMP_UP = 1.5;             // s, ease-in
 const RAMP_DOWN = 2.0;           // s, ease-out
@@ -135,30 +135,30 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
   // Central column: Mirror-finished main support cylinder (radius 2.0, height 5.5)
   const columnMesh = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 5.5, 24), mirrorMat);
-  columnMesh.position.y = 0.3 + 0.3 + 2.75; // above base
+  columnMesh.position.y = 0.3 + 0.3 + 2.75 + 1.0; // above base + raised by 1.0
   columnMesh.castShadow = true;
   columnMesh.receiveShadow = true;
   rotatingAssembly.add(columnMesh);
 
   // Column gold moldings (decorative bands)
   const bottomBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
-  bottomBand.position.y = 0.3 + 0.3 + 0.1;
+  bottomBand.position.y = 0.3 + 0.3 + 0.1 + 1.0;
   rotatingAssembly.add(bottomBand);
 
   const topBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
-  topBand.position.y = 0.3 + 0.3 + 5.4;
+  topBand.position.y = 0.3 + 0.3 + 5.4 + 1.0;
   rotatingAssembly.add(topBand);
 
   // Canopy conical roof: Cone of radius 13.2, height 3.5
   const canopyMesh = new THREE.Mesh(new THREE.ConeGeometry(13.2, 3.5, 32), canopyMat);
-  canopyMesh.position.y = 0.3 + 0.3 + 5.5 + 1.75; // 0.6 + 5.5 + 1.75 = 7.85
+  canopyMesh.position.y = 0.3 + 0.3 + 5.5 + 1.75 + 1.0; // 0.6 + 5.5 + 1.75 + 1.0 = 8.85
   canopyMesh.castShadow = true;
   canopyMesh.receiveShadow = true;
   rotatingAssembly.add(canopyMesh);
 
   // Canopy valance/rim
   const canopyRim = new THREE.Mesh(new THREE.CylinderGeometry(13.2, 13.2, 0.4, 32), goldMat);
-  canopyRim.position.y = 0.3 + 0.3 + 5.5; // 0.6 + 5.5 = 6.1
+  canopyRim.position.y = 0.3 + 0.3 + 5.5 + 1.0; // 0.6 + 5.5 + 1.0 = 7.1
   canopyRim.castShadow = true;
   rotatingAssembly.add(canopyRim);
 
@@ -181,7 +181,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   for (let i = 0; i < 16; i++) {
     const angle = (i / 16) * Math.PI * 2;
     const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-    bulb.position.set(13.22 * Math.cos(angle), 0.3 + 0.3 + 5.5, 13.22 * Math.sin(angle));
+    bulb.position.set(13.22 * Math.cos(angle), 0.3 + 0.3 + 5.5 + 1.0, 13.22 * Math.sin(angle));
     rotatingAssembly.add(bulb);
     bulbs.push(bulb);
   }
@@ -204,9 +204,9 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     // Stationary pole (gold) — horse slides up/down on it via horseContainer bobbing.
     // Slightly thicker than GLB's built-in pole to conceal it during bob.
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.18, 6.2, 12), goldMat
+      new THREE.CylinderGeometry(0.18, 0.18, 7.2, 12), goldMat
     );
-    pole.position.y = 3.1; // centered: spans Y 0–6.2 in mountGroup space
+    pole.position.y = 3.6; // centered: spans Y 0–7.2 in mountGroup space
     pole.castShadow = true;
     mountGroup.add(pole);
 
@@ -237,7 +237,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       // Position rider realistically on the horse saddle:
       // Since rider origin is at the feet, we offset the pivot so that the rider's
       // hips (approx 28% of height) align with the horse's saddle
-      const saddleHeight = 0.42 * (targetHorseY / 2.4);
+      const saddleHeight = 0.48 * (targetHorseY / 2.4);
       const riderY = saddleHeight - currentHeight * 0.28;
       const riderZ = -0.10 * (targetHorseY / 2.4);
       rider.pivot.position.set(-0.3, riderY, riderZ); // offset toward tail, away from pole axis
@@ -324,9 +324,9 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     // 2. Horse bobbing (each horse has phase offset) and rider updates
     const speed = controller.maxSpeed * ease;
     const platformY = 0.6;
-    const maxWorldHeadY = 5.8;
+    const maxWorldHeadY = 6.8;
     for (const h of horses) {
-      const wave = Math.sin(time * HORSE_BOB_FREQ + h.phaseOffset) * BOB_AMP;
+      const wave = (Math.sin(time * HORSE_BOB_FREQ + h.phaseOffset) + 1.0) * BOB_AMP;
       
       let maxContainerY = Infinity;
       if (h.rider) {
@@ -335,7 +335,9 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
         maxContainerY = maxWorldHeadY - platformY - (riderY + riderHeight);
       }
       
-      h.container.position.y = Math.min(HORSE_BASE_Y + wave * ease, maxContainerY);
+      const targetY = (HORSE_BASE_Y - BOB_AMP) + wave * ease;
+      // Clamp at bottom (targetHorseY / 2) to prevent ground clipping, and at top (maxContainerY) to prevent ceiling clipping
+      h.container.position.y = Math.max(targetHorseY / 2.0, Math.min(targetY, maxContainerY));
       
       if (h.rider) {
         updateRider(h.rider, time + h.rider.phase);

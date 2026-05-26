@@ -111,39 +111,29 @@ export function pose(bones, name, dx = 0, dy = 0, dz = 0) {
   if (e) e.bone.rotation.set(e.rest.x + dx, e.rest.y + dy, e.rest.z + dz);
 }
 
+// Seated leg pose — calibrated to wrap the rider's legs beautifully around the horse mesh
 // Seated leg pose — applied every frame (legs never gesture).
-export function applySeatedLegs(B, index = 0) {
-  const configs = [
-    // 0: Current settings
-    { ulx: -0.8, uly: 0, ulz: 0.70, llx: 0.6, lly: 0, llz: -0.25 },
-    // 1: Much wider spread on Z (1.10 instead of 0.70)
-    { ulx: -0.8, uly: 0, ulz: 1.10, llx: 0.6, lly: 0, llz: -0.40 },
-    // 2: Extremely wide spread on Z (1.40)
-    { ulx: -0.8, uly: 0, ulz: 1.40, llx: 0.6, lly: 0, llz: -0.55 },
-    // 3: Spreading with opposite Z sign
-    { ulx: -0.8, uly: 0, ulz: -0.70, llx: 0.6, lly: 0, llz: 0.25 },
-    // 4: Inward/outward twist (Y axis rotation of UpperLeg)
-    { ulx: -0.8, uly: 0.6, ulz: 0.70, llx: 0.6, lly: 0, llz: -0.25 },
-    // 5: Opposite twist
-    { ulx: -0.8, uly: -0.6, ulz: 0.70, llx: 0.6, lly: 0, llz: -0.25 },
-    // 6: Knee raised higher with wide Z
-    { ulx: -0.4, uly: 0, ulz: 1.00, llx: 0.8, lly: 0, llz: -0.35 },
-    // 7: Wide spread with lower leg bent back a lot
-    { ulx: -0.8, uly: 0, ulz: 1.00, llx: 0.9, lly: 0, llz: -0.35 }
-  ];
+export function applySeatedLegs(B, scale = 1.0) {
+  // Flexion/extension: thigh forward/downward (negative rotation in Quaternius rig)
+  const ulx = -0.55;
+  // Twist: inward rotation to contour flanks
+  const uly = 0.15 * scale;
+  // Abduction: wider splay for smaller riders to clear constant horse width
+  const ulz = 1.15 - 0.20 * scale;
+  // Knee flexion: bend shins back (positive rotation in Quaternius rig)
+  const llx = 0.95;
+  // Knee twist: none
+  const lly = 0;
+  // Shin wrap: wrap shins inward to hug underbelly
+  const llz = 0.35 - 0.15 * scale;
 
-  const conf = configs[index % configs.length];
-  const ulx = conf.ulx;
-  const uly = conf.uly;
-  const ulz = conf.ulz;
-  const llx = conf.llx;
-  const lly = conf.lly;
-  const llz = conf.llz;
+  // ── LEFT LEG (Standard Armature Space) ──
+  pose(B, 'UpperLegL', ulx,  uly, -ulz);
+  pose(B, 'LowerLegL', llx,  lly,  llz);
 
-  pose(B, 'UpperLegL', ulx, uly, ulz);
-  pose(B, 'UpperLegR', ulx, -uly, -ulz); // mirror Y and Z
-  pose(B, 'LowerLegL', llx, lly, llz);
-  pose(B, 'LowerLegR', llx, -lly, -llz); // mirror Y and Z
+  // ── RIGHT LEG (Symmetrically Mirrored) ──
+  pose(B, 'UpperLegR', ulx, -uly,  ulz);
+  pose(B, 'LowerLegR', llx, -lly, -llz);
 }
 
 const UPPER_BONES = ['UpperArmR', 'UpperArmL', 'LowerArmR', 'LowerArmL', 'Head', 'Torso'];
@@ -206,11 +196,12 @@ for (const k in POSE_DEFS) {
 export function makeRider(template, height, { pool, facingY = 0, phase = 0, standing = false }) {
   const pivot = new THREE.Group();             // gentle body sway lives here
   const fig = cloneSkinned(template.root);
-  fig.scale.setScalar(height / template.height);
+  const scale = height / template.height;
+  fig.scale.setScalar(scale);
   fig.rotation.y = facingY;
   pivot.add(fig);
   return {
-    pivot, fig, bones: collectBones(fig), pool, phase, standing,
+    pivot, fig, bones: collectBones(fig), pool, phase, standing, scale,
     from: pool.includes('rest') || pool.includes('standRest') ? (pool.includes('standRest') ? 'standRest' : 'rest') : pool[0],
     to: pick(pool), tStart: 0, transDur: 0.7,
     nextSwitch: phase * 0.7 + Math.random() * 3, // stagger first switch
@@ -237,7 +228,7 @@ export function updateRider(r, t) {
     pose(B, 'LowerLegR', 0, 0, 0);
   } else {
     // Seated legs
-    applySeatedLegs(B, r.index);
+    applySeatedLegs(B, r.scale);
   }
 
   const A = POSES[r.from], C = POSES[r.to];
