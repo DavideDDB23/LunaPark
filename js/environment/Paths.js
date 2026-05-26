@@ -44,31 +44,48 @@ export async function buildPaths({ anisotropy = 8 } = {}) {
   try {
     const gltf = await loadGLB(BRIDGE_URL);
     const bridge = gltf.scene;
+    bridge.name = 'japanese_bridge';
     sanitizeMaterials(bridge);
 
     const bbox = new THREE.Box3().setFromObject(bridge);
     const size = new THREE.Vector3();
     bbox.getSize(size);
 
-    const targetLength = 22.0; // long enough to cross the meandering river with margin
-    const longestAxis = Math.max(size.x, size.z);
-    const scale = longestAxis > 0 ? targetLength / longestAxis : 1;
-    bridge.scale.setScalar(scale);
+    const targetLength = 22.0; // long enough to cross the river with nice margin
+    const targetWidth = 6.0;   // matching the walking path width (6m)
+    const targetHeight = 5.0;  // proportionate to 3.28m human models
 
-    // After scale, walking surface should align with NS path (width = 6m).
     // Rotate so long axis runs along Z (NS path crosses EW river).
     const longAxisIsX = size.x >= size.z;
     bridge.rotation.y = longAxisIsX ? Math.PI / 2 : 0;
 
-    bridge.position.set(0, pathY - bbox.min.y * scale, 0);
+    // Scale non-uniformly based on orientation
+    if (longAxisIsX) {
+      bridge.scale.set(
+        targetLength / size.x,
+        targetHeight / size.y,
+        targetWidth / size.z
+      );
+    } else {
+      bridge.scale.set(
+        targetWidth / size.x,
+        targetHeight / size.y,
+        targetLength / size.z
+      );
+    }
 
-    // Recenter after rotation+scale — bridge model origin may not be at its geometric centre.
+    // Recenter and place base on the path ground
+    bridge.position.set(0, 0, 0);
     bridge.updateMatrixWorld(true);
-    const postBox = new THREE.Box3().setFromObject(bridge);
+    const scaledBox = new THREE.Box3().setFromObject(bridge);
     const postCenter = new THREE.Vector3();
-    postBox.getCenter(postCenter);
-    bridge.position.x -= postCenter.x;
-    bridge.position.z -= postCenter.z;
+    scaledBox.getCenter(postCenter);
+
+    bridge.position.set(
+      -postCenter.x,
+      pathY - scaledBox.min.y,
+      -postCenter.z
+    );
 
     bridge.traverse((o) => {
       if (o.isMesh) {
