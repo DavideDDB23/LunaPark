@@ -95,6 +95,10 @@ export function collectBones(fig) {
       const dottedName = n.replace(/([LR])$/, '.$1');
       b = fig.getObjectByName(dottedName);
     }
+    if (!b) {
+      const underscoredName = n.replace(/([LR])$/, '_$1');
+      b = fig.getObjectByName(underscoredName);
+    }
     if (b) {
       map[n] = { bone: b, rest: b.rotation.clone() };
       foundBones.push(n);
@@ -106,55 +110,105 @@ export function collectBones(fig) {
   return map;
 }
 
-// Set a bone to rest-pose + delta Euler (so it works regardless of the bind rotation).
-export function pose(bones, name, dx = 0, dy = 0, dz = 0) {
+// Set a bone to rest-pose + delta Euler (relative) or direct Euler (absolute).
+export function pose(bones, name, dx = 0, dy = 0, dz = 0, absolute = false) {
   const e = bones[name];
-  if (e) e.bone.rotation.set(e.rest.x + dx, e.rest.y + dy, e.rest.z + dz);
+  if (!e) return;
+  if (absolute) {
+    e.bone.rotation.set(dx, dy, dz);
+  } else {
+    e.bone.rotation.set(e.rest.x + dx, e.rest.y + dy, e.rest.z + dz);
+  }
 }
 
-// Seated leg pose — calibrated to wrap the rider's legs beautifully around the horse mesh
-// Seated leg pose — applied every frame (legs never gesture).
-export function applyHorseSeatedLegs(B, scale = 1.0) {
-  // Flexion/extension: thigh forward/downward (negative rotation in Quaternius rig)
-  const ulx = -0.55;
-  // Twist: inward rotation to contour flanks
-  const uly = 0.15 * scale;
-  // Abduction: wider splay for smaller riders to clear constant horse width
-  const ulz = 1.15 - 0.20 * scale;
-  // Knee flexion: bend shins back (positive rotation in Quaternius rig)
-  const llx = 0.95;
-  // Knee twist: none
-  const lly = 0;
-  // Shin wrap: wrap shins inward to hug underbelly
-  const llz = 0.35 - 0.15 * scale;
-
-  // ── LEFT LEG (Standard Armature Space) ──
-  pose(B, 'UpperLegL', ulx,  uly, -ulz);
-  pose(B, 'LowerLegL', llx,  lly,  llz);
-
-  // ── RIGHT LEG (Symmetrically Mirrored) ──
-  pose(B, 'UpperLegR', ulx, -uly,  ulz);
-  pose(B, 'LowerLegR', llx, -lly, -llz);
+// Set a bone's rotation via quaternion (bypasses Euler decomposition issues
+// caused by mirrored bone local axes in the Quaternius rig).
+function poseQ(bones, name, qx, qy, qz, qw) {
+  const e = bones[name];
+  if (!e) return;
+  e.bone.quaternion.set(qx, qy, qz, qw);
 }
+
+/* ── Quaternion values extracted from the GLTF "SitDown" animation ──
+ *
+ * The Quaternius human rig has mirrored bone rolls: left & right leg
+ * bones live in different local coordinate systems.  Setting the same
+ * Euler angles on both sides does NOT produce a symmetric pose.
+ *
+ * The artist's own "SitDown" animation stores quaternions that are
+ * perfectly symmetric:  same (x, w), negated (y, z).
+ * Using those quaternions directly guarantees visual symmetry.
+ *
+ * Source: last keyframe of "SitDown" animation in Casual_Male.gltf
+ *   UpperLeg.L quat = ( 0.822676,  0.006432,  0.004781,  0.568454)
+ *   UpperLeg.R quat = ( 0.822676, -0.006433, -0.004780,  0.568454)
+ *   LowerLeg.L quat = ( 0.684060,  0.006947,  0.006955,  0.729359)
+ *   LowerLeg.R quat = ( 0.684060, -0.006947, -0.006955,  0.729359)
+ *   Foot.L     quat = ( 0.000005,  0.702952,  0.711237,  0.000005)
+ *   Foot.R     quat = ( 0.000006, -0.702952, -0.711237,  0.000005)
+ */
 
 // Chair-seated legs (Tagada style): knees forward, minimal splay.
 export function applyChairSeatedLegs(B, scale = 1.0) {
-  // Thigh forward to sit on a chair
-  const ulx = -1.05;
-  // Slight inward twist for natural alignment
-  const uly = 0;
-  // Keep legs parallel for a simple seated pose
-  const ulz = 0;
-  // Knee flexion (positive in this rig bends the shin backward)
-  const llx = 0.95;
-  const lly = 0;
-  const llz = 0;
+  // Fully-seated pose from the SitDown animation (last keyframe)
+  poseQ(B, 'UpperLegL',  0.822676,  0.006432,  0.004781, 0.568454);
+  poseQ(B, 'UpperLegR',  0.822676, -0.006433, -0.004780, 0.568454);
+  poseQ(B, 'LowerLegL',  0.684060,  0.006947,  0.006955, 0.729359);
+  poseQ(B, 'LowerLegR',  0.684060, -0.006947, -0.006955, 0.729359);
+  poseQ(B, 'FootL',      0.000005,  0.702952,  0.711237, 0.000005);
+  poseQ(B, 'FootR',      0.000006, -0.702952, -0.711237, 0.000005);
+}
 
-  pose(B, 'UpperLegL', ulx, uly, -ulz);
-  pose(B, 'LowerLegL', llx, lly, llz);
+// Seated leg pose for horse — splayed outwards around the horse body
+export function applyHorseSeatedLegs(B, scale = 1.0) {
+  // Start from the base seated quaternion then apply splay via
+  // a small additional rotation around the bone's local Z axis.
+  // splay quaternion:  (0, 0, sin(a/2), cos(a/2))
+  const splayAngle = 0.35 + 0.15 * (1.0 / scale); // radians outward
+  const halfSplay = splayAngle * 0.5;
+  const sz = Math.sin(halfSplay);
+  const cz = Math.cos(halfSplay);
 
-  pose(B, 'UpperLegR', ulx, -uly, ulz);
-  pose(B, 'LowerLegR', llx, -lly, -llz);
+  // Base seated upper-leg quaternions (from SitDown animation)
+  const ulL = { x: 0.822676, y: 0.006432, z: 0.004781, w: 0.568454 };
+  const ulR = { x: 0.822676, y: -0.006433, z: -0.004780, w: 0.568454 };
+
+  // Splay: rotate around local Z. Left leg splays -Z, right leg splays +Z
+  // q_result = q_base * q_splay  (local-space post-multiply)
+  const splayL = { x: 0, y: 0, z: -sz, w: cz };   // negative Z splay
+  const splayR = { x: 0, y: 0, z: sz, w: cz };    // positive Z splay
+
+  poseQ(B, 'UpperLegL', ...qMul(ulL, splayL));
+  poseQ(B, 'UpperLegR', ...qMul(ulR, splayR));
+
+  // Lower legs: use seated pose with a small inward wrap
+  const wrapAngle = 0.15;
+  const halfWrap = wrapAngle * 0.5;
+  const wz = Math.sin(halfWrap);
+  const cwz = Math.cos(halfWrap);
+
+  const llL = { x: 0.684060, y: 0.006947, z: 0.006955, w: 0.729359 };
+  const llR = { x: 0.684060, y: -0.006947, z: -0.006955, w: 0.729359 };
+
+  const wrapL = { x: 0, y: 0, z: -wz, w: cwz };  // wrap inward
+  const wrapR = { x: 0, y: 0, z: wz, w: cwz };    // wrap inward (mirrored)
+
+  poseQ(B, 'LowerLegL', ...qMul(llL, wrapL));
+  poseQ(B, 'LowerLegR', ...qMul(llR, wrapR));
+
+  // Feet: same as chair-seated
+  poseQ(B, 'FootL',  0.000005,  0.702952,  0.711237, 0.000005);
+  poseQ(B, 'FootR',  0.000006, -0.702952, -0.711237, 0.000005);
+}
+
+// Quaternion multiply: returns [x, y, z, w]
+function qMul(a, b) {
+  return [
+    a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+  ];
 }
 
 const UPPER_BONES = ['UpperArmR', 'UpperArmL', 'LowerArmR', 'LowerArmL', 'Head', 'Torso'];
@@ -213,8 +267,7 @@ for (const k in POSE_DEFS) {
   for (const b in POSE_DEFS[k]) POSES[k][b] = POSE_DEFS[k][b];
 }
 
-// One rider with a pose state-machine: it holds an action, then eases to the next.
-export function makeRider(template, height, { pool, facingY = 0, phase = 0, standing = false }) {
+export function makeRider(template, height, { pool, facingY = 0, phase = 0, standing = false, seatedStyle = 'chair' }) {
   const pivot = new THREE.Group();             // gentle body sway lives here
   const fig = cloneSkinned(template.root);
   const scale = height / template.height;
@@ -222,7 +275,7 @@ export function makeRider(template, height, { pool, facingY = 0, phase = 0, stan
   fig.rotation.y = facingY;
   pivot.add(fig);
   return {
-    pivot, fig, bones: collectBones(fig), pool, phase, standing, scale,
+    pivot, fig, bones: collectBones(fig), pool, phase, standing, scale, seatedStyle,
     from: pool.includes('rest') || pool.includes('standRest') ? (pool.includes('standRest') ? 'standRest' : 'rest') : pool[0],
     to: pick(pool), tStart: 0, transDur: 0.7,
     nextSwitch: phase * 0.7 + Math.random() * 3, // stagger first switch
@@ -249,7 +302,11 @@ export function updateRider(r, t) {
     pose(B, 'LowerLegR', 0, 0, 0);
   } else {
     // Seated legs
-    applyHorseSeatedLegs(B, r.scale);
+    if (r.seatedStyle === 'horse') {
+      applyHorseSeatedLegs(B, r.scale);
+    } else {
+      applyChairSeatedLegs(B, r.scale);
+    }
   }
 
   const A = POSES[r.from], C = POSES[r.to];

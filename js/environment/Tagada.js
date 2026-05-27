@@ -388,15 +388,33 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         phase: i * 1.3
       });
 
-      // Hips sit at seatSurfaceY (0.80) and feet rest naturally on the platform floor (y = 0.0)
-      const riderY = 0.0;
-      
-      // Shift passenger slightly forward
-      const riderZ = 0.15;
-      rider.pivot.position.set(0, riderY, riderZ);
-      
       // Update matrices to lock skeletal elements
       rider.fig.updateMatrixWorld(true);
+
+      const hipBone = rider.fig.getObjectByName('Hips');
+      const seatSurfaceY = 0.80; // top of seat cushion
+      const targetZ = 0.08;      // slightly forward from backrest (backrest is at -0.3)
+      const scale = riderHeight / template.height;
+
+      if (hipBone) {
+        const localHip = new THREE.Vector3();
+        hipBone.getWorldPosition(localHip);
+        rider.fig.worldToLocal(localHip);
+        
+        const scaledHip = localHip.clone().multiplyScalar(scale);
+        
+        // Pivot position + scaledHip = (0.0, seatSurfaceY, targetZ)
+        rider.pivot.position.set(0.0 - scaledHip.x, seatSurfaceY - scaledHip.y, targetZ - scaledHip.z);
+      } else {
+        // Fallback if Hips bone is not found
+        const riderY = seatSurfaceY - riderHeight * 0.28;
+        rider.pivot.position.set(0.0, riderY, targetZ);
+      }
+
+      rider.restX = rider.pivot.position.x;
+      rider.restY = rider.pivot.position.y;
+      rider.restZ = rider.pivot.position.z;
+
       seatGroup.add(rider.pivot);
     }
 
@@ -560,9 +578,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         
         // Hips offset + dynamic jitter
         s.rider.pivot.position.set(
-          jitterX,
-          jitterY,
-          0.15 + jitterZ
+          s.rider.restX + jitterX,
+          s.rider.restY + jitterY,
+          s.rider.restZ + jitterZ
         );
 
         // Quick tilt/jolt rotation on the passenger pivot during bumps

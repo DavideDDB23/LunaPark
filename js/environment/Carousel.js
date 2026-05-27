@@ -226,7 +226,8 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       const rider = makeRider(tmpl, currentHeight, {
         pool: ACTIONS_SEATED_GENERAL,
         facingY: 0,
-        phase: i * (Math.PI / 4)
+        phase: i * (Math.PI / 4),
+        seatedStyle: 'horse'
       });
       rider.index = i;
       
