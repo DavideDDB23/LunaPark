@@ -44,6 +44,7 @@ No imported animations — all motion is JavaScript math.
 - [x] Horses bob up and down as the carousel spins — each horse at a different phase so they form a wave
 - [x] A small jockey figure sitting on each horse, moving with it
 - [x] Placed in the **northeast** area (around +40, 0, −40)
+- [x] Fix legs in `passengers.js` (use `applyChairSeatedLegs` and apply some rotation)
 
 ### 3. Roller Coaster
 - [ ] A looping curved track built from a smooth mathematical curve (CatmullRom spline)
@@ -52,11 +53,16 @@ No imported animations — all motion is JavaScript math.
 - [ ] Cart goes faster in valleys and slower on climbs (physics-inspired variable speed)
 - [ ] Placed in the **southeast** area (around +40, 0, +40)
 
-### 4. Tagada (Mechanical Arm Ride)
-- [ ] A heavy mechanical arm that oscillates back and forth on two axes simultaneously, creating a compound unpredictable motion
-- [ ] At the end of the arm, a circular seat platform that spins fast independently
-- [ ] 8 seats arranged around the disc, each with a passenger
-- [ ] Placed in the **southwest** area (around −40, 0, +40)
+### 4. Tagada (Mechanical Arm Ride) ✅
+- [x] A heavy mechanical arm that oscillates back and forth on two axes simultaneously, creating a compound unpredictable motion
+- [x] At the end of the arm, a circular seat platform that spins fast independently
+- [x] 8 seats arranged around the disc, each with a passenger
+- [x] Placed in the **southwest** area (around −40, 0, +40)
+- [x] Fix legs in `passengers.js` (`applyChairSeatedLegs`)
+- [x] Fix position of some passenger models (some are clipped into the chair)
+- [ ] Fix arm override (hands-up animation) when the ride is on
+- [ ] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
+- [ ] If no model is found, change with "Calcio in culo" or "torre di caduta" or "space star"
 
 ---
 

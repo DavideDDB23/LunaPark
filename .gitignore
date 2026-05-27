@@ -21,6 +21,8 @@ Thumbs.db
 
 # Local debug helpers — not part of the published app
 debug.js
+.antigravity/
+.claude/
 
 # Blender / DCC source files shipped inside asset packs (the runtime only loads the GLB/OBJ/JPG/PNG/HDR)
 *.blend
