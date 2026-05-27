@@ -26,6 +26,7 @@ export const VISITOR_MODELS = [
 const ANIM_BONES = [
   'UpperArmL', 'UpperArmR', 'LowerArmL', 'LowerArmR', 'Head', 'Torso',
   'UpperLegL', 'UpperLegR', 'LowerLegL', 'LowerLegR',
+  'FootL', 'FootR',
 ];
 
 export const ACTIONS_SEATED_GENERAL = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'wave', 'point', 'photo', 'cheer', 'relax'];
@@ -113,7 +114,7 @@ export function pose(bones, name, dx = 0, dy = 0, dz = 0) {
 
 // Seated leg pose — calibrated to wrap the rider's legs beautifully around the horse mesh
 // Seated leg pose — applied every frame (legs never gesture).
-export function applySeatedLegs(B, scale = 1.0) {
+export function applyHorseSeatedLegs(B, scale = 1.0) {
   // Flexion/extension: thigh forward/downward (negative rotation in Quaternius rig)
   const ulx = -0.55;
   // Twist: inward rotation to contour flanks
@@ -133,6 +134,26 @@ export function applySeatedLegs(B, scale = 1.0) {
 
   // ── RIGHT LEG (Symmetrically Mirrored) ──
   pose(B, 'UpperLegR', ulx, -uly,  ulz);
+  pose(B, 'LowerLegR', llx, -lly, -llz);
+}
+
+// Chair-seated legs (Tagada style): knees forward, minimal splay.
+export function applyChairSeatedLegs(B, scale = 1.0) {
+  // Thigh forward to sit on a chair
+  const ulx = -1.05;
+  // Slight inward twist for natural alignment
+  const uly = 0;
+  // Keep legs parallel for a simple seated pose
+  const ulz = 0;
+  // Knee flexion (positive in this rig bends the shin backward)
+  const llx = 0.95;
+  const lly = 0;
+  const llz = 0;
+
+  pose(B, 'UpperLegL', ulx, uly, -ulz);
+  pose(B, 'LowerLegL', llx, lly, llz);
+
+  pose(B, 'UpperLegR', ulx, -uly, ulz);
   pose(B, 'LowerLegR', llx, -lly, -llz);
 }
 
@@ -228,7 +249,7 @@ export function updateRider(r, t) {
     pose(B, 'LowerLegR', 0, 0, 0);
   } else {
     // Seated legs
-    applySeatedLegs(B, r.scale);
+    applyHorseSeatedLegs(B, r.scale);
   }
 
   const A = POSES[r.from], C = POSES[r.to];

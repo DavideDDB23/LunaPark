@@ -14,6 +14,7 @@ import { buildEntranceGate } from "./environment/Props.js";
 import { buildRiver } from "./environment/River.js";
 import { buildFerrisWheel } from "./environment/FerrisWheel.js";
 import { buildCarousel } from "./environment/Carousel.js";
+import { buildTagada } from "./environment/Tagada.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 
 const canvas = document.getElementById('c');
@@ -108,6 +109,11 @@ async function init() {
   environmentGroup.add(carousel);
   window.__lp.carousel = carousel.userData.controller;
 
+  console.log("buildTagada");
+  const tagada = await buildTagada({ position: [-40, 0, 40], camera, renderer, anisotropy: maxAniso });
+  environmentGroup.add(tagada);
+  window.__lp.tagada = tagada.userData.controller;
+
   // Day/night controller — slider in HUD drives this.
   dayNight = new DayNightCycle({
     scene,
@@ -180,6 +186,9 @@ function animate() {
 
   const carousel = environmentGroup.getObjectByName('carousel');
   if (carousel && carousel.userData.tick) carousel.userData.tick(delta, time);
+
+  const tagada = environmentGroup.getObjectByName('tagada');
+  if (tagada && tagada.userData.tick) tagada.userData.tick(delta, time);
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
