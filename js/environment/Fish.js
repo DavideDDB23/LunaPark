@@ -64,11 +64,20 @@ async function loadFishTemplate() {
   const bbox = new THREE.Box3().setFromObject(source);
   const size = new THREE.Vector3();
   bbox.getSize(size);
+  const center = new THREE.Vector3();
+  bbox.getCenter(center);
+  
   const longest = Math.max(size.x, size.y, size.z);
   const scale = longest > 0 ? TARGET_FISH_LENGTH / longest : 1;
   const forwardAxis = size.x >= size.z ? 'x' : 'z';
 
-  return { source, scale, forwardAxis };
+  // Wrap and center the raw GLTF scene around the origin
+  const wrapper = new THREE.Group();
+  wrapper.name = 'fish_wrapper';
+  wrapper.add(source);
+  source.position.set(-center.x, -center.y, -center.z);
+
+  return { source: wrapper, scale, forwardAxis };
 }
 
 function findBones(root) {
@@ -85,7 +94,7 @@ function findBones(root) {
   return { ...found, rest };
 }
 
-export async function buildFish() {
+export async function buildFish(water) {
   const group = new THREE.Group();
   group.name = 'fish';
 
@@ -99,16 +108,74 @@ export async function buildFish() {
 
   const fishes = [];
 
-  // ─── Ripple Pool ──────────────────────────────────────────────
-  const rippleCount = 8;
+  // ─── Custom Foam Ring Shader Material ─────────────────────────
+  const ringVertexShader = /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const ringFragmentShader = /* glsl */ `
+    uniform float uProgress;
+    uniform float uOpacity;
+    uniform vec3 uColor;
+    varying vec2 vUv;
+
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      float a = hash(i);
+      float b = hash(i + vec2(1.0, 0.0));
+      float c = hash(i + vec2(0.0, 1.0));
+      float d = hash(i + vec2(1.0, 1.0));
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    }
+
+    void main() {
+      // Planar UV distance from center (0.5, 0.5)
+      float d = length(vUv - vec2(0.5)) * 2.0;
+      
+      // Ring thickness profile (fades at inner 0.78 and outer 1.02 boundaries)
+      float radial = smoothstep(0.78, 0.88, d) * smoothstep(1.02, 0.92, d);
+      if (radial <= 0.0) discard;
+
+      // Circular angle for polar coordinates noise
+      float angle = atan(vUv.y - 0.5, vUv.x - 0.5);
+      
+      // Warped circular foam texture
+      vec2 noiseUv = vec2(angle * 5.0, (d - 0.9) * 20.0 - uProgress * 3.0);
+      float n1 = noise(noiseUv);
+      float n2 = noise(noiseUv * 2.1 + vec2(uProgress * 1.5));
+      float n = 0.6 * n1 + 0.4 * n2;
+
+      // Foam breaks up dynamically as progress increases
+      float threshold = 0.25 + uProgress * 0.5;
+      float foam = smoothstep(threshold, threshold + 0.12, n);
+      float alpha = foam * radial * uOpacity * (1.0 - uProgress);
+      
+      gl_FragColor = vec4(uColor, alpha);
+    }
+  `;
+
+  // ─── Concentric Ripple Pool ───────────────────────────────────
+  const rippleCount = 32;
   const ripples = [];
-  const rippleGeo = new THREE.RingGeometry(0.8, 1.0, 24);
+  const rippleGeo = new THREE.RingGeometry(0.8, 1.0, 32);
   
   for (let i = 0; i < rippleCount; i++) {
-    const rMat = new THREE.MeshBasicMaterial({
-      color: 0xcce6ff,
+    const rMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uProgress: { value: 0 },
+        uOpacity: { value: 0 },
+        uColor: { value: new THREE.Color(0xd8edff) }
+      },
+      vertexShader: ringVertexShader,
+      fragmentShader: ringFragmentShader,
       transparent: true,
-      opacity: 0.0,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
@@ -121,22 +188,142 @@ export async function buildFish() {
     ripples.push({
       mesh: rMesh,
       active: false,
-      time: 0,
+      age: 0,
+      delay: 0,
       duration: 1.0,
       maxScale: 2.5
     });
   }
 
-  function spawnRipple(x, z) {
-    const rip = ripples.find(r => !r.active);
-    if (rip) {
-      rip.active = true;
-      rip.time = 0;
-      rip.mesh.position.set(x, WATER_LEVEL + 0.005, z);
-      rip.mesh.scale.set(0.01, 0.01, 0.01);
-      rip.mesh.visible = true;
-      rip.mesh.material.opacity = 0.65;
+  function triggerSplashRipples(x, z, isEntry) {
+    const configs = isEntry ? [
+      { delay: 0.0, duration: 0.8, maxScale: 1.8 },
+      { delay: 0.1, duration: 1.0, maxScale: 2.6 },
+      { delay: 0.25, duration: 1.2, maxScale: 3.4 }
+    ] : [
+      { delay: 0.0, duration: 0.6, maxScale: 1.4 },
+      { delay: 0.15, duration: 0.9, maxScale: 2.1 }
+    ];
+    
+    for (const conf of configs) {
+      const rip = ripples.find(r => !r.active);
+      if (rip) {
+        rip.active = true;
+        rip.age = 0;
+        rip.delay = conf.delay;
+        rip.duration = conf.duration;
+        rip.maxScale = conf.maxScale;
+        rip.mesh.position.set(x, WATER_LEVEL + 0.005, z);
+        rip.mesh.scale.set(0.01, 0.01, 0.01);
+        rip.mesh.visible = false;
+        rip.mesh.material.uniforms.uOpacity.value = 0.0;
+        rip.mesh.material.uniforms.uProgress.value = 0.0;
+        rip.mesh.material.uniforms.uColor.value.setHex(isEntry ? 0xffffff : 0xd8edff);
+      }
     }
+  }
+
+  // ─── Droplet Particle Pool ────────────────────────────────────
+  const particleCount = 150;
+  const particles = [];
+  const dropGeo = new THREE.BoxGeometry(0.045, 0.045, 0.045);
+  
+  for (let i = 0; i < particleCount; i++) {
+    const dMat = new THREE.MeshBasicMaterial({
+      color: 0xe6f2ff,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const dMesh = new THREE.Mesh(dropGeo, dMat);
+    dMesh.visible = false;
+    group.add(dMesh);
+    
+    particles.push({
+      mesh: dMesh,
+      active: false,
+      vx: 0, vy: 0, vz: 0,
+      age: 0,
+      duration: 1.0
+    });
+  }
+
+  function triggerSplashDroplets(x, z, vx, vy, vz, isEntry) {
+    const numDroplets = isEntry ? (24 + Math.floor(Math.random() * 12)) : (12 + Math.floor(Math.random() * 6));
+    
+    for (let k = 0; k < numDroplets; k++) {
+      const part = particles.find(p => !p.active);
+      if (!part) break;
+      
+      part.active = true;
+      part.age = 0;
+      part.duration = 0.5 + Math.random() * 0.5;
+      part.mesh.position.set(
+        x + (Math.random() - 0.5) * 0.1,
+        WATER_LEVEL + 0.01,
+        z + (Math.random() - 0.5) * 0.1
+      );
+      
+      const baseScale = isEntry ? (0.6 + Math.random() * 0.8) : (0.4 + Math.random() * 0.6);
+      part.mesh.scale.setScalar(baseScale);
+      part.mesh.visible = true;
+      part.mesh.material.opacity = 0.9;
+      
+      const angle = Math.random() * Math.PI * 2;
+      const spreadSpeed = isEntry ? (1.5 + Math.random() * 2.5) : (0.8 + Math.random() * 1.5);
+      
+      const rx = Math.cos(angle) * spreadSpeed;
+      const rz = Math.sin(angle) * spreadSpeed;
+      
+      if (isEntry) {
+        // Entry radial rebound + forward momentum
+        part.vx = rx * 0.7 + vx * 0.4;
+        part.vy = Math.abs(vy) * 0.5 + 2.0 + Math.random() * 3.0; // rebound upwards
+        part.vz = rz * 0.7 + vz * 0.4;
+      } else {
+        // Exit spray forward-up
+        part.vx = rx * 0.5 + vx * 0.6;
+        part.vy = vy * 0.7 + 1.5 + Math.random() * 2.0;
+        part.vz = rz * 0.5 + vz * 0.6;
+      }
+    }
+  }
+
+  function spawnContinuousTrailDroplets(x, y, z, vx, vy, vz, count, isEntry) {
+    for (let k = 0; k < count; k++) {
+      const part = particles.find(p => !p.active);
+      if (!part) break;
+      
+      part.active = true;
+      part.age = 0;
+      part.duration = 0.3 + Math.random() * 0.3;
+      part.mesh.position.set(
+        x + (Math.random() - 0.5) * 0.08,
+        y,
+        z + (Math.random() - 0.5) * 0.08
+      );
+      
+      const baseScale = isEntry ? (0.4 + Math.random() * 0.5) : (0.3 + Math.random() * 0.3);
+      part.mesh.scale.setScalar(baseScale);
+      part.mesh.visible = true;
+      part.mesh.material.opacity = 0.8;
+      
+      const angle = Math.random() * Math.PI * 2;
+      const spreadSpeed = isEntry ? (0.6 + Math.random() * 0.8) : (0.4 + Math.random() * 0.6);
+      
+      part.vx = Math.cos(angle) * spreadSpeed + vx * 0.3;
+      part.vy = Math.abs(vy) * 0.2 + 0.6 + Math.random() * 0.8; // pop up slightly
+      part.vz = Math.sin(angle) * spreadSpeed + vz * 0.3;
+    }
+  }
+
+  function triggerFullSplash(x, z, vx, vy, vz, isEntry) {
+    if (water && water.userData.triggerRipple) {
+      water.userData.triggerRipple(x, z, isEntry ? 1.4 : 0.7);
+    }
+    triggerSplashRipples(x, z, isEntry);
+    triggerSplashDroplets(x, z, vx, vy, vz, isEntry);
   }
 
   for (let i = 0; i < FISH_COUNT; i++) {
@@ -156,6 +343,8 @@ export async function buildFish() {
       bones,
       forwardAxis: tmpl.forwardAxis,
       x: seedX,
+      y: WATER_LEVEL + (-0.13 - Math.random() * 0.04),
+      z: riverCenter(seedX),
       baseSpeed: 1.6 + Math.random() * 1.0,
       dir: Math.random() < 0.5 ? -1 : 1,
       lateralPhase: Math.random() * Math.PI * 2,
@@ -164,11 +353,13 @@ export async function buildFish() {
       finPhase:     Math.random() * Math.PI * 2,
       // Dynamic motion state
       baseFreq:     3.6 + Math.random() * 1.2,
-      nextJump:     4.0 + Math.random() * 8.0, // jump less often so it's more special
-      jumpT:        -1,
-      jumpDur:      1.2 + Math.random() * 0.4,
+      nextJump:     4.0 + Math.random() * 8.0,
+      jumpState:    'swim',
+      vx: 0, vy: 0, vz: 0,
+      airTime: 0,
+      airT: 0,
+      diveT: 0,
       jumpRoll:     0,
-      jumpHeight:   0.7 + Math.random() * 0.5,
       depthVariant: -0.13 - Math.random() * 0.04,
       // Swim state variables (Burst-and-Coast)
       swimState:    Math.random() < 0.5 ? 'burst' : 'coast',
@@ -177,24 +368,64 @@ export async function buildFish() {
       activeFreq:   3.6,
       activeAmp:    0.35,
       activeFinAmp: 0.30,
-      phaseAccumulator: 0,
-      wasUnderwater: true
+      phaseAccumulator: 0
     });
   }
 
   group.userData.tick = (delta, time, _windSpeed) => {
+    // Clamp delta to prevent physics glitches during lag spikes
+    const dt = Math.min(delta, 0.05);
+
     // ── Update Ripples ──────────────────────────────────────────
     for (const rip of ripples) {
       if (!rip.active) continue;
-      rip.time += delta;
-      const progress = rip.time / rip.duration;
+      rip.age += dt;
+      if (rip.age < rip.delay) continue;
+      
+      const progress = (rip.age - rip.delay) / rip.duration;
       if (progress >= 1.0) {
         rip.active = false;
         rip.mesh.visible = false;
       } else {
+        rip.mesh.visible = true;
         const s = THREE.MathUtils.lerp(0.01, rip.maxScale, progress);
         rip.mesh.scale.set(s, s, s);
-        rip.mesh.material.opacity = 0.65 * (1.0 - progress);
+        rip.mesh.material.uniforms.uProgress.value = progress;
+        rip.mesh.material.uniforms.uOpacity.value = 0.85;
+      }
+    }
+
+    // ── Update Droplets ─────────────────────────────────────────
+    const gravity = 12.0;
+    for (const part of particles) {
+      if (!part.active) continue;
+      part.age += dt;
+      const progress = part.age / part.duration;
+      if (progress >= 1.0 || part.mesh.position.y < WATER_LEVEL - 0.1) {
+        part.active = false;
+        part.mesh.visible = false;
+      } else {
+        part.vy -= gravity * dt;
+        part.mesh.position.x += part.vx * dt;
+        part.mesh.position.y += part.vy * dt;
+        part.mesh.position.z += part.vz * dt;
+        
+        const scaleVal = 1.0 - progress;
+        part.mesh.material.opacity = 0.9 * (1.0 - progress);
+
+        // Motion stretched droplet particles
+        const speed = Math.sqrt(part.vx * part.vx + part.vy * part.vy + part.vz * part.vz);
+        if (speed > 0.01) {
+          const dir = new THREE.Vector3(part.vx, part.vy, part.vz).normalize();
+          const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+          part.mesh.quaternion.copy(quat);
+
+          const stretch = 1.0 + speed * 0.18;
+          const thickness = 1.0 / Math.sqrt(stretch);
+          part.mesh.scale.set(thickness, stretch, thickness).multiplyScalar(scaleVal * 0.6);
+        } else {
+          part.mesh.scale.setScalar(scaleVal * 0.6);
+        }
       }
     }
 
@@ -202,7 +433,7 @@ export async function buildFish() {
       const b = f.bones;
 
       // ── Swim state machine (Burst-and-Coast) ──────────────────
-      f.stateTimer -= delta;
+      f.stateTimer -= dt;
       if (f.stateTimer <= 0) {
         if (f.swimState === 'burst') {
           f.swimState = 'coast';
@@ -219,21 +450,23 @@ export async function buildFish() {
       let targetAmp = 0.35;
       let targetFinAmp = 0.30;
 
-      if (f.jumpT >= 0) {
+      const isJumpingState = f.jumpState !== 'swim';
+
+      if (isJumpingState) {
         targetSpeedMultiplier = 2.2;
         targetFreq = f.baseFreq * 2.5;
         targetAmp = 0.65;
         targetFinAmp = 0.10;
       } else if (f.swimState === 'burst') {
-        targetSpeedMultiplier = 1.6 + Math.random() * 0.2;
-        targetFreq = f.baseFreq * 1.6;
-        targetAmp = 0.50;
+        targetSpeedMultiplier = 1.8 + Math.random() * 0.2;
+        targetFreq = f.baseFreq * 1.8;
+        targetAmp = 0.60;
         targetFinAmp = 0.05; // tuck fins during burst
       } else {
-        // Coasting / drifting
-        targetSpeedMultiplier = 0.35 + Math.sin(time * 0.5 + f.bobPhase) * 0.15;
-        targetFreq = f.baseFreq * 0.3;
-        targetAmp = 0.12; // very gentle wag
+        // Coasting / drifting (decelerating)
+        targetSpeedMultiplier = 0.22 + Math.sin(time * 0.4 + f.bobPhase) * 0.08;
+        targetFreq = f.baseFreq * 0.15;
+        targetAmp = 0.06; // tail almost stops
         targetFinAmp = 0.45; // flare fins to stabilize
       }
 
@@ -243,119 +476,239 @@ export async function buildFish() {
       f.activeAmp = THREE.MathUtils.lerp(f.activeAmp, targetAmp, 0.08);
       f.activeFinAmp = THREE.MathUtils.lerp(f.activeFinAmp, targetFinAmp, 0.08);
 
-      // Accumulate phase smoothly to avoid frequency change jumps
-      f.phaseAccumulator += delta * f.activeFreq * 2 * Math.PI;
+      // Accumulate phase smoothly to avoid frequency change snaps
+      f.phaseAccumulator += dt * f.activeFreq * 2 * Math.PI;
       const phase = f.phaseAccumulator + f.wagPhase;
-      const tailPhase = Math.sin(phase);
 
-      // ── Cyclic propulsion speed modification ───────────────────
-      const propulse = 0.85 + 0.25 * Math.max(0, Math.cos(phase));
-      const speedMul = f.activeSpeed * propulse;
-      f.x += f.baseSpeed * speedMul * f.dir * delta;
-      
-      if (f.x > RIVER_X_MAX - 8) { f.dir = -1; f.x = RIVER_X_MAX - 8; }
-      if (f.x < RIVER_X_MIN + 8) { f.dir =  1; f.x = RIVER_X_MIN + 8; }
-
+      // ── River Path Properties (Curvilinear coordinates) ─────────
       const cz = riverCenter(f.x);
       const hw = riverHalfWidth(f.x);
-      const lateral = Math.sin(time * 0.7 + f.lateralPhase) * (hw * 0.55);
-      const z = cz + lateral;
-      const lateralVel = Math.cos(time * 0.7 + f.lateralPhase) * (hw * 0.55) * 0.7;
-      // Turn rate / curvature is proportional to lateral acceleration
-      const lateralAcc = -Math.sin(time * 0.7 + f.lateralPhase) * (hw * 0.55) * 0.49;
+      
+      // River derivatives for tangent/normal alignment
+      const dz_ds = 14 * 0.04 * Math.cos(f.x * 0.04) + 3 * 0.11 * Math.cos(f.x * 0.11);
+      const len = Math.sqrt(1 + dz_ds * dz_ds);
+      const tx = 1.0 / len;
+      const tz = dz_ds / len;
+      const nx = -tz;
+      const nz = tx;
 
-      // ── Depth and Jumps ────────────────────────────────────────
-      const bob = Math.sin(time * 1.8 + f.bobPhase) * 0.02;
-      let y = WATER_LEVEL + f.depthVariant + bob;
+      // Curvature calculation for spine bending
+      const d2z_ds2 = -14 * 0.0016 * Math.sin(f.x * 0.04) - 3 * 0.0121 * Math.sin(f.x * 0.11);
+      // Normalized curvature
+      const curvature = d2z_ds2 / Math.pow(1.0 + dz_ds * dz_ds, 1.5);
+      const pathCurvatureYaw = curvature * 22.0 * f.dir;
 
-      let pitch = Math.cos(time * 1.8 + f.bobPhase) * 0.04;
-      let roll  = lateralVel * 0.18 * f.dir;
+      // 1. Normal swimming path parameters
+      const v_path = f.baseSpeed * f.activeSpeed;
+      const vx_swim = v_path * f.dir * tx;
+      const vz_swim = v_path * f.dir * tz;
+      
+      const lateralPhase = time * 0.7 + f.lateralPhase;
+      const L = Math.sin(lateralPhase) * (hw * 0.55);
+      const dL_dt = 0.7 * Math.cos(lateralPhase) * (hw * 0.55);
+      const vx_lat = dL_dt * nx;
+      const vz_lat = dL_dt * nz;
+
+      const vx_swim_total = vx_swim + vx_lat;
+      const vz_swim_total = vz_swim + vz_lat;
+      
+      const y_target = WATER_LEVEL + f.depthVariant + Math.sin(time * 1.8 + f.bobPhase) * 0.02;
+
       let curlBack  = 0;
       let curlFront = 0;
+      let targetRoll = 0;
+      let targetPitch = 0;
 
-      // Jump trigger check
-      if (f.jumpT < 0 && time >= f.nextJump) {
-        f.jumpT = 0;
-        f.jumpRoll = (Math.random() - 0.5) * 1.5; // roll in air
+      // ── Physical State Updates ─────────────────────────────────
+      if (f.jumpState === 'swim') {
+        // Propulsion pulses smoothly twice per tail wag cycle
+        const propulse = 1.0 + 0.3 * Math.sin(2 * phase - Math.PI / 2);
+        const speedMul = f.activeSpeed * propulse;
+        const ds_dt = (f.baseSpeed * speedMul * f.dir) / len;
+        f.x += ds_dt * dt;
+
+        if (f.x > RIVER_X_MAX - 10) { f.dir = -1; f.x = RIVER_X_MAX - 10; }
+        if (f.x < RIVER_X_MIN + 10) { f.dir =  1; f.x = RIVER_X_MIN + 10; }
+
+        f.y = y_target;
+        
+        // Sway adds to the lateral offset
+        const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir;
+        f.z = cz + L + sway * nz;
+
+        // Position root
+        f.root.position.set(f.x + (L + sway) * nx, f.y, f.z);
+
+        f.vx = vx_swim_total;
+        f.vz = vz_swim_total;
+        f.vy = 1.8 * 0.02 * Math.cos(time * 1.8 + f.bobPhase); // vertical change speed
+
+        // Check for jump trigger
+        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25) {
+          f.jumpState = 'takeoff';
+          f.jumpRoll = (Math.random() - 0.5) * 1.4;
+          
+          // Boost takeoff velocities
+          f.vx = vx_swim_total * 1.6;
+          f.vz = vz_swim_total * 1.6;
+          f.vy = 4.2 + Math.random() * 2.2;
+          
+          f.takeoffX = f.x + (L + sway) * nx;
+          f.takeoffZ = f.z;
+          f.takeoffY = f.y;
+        }
+
+        targetRoll = dL_dt * 0.18 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.10 * f.dir;
+        targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
       }
+      else if (f.jumpState === 'takeoff') {
+        f.takeoffX += f.vx * dt;
+        f.takeoffZ += f.vz * dt;
+        f.takeoffY += f.vy * dt;
+        
+        f.root.position.set(f.takeoffX, f.takeoffY, f.takeoffZ);
+        f.x = f.takeoffX; // sync path position
 
-      if (f.jumpT >= 0) {
-        f.jumpT += delta / f.jumpDur;
-        if (f.jumpT >= 1) {
-          f.jumpT = -1;
-          f.nextJump = time + 6 + Math.random() * 10;
-        } else {
-          const t = f.jumpT;
-          const arc = Math.sin(t * Math.PI);
-          // Height arc
-          y = THREE.MathUtils.lerp(WATER_LEVEL + f.depthVariant, WATER_LEVEL + f.jumpHeight, arc);
+        targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
+        targetRoll = 0.0;
+
+        if (f.takeoffY >= WATER_LEVEL) {
+          f.jumpState = 'airborne';
+          f.airTime = 2.0 * f.vy / 11.0; // parabolic duration in air
+          f.airT = 0;
+          f.airX = f.takeoffX;
+          f.airY = WATER_LEVEL;
+          f.airZ = f.takeoffZ;
           
-          // Trajectory Pitch: positive on ascent, zero at apex, negative on descent
-          pitch = Math.cos(t * Math.PI) * 0.95;
-          // Add roll rotation
-          roll = arc * f.jumpRoll;
-          
-          // Frantic air thrashing curl
-          curlBack  = -Math.cos(t * Math.PI) * 0.35 + Math.sin(time * 15.0) * 0.10;
-          curlFront = -Math.cos(t * Math.PI) * 0.15 + Math.sin(time * 15.0) * 0.05;
+          triggerFullSplash(f.takeoffX, f.takeoffZ, f.vx, f.vy, f.vz, false); // Exit splash
+        }
+      }
+      else if (f.jumpState === 'airborne') {
+        // Projectile gravity motion in air
+        f.vy -= 11.0 * dt;
+        f.airX += f.vx * dt;
+        f.airY += f.vy * dt;
+        f.airZ += f.vz * dt;
+
+        f.root.position.set(f.airX, f.airY, f.airZ);
+        f.x = f.airX;
+
+        f.airT += dt;
+        const t_progress = Math.min(1.0, f.airT / f.airTime);
+        
+        // Pitch follows velocity vector directly
+        targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
+        // Signature air twist roll
+        targetRoll = Math.sin(t_progress * Math.PI) * f.jumpRoll;
+
+        // Custom spine bending in air
+        curlBack = -Math.cos(t_progress * Math.PI) * 0.25;
+        curlFront = -Math.cos(t_progress * Math.PI) * 0.10;
+
+        // Spawn continuous spray droplets as the fish enters/exits surface boundary
+        if (f.airY < WATER_LEVEL + 0.15 && f.airY >= WATER_LEVEL) {
+          spawnContinuousTrailDroplets(f.airX, WATER_LEVEL + 0.01, f.airZ, f.vx * 0.4, f.vy * 0.4, f.vz * 0.4, 2, false);
+        }
+
+        if (f.airY < WATER_LEVEL) {
+          f.jumpState = 'dive';
+          f.diveX = f.airX;
+          f.diveY = f.airY;
+          f.diveZ = f.airZ;
+
+          triggerFullSplash(f.airX, f.airZ, f.vx, f.vy, f.vz, true); // Entry splash
+        }
+      }
+      else if (f.jumpState === 'dive') {
+        // Underwater recovery - apply water resistance drag and spring depth recovery
+        f.vx = THREE.MathUtils.lerp(f.vx, vx_swim_total, 5.5 * dt);
+        f.vz = THREE.MathUtils.lerp(f.vz, vz_swim_total, 5.5 * dt);
+
+        const springForceY = (y_target - f.diveY) * 16.0 - f.vy * 4.0;
+        f.vy += springForceY * dt;
+
+        f.diveX += f.vx * dt;
+        f.diveY += f.vy * dt;
+        f.diveZ += f.vz * dt;
+
+        f.root.position.set(f.diveX, f.diveY, f.diveZ);
+        f.x = f.diveX;
+
+        targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
+        targetRoll = 0.0;
+
+        // Continuous bubble droplets trail during high-velocity dive entry
+        if (f.diveY > WATER_LEVEL - 0.20 && f.diveY < WATER_LEVEL) {
+          spawnContinuousTrailDroplets(f.diveX, WATER_LEVEL + 0.01, f.diveZ, f.vx * 0.35, f.vy * 0.35, f.vz * 0.35, 1, true);
+        }
+
+        if (Math.abs(f.diveY - y_target) < 0.035 && Math.abs(f.vy) < 0.35) {
+          f.jumpState = 'swim';
+          f.nextJump = time + 7.0 + Math.random() * 11.0;
         }
       }
 
-      // ── Entry/Exit boundary crossings (Ripples) ──────────────────
-      const isUnderwater = y < WATER_LEVEL;
-      if (f.wasUnderwater !== isUnderwater) {
-        spawnRipple(f.x, z);
-        f.wasUnderwater = isUnderwater;
-      }
-
-      // ── Root transform (world position + heading) ───────────────
-      f.root.position.set(f.x, y, z);
-      const baseYaw = f.dir > 0 ? 0 : Math.PI;
+      // ── Root Heading (Yaw) Alignment ─────────────────────────────
+      const targetTravelAngle = Math.atan2(f.vz, f.vx);
+      
+      if (f.currentYaw === undefined) f.currentYaw = targetTravelAngle;
+      let yawDiff = targetTravelAngle - f.currentYaw;
+      yawDiff = Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff));
+      
+      const yawRate = f.jumpState === 'swim' ? 0.15 : 0.35; // follow trajectory faster in air
+      f.currentYaw += yawDiff * yawRate;
+      
       const extraYaw = f.forwardAxis === 'z' ? Math.PI / 2 : 0;
-      f.root.rotation.set(0, baseYaw + extraYaw, 0);
+      
+      f.root.rotation.order = 'YXZ';
+      f.root.rotation.y = f.currentYaw + extraYaw;
 
-      const signedPitch = f.dir > 0 ? pitch : -pitch;
+      // ── Smooth Pitch and Roll Interpolation ─────────────────────
+      if (f.currentPitch === undefined) f.currentPitch = 0;
+      if (f.currentRoll === undefined) f.currentRoll = 0;
+      
+      const rate = f.jumpState === 'swim' ? 0.16 : 0.28;
+      f.currentPitch = THREE.MathUtils.lerp(f.currentPitch, targetPitch, rate);
+      f.currentRoll = THREE.MathUtils.lerp(f.currentRoll, targetRoll, rate);
+
       if (f.forwardAxis === 'x') {
-        f.root.rotation.z = signedPitch;
-        f.root.rotation.x = roll;
+        f.root.rotation.z = f.currentPitch;
+        f.root.rotation.x = f.currentRoll;
       } else {
-        f.root.rotation.x = signedPitch;
-        f.root.rotation.z = roll;
+        f.root.rotation.x = f.currentPitch;
+        f.root.rotation.z = f.currentRoll;
       }
 
-      // ── Spine Turn-Bending ─────────────────────────────────────
-      // Flex spine front and back yaw rotation based on turn acceleration
-      const spineYaw = lateralAcc * 0.12 * f.dir;
-
-      // ── Bone rotations ─────────────────────────────────────────
-      if (b.tail) {
-        const r = b.rest.tail;
-        // Thrash frantically if in the air
-        const amp = f.activeAmp;
-        const wag = f.jumpT >= 0 ? Math.sin(phase * 1.5) * amp * 1.3 : tailPhase * amp;
-        b.tail.rotation.set(r.x, r.y, r.z + wag);
+      // ── Bone rotations (Wave propagation Head -> Tail) ─────────
+      const isAir = f.jumpState === 'airborne';
+      if (b.spineFront) {
+        const r = b.rest.spineFront;
+        const wag = isAir ? Math.sin(time * 30.0) * f.activeAmp * 1.5 : Math.sin(phase) * f.activeAmp * 0.25;
+        b.spineFront.rotation.set(
+          r.x + curlFront,
+          r.y, // cleared old roll-steer twist bug
+          r.z + wag + pathCurvatureYaw * 0.8
+        );
       }
       if (b.spineBack) {
         const r = b.rest.spineBack;
-        const wag = Math.sin(phase - 0.35) * f.activeAmp * 0.55;
+        const wag = isAir ? Math.sin(time * 30.0 - 0.45) * f.activeAmp * 1.5 : Math.sin(phase - 0.45) * f.activeAmp * 0.55;
         b.spineBack.rotation.set(
           r.x + curlBack,
-          r.y + spineYaw * 0.5,
-          r.z + wag
+          r.y, // cleared old roll-steer twist bug
+          r.z + wag + pathCurvatureYaw * 0.5
         );
       }
-      if (b.spineFront) {
-        const r = b.rest.spineFront;
-        const wag = Math.sin(phase - 0.70) * f.activeAmp * 0.22;
-        b.spineFront.rotation.set(
-          r.x + curlFront,
-          r.y + spineYaw * 0.8,
-          r.z + wag
-        );
+      if (b.tail) {
+        const r = b.rest.tail;
+        const amp = f.activeAmp;
+        const wag = isAir ? Math.sin(time * 30.0 - 0.90) * amp * 1.8 : Math.sin(phase - 0.90) * amp * 0.95;
+        b.tail.rotation.set(r.x, r.y, r.z + wag);
       }
       if (b.root) {
         const r = b.rest.root;
-        b.root.rotation.set(r.x, r.y, r.z - tailPhase * f.activeAmp * 0.10);
+        const wag = isAir ? Math.sin(time * 30.0) * f.activeAmp * 0.15 : Math.sin(phase) * f.activeAmp * 0.10;
+        b.root.rotation.set(r.x, r.y, r.z - wag);
       }
 
       // ── Pectoral fin idle paddle & steer ───────────────────────
@@ -363,13 +716,12 @@ export async function buildFish() {
       const finAmp = f.activeFinAmp;
       if (b.finL) {
         const r = b.rest.finL;
-        // Pectoral steering: flare the inside fin, tuck the outside fin
-        const steerTuck = Math.max(0, -lateralVel * f.dir) * 0.4;
+        const steerTuck = Math.max(0, -dL_dt * f.dir) * 0.4;
         b.finL.rotation.set(r.x + Math.sin(finPhase) * finAmp, r.y + steerTuck, r.z);
       }
       if (b.finR) {
         const r = b.rest.finR;
-        const steerTuck = Math.max(0, lateralVel * f.dir) * 0.4;
+        const steerTuck = Math.max(0, dL_dt * f.dir) * 0.4;
         b.finR.rotation.set(r.x + Math.sin(finPhase + Math.PI) * finAmp, r.y + steerTuck, r.z);
       }
     }

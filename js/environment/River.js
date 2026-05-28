@@ -46,8 +46,8 @@ export async function buildRiver() {
 
   group.add(buildRiverBed());
 
-  const [rocks, fish] = await Promise.all([buildRocks(), buildFish()]);
   const water = buildWater();
+  const [rocks, fish] = await Promise.all([buildRocks(), buildFish(water)]);
 
   group.add(water);
   group.add(rocks);
