@@ -26,7 +26,7 @@ const POSITIONS = [
 function enableShadows(root) {
   root.traverse((o) => {
     if (o.isMesh) {
-      o.castShadow = true;
+      o.castShadow = false; // Disable to prevent blocking its own light
       o.receiveShadow = true;
       o.layers.enable(LAMPPOST_LAYER);
     }
@@ -64,13 +64,21 @@ export async function buildLampposts() {
     lampMesh.scale.setScalar(scale);
     enableShadows(lampMesh);
     lampMesh.traverse((o) => {
-      if (o.isMesh) o.userData.lampRef = lampRoot;
+      if (o.isMesh) {
+        o.userData.lampRef = lampRoot;
+        if (o.material) {
+          o.material = o.material.clone(); // unique material for individual emissive/color control
+        }
+      }
     });
     lampRoot.add(lampMesh);
 
-    const pointLight = new THREE.PointLight(0xffdd88, 0, 15, 2);
+    // High-performance PointLight shining in all directions
+    const pointLight = new THREE.PointLight(0xfffaf0, 0, 70, 1.2);
     pointLight.position.set(0, lampHeadY, 0);
     pointLight.name = `${id}_light`;
+    pointLight.castShadow = false; // Disable shadows to avoid self-blocking and save WebGL shadow map slots
+    pointLight.userData.lockColor = true;
     lampRoot.add(pointLight);
 
     lampRoot.userData.pointLight = pointLight;
@@ -92,7 +100,7 @@ export async function buildLampposts() {
     }
   });
 
-  // Smooth transition (0.8s) -> Rate = 14 / 0.8 = 17.5 units per second
+  // Smooth transition (0.8s) -> Rate = 120.0 / 0.8 = 150.0 units per second
   group.userData.tick = (delta, time) => {
     for (const lampRoot of group.children) {
       const pl = lampRoot.userData.pointLight;
@@ -101,20 +109,34 @@ export async function buildLampposts() {
       let targetIntensity = 0;
       if (lampRoot.userData.targetOn) {
         if (lampRoot.userData.isManual) {
-          targetIntensity = 14;
+          targetIntensity = 120.0;
         } else {
           const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
-          targetIntensity = nf * 14;
+          targetIntensity = nf * 120.0;
         }
       }
 
-      const rate = 17.5 * delta;
+      const rate = 150.0 * delta;
       const diff = targetIntensity - pl.intensity;
       if (Math.abs(diff) > 0.01) {
         pl.intensity += Math.sign(diff) * Math.min(rate, Math.abs(diff));
       } else {
         pl.intensity = targetIntensity;
       }
+
+      // Update emissive intensity of physical lamp mesh to match actual PointLight intensity
+      const normalizedIntensity = pl.intensity / 120.0;
+      lampRoot.traverse((o) => {
+        if (o.isMesh && o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const mat of mats) {
+            if (mat.emissive) {
+              mat.emissiveIntensity = normalizedIntensity * 8.0;
+              mat.emissive.setHex(0xfffaf0);
+            }
+          }
+        }
+      });
     }
   };
 
