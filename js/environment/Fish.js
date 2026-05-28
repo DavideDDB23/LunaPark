@@ -343,7 +343,7 @@ export async function buildFish(water) {
       bones,
       forwardAxis: tmpl.forwardAxis,
       x: seedX,
-      y: WATER_LEVEL + (-0.13 - Math.random() * 0.04),
+      y: WATER_LEVEL + (-0.22 - Math.random() * 0.05),
       z: riverCenter(seedX),
       baseSpeed: 1.6 + Math.random() * 1.0,
       dir: Math.random() < 0.5 ? -1 : 1,
@@ -355,12 +355,14 @@ export async function buildFish(water) {
       baseFreq:     3.6 + Math.random() * 1.2,
       nextJump:     4.0 + Math.random() * 8.0,
       jumpState:    'swim',
+      isTurning:    false,
+      targetDir:    0,
       vx: 0, vy: 0, vz: 0,
       airTime: 0,
       airT: 0,
       diveT: 0,
       jumpRoll:     0,
-      depthVariant: -0.13 - Math.random() * 0.04,
+      depthVariant: -0.22 - Math.random() * 0.05,
       // Swim state variables (Burst-and-Coast)
       swimState:    Math.random() < 0.5 ? 'burst' : 'coast',
       stateTimer:   1.0 + Math.random() * 2.0,
@@ -450,31 +452,49 @@ export async function buildFish(water) {
       let targetAmp = 0.35;
       let targetFinAmp = 0.30;
 
-      const isJumpingState = f.jumpState !== 'swim';
-
-      if (isJumpingState) {
-        targetSpeedMultiplier = 2.2;
-        targetFreq = f.baseFreq * 2.5;
-        targetAmp = 0.65;
+      if (f.jumpState === 'airborne') {
+        // Graceful air leap settings
+        targetSpeedMultiplier = 1.8;
+        targetFreq = f.baseFreq * 0.4;
+        targetAmp = 0.20;
         targetFinAmp = 0.10;
+      } else if (f.jumpState === 'takeoff') {
+        targetSpeedMultiplier = 1.8;
+        targetFreq = f.baseFreq * 1.2;
+        targetAmp = 0.40;
+        targetFinAmp = 0.10;
+      } else if (f.jumpState === 'dive') {
+        targetSpeedMultiplier = 1.0;
+        targetFreq = f.baseFreq * 1.0;
+        targetAmp = 0.30;
+        targetFinAmp = 0.30;
+      } else if (f.isTurning) {
+        // Slow down tail beat during turn pivot
+        targetSpeedMultiplier = 0.05;
+        targetFreq = f.baseFreq * 0.8; // active wag during turn
+        targetAmp = 0.25;
+        targetFinAmp = 0.45;
       } else if (f.swimState === 'burst') {
-        targetSpeedMultiplier = 1.8 + Math.random() * 0.2;
-        targetFreq = f.baseFreq * 1.8;
-        targetAmp = 0.60;
+        targetSpeedMultiplier = 1.5;
+        targetFreq = f.baseFreq * 1.5; // speed-synchronized frequency
+        targetAmp = 0.35 * 1.3;        // speed-synchronized amplitude
         targetFinAmp = 0.05; // tuck fins during burst
       } else {
         // Coasting / drifting (decelerating)
-        targetSpeedMultiplier = 0.22 + Math.sin(time * 0.4 + f.bobPhase) * 0.08;
-        targetFreq = f.baseFreq * 0.15;
-        targetAmp = 0.06; // tail almost stops
+        targetSpeedMultiplier = 0.45 + Math.sin(time * 0.5 + f.bobPhase) * 0.15;
+        targetFreq = f.baseFreq * targetSpeedMultiplier; // speed-synchronized
+        targetAmp = 0.35 * targetSpeedMultiplier;        // speed-synchronized
         targetFinAmp = 0.45; // flare fins to stabilize
       }
 
-      // Smoothly interpolate active state values
-      f.activeSpeed = THREE.MathUtils.lerp(f.activeSpeed, targetSpeedMultiplier, 0.08);
-      f.activeFreq = THREE.MathUtils.lerp(f.activeFreq, targetFreq, 0.08);
-      f.activeAmp = THREE.MathUtils.lerp(f.activeAmp, targetAmp, 0.08);
-      f.activeFinAmp = THREE.MathUtils.lerp(f.activeFinAmp, targetFinAmp, 0.08);
+      // Smoothly interpolate active state values (Frame-rate independent)
+      const speedAlpha = 1.0 - Math.exp(-5.0 * dt);
+      const freqAlpha = 1.0 - Math.exp(-6.0 * dt);
+      const ampAlpha = 1.0 - Math.exp(-6.0 * dt);
+      f.activeSpeed = THREE.MathUtils.lerp(f.activeSpeed, targetSpeedMultiplier, speedAlpha);
+      f.activeFreq = THREE.MathUtils.lerp(f.activeFreq, targetFreq, freqAlpha);
+      f.activeAmp = THREE.MathUtils.lerp(f.activeAmp, targetAmp, ampAlpha);
+      f.activeFinAmp = THREE.MathUtils.lerp(f.activeFinAmp, targetFinAmp, ampAlpha);
 
       // Accumulate phase smoothly to avoid frequency change snaps
       f.phaseAccumulator += dt * f.activeFreq * 2 * Math.PI;
@@ -494,9 +514,8 @@ export async function buildFish(water) {
 
       // Curvature calculation for spine bending
       const d2z_ds2 = -14 * 0.0016 * Math.sin(f.x * 0.04) - 3 * 0.0121 * Math.sin(f.x * 0.11);
-      // Normalized curvature
       const curvature = d2z_ds2 / Math.pow(1.0 + dz_ds * dz_ds, 1.5);
-      const pathCurvatureYaw = curvature * 22.0 * f.dir;
+      const pathCurvatureYaw = curvature * 14.0 * f.dir;
 
       // 1. Normal swimming path parameters
       const v_path = f.baseSpeed * f.activeSpeed;
@@ -518,47 +537,84 @@ export async function buildFish(water) {
       let curlFront = 0;
       let targetRoll = 0;
       let targetPitch = 0;
+      let targetTravelAngle = 0;
 
       // ── Physical State Updates ─────────────────────────────────
       if (f.jumpState === 'swim') {
-        // Propulsion pulses smoothly twice per tail wag cycle
-        const propulse = 1.0 + 0.3 * Math.sin(2 * phase - Math.PI / 2);
-        const speedMul = f.activeSpeed * propulse;
-        const ds_dt = (f.baseSpeed * speedMul * f.dir) / len;
-        f.x += ds_dt * dt;
+        if (!f.isTurning) {
+          // Propulsion pulses smoothly twice per tail wag cycle
+          const propulse = 1.0 + 0.3 * Math.sin(2 * phase - Math.PI / 2);
+          const speedMul = f.activeSpeed * propulse;
+          const ds_dt = (f.baseSpeed * speedMul * f.dir) / len;
+          f.x += ds_dt * dt;
 
-        if (f.x > RIVER_X_MAX - 10) { f.dir = -1; f.x = RIVER_X_MAX - 10; }
-        if (f.x < RIVER_X_MIN + 10) { f.dir =  1; f.x = RIVER_X_MIN + 10; }
+          // U-turn triggers at boundaries
+          if (f.x > RIVER_X_MAX - 12 && f.dir === 1) {
+            f.isTurning = true;
+            f.targetDir = -1;
+          } else if (f.x < RIVER_X_MIN + 12 && f.dir === -1) {
+            f.isTurning = true;
+            f.targetDir = 1;
+          }
+        }
 
         f.y = y_target;
         
-        // Sway adds to the lateral offset
-        const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir;
-        f.z = cz + L + sway * nz;
+        // Fade lateral weave and sway smoothly during turns
+        let weaveFactorTarget = f.isTurning ? 0.0 : 1.0;
+        if (f.weaveFactor === undefined) f.weaveFactor = 1.0;
+        f.weaveFactor = THREE.MathUtils.lerp(f.weaveFactor, weaveFactorTarget, 8.0 * dt);
+
+        const L_active = L * f.weaveFactor;
+        const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * f.weaveFactor;
+        
+        f.z = cz + L_active + sway * nz;
 
         // Position root
-        f.root.position.set(f.x + (L + sway) * nx, f.y, f.z);
+        f.root.position.set(f.x + (L_active + sway) * nx, f.y, f.z);
 
-        f.vx = vx_swim_total;
-        f.vz = vz_swim_total;
-        f.vy = 1.8 * 0.02 * Math.cos(time * 1.8 + f.bobPhase); // vertical change speed
-
-        // Check for jump trigger
-        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25) {
-          f.jumpState = 'takeoff';
-          f.jumpRoll = (Math.random() - 0.5) * 1.4;
+        if (f.isTurning) {
+          f.vx = 0.01 * f.dir; // minimal speed
+          f.vz = 0.01 * f.dir;
+          f.vy = 0;
           
-          // Boost takeoff velocities
-          f.vx = vx_swim_total * 1.6;
-          f.vz = vz_swim_total * 1.6;
-          f.vy = 4.2 + Math.random() * 2.2;
+          // Target yaw is the new tangent direction
+          targetTravelAngle = Math.atan2(tz * f.targetDir, tx * f.targetDir);
+          
+          // Finish U-turn when aligned
+          let yawDiff = targetTravelAngle - f.currentYaw;
+          yawDiff = Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff));
+          if (Math.abs(yawDiff) < 0.15) {
+            f.dir = f.targetDir;
+            f.isTurning = false;
+          }
+        } else {
+          f.vx = vx_swim_total;
+          f.vz = vz_swim_total;
+          f.vy = 1.8 * 0.02 * Math.cos(time * 1.8 + f.bobPhase); // vertical change speed
+          
+          // Heading Stabilization: Align with path tangent + subtle clamped steer angle
+          const pathAngle = Math.atan2(tz * f.dir, tx * f.dir);
+          const steerAngle = Math.atan2(dL_dt, v_path) * 0.15; // limited steer deviation (max ~10 deg)
+          targetTravelAngle = pathAngle + steerAngle;
+        }
+
+        // Check for jump trigger (only if far from endpoints and not turning)
+        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning) {
+          f.jumpState = 'takeoff';
+          f.jumpRoll = (Math.random() - 0.5) * 1.2;
+          
+          // Boost takeoff velocities, aligned strictly to path tangent (straight jumps!)
+          f.vx = v_path * f.dir * tx * 1.4;
+          f.vz = v_path * f.dir * tz * 1.4;
+          f.vy = 4.0 + Math.random() * 1.8;
           
           f.takeoffX = f.x + (L + sway) * nx;
           f.takeoffZ = f.z;
           f.takeoffY = f.y;
         }
 
-        targetRoll = dL_dt * 0.18 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.10 * f.dir;
+        targetRoll = dL_dt * 0.08 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.04 * f.dir;
         targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
       }
       else if (f.jumpState === 'takeoff') {
@@ -569,6 +625,7 @@ export async function buildFish(water) {
         f.root.position.set(f.takeoffX, f.takeoffY, f.takeoffZ);
         f.x = f.takeoffX; // sync path position
 
+        targetTravelAngle = Math.atan2(f.vz, f.vx);
         targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
         targetRoll = 0.0;
 
@@ -596,6 +653,7 @@ export async function buildFish(water) {
         f.airT += dt;
         const t_progress = Math.min(1.0, f.airT / f.airTime);
         
+        targetTravelAngle = Math.atan2(f.vz, f.vx);
         // Pitch follows velocity vector directly
         targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
         // Signature air twist roll
@@ -634,6 +692,7 @@ export async function buildFish(water) {
         f.root.position.set(f.diveX, f.diveY, f.diveZ);
         f.x = f.diveX;
 
+        targetTravelAngle = Math.atan2(f.vz, f.vx);
         targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
         targetRoll = 0.0;
 
@@ -648,28 +707,27 @@ export async function buildFish(water) {
         }
       }
 
-      // ── Root Heading (Yaw) Alignment ─────────────────────────────
-      const targetTravelAngle = Math.atan2(f.vz, f.vx);
-      
+      // ── Root Heading (Yaw) Alignment (Frame-rate independent) ────
       if (f.currentYaw === undefined) f.currentYaw = targetTravelAngle;
       let yawDiff = targetTravelAngle - f.currentYaw;
       yawDiff = Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff));
       
-      const yawRate = f.jumpState === 'swim' ? 0.15 : 0.35; // follow trajectory faster in air
-      f.currentYaw += yawDiff * yawRate;
+      const yawDecaySpeed = f.jumpState === 'swim' ? (f.isTurning ? 2.5 : 10.0) : 25.0;
+      f.currentYaw += yawDiff * (1.0 - Math.exp(-yawDecaySpeed * dt));
       
       const extraYaw = f.forwardAxis === 'z' ? Math.PI / 2 : 0;
       
       f.root.rotation.order = 'YXZ';
       f.root.rotation.y = f.currentYaw + extraYaw;
 
-      // ── Smooth Pitch and Roll Interpolation ─────────────────────
+      // ── Smooth Pitch and Roll Interpolation (Frame-rate independent) ──
       if (f.currentPitch === undefined) f.currentPitch = 0;
       if (f.currentRoll === undefined) f.currentRoll = 0;
       
-      const rate = f.jumpState === 'swim' ? 0.16 : 0.28;
-      f.currentPitch = THREE.MathUtils.lerp(f.currentPitch, targetPitch, rate);
-      f.currentRoll = THREE.MathUtils.lerp(f.currentRoll, targetRoll, rate);
+      const pitchRollDecay = f.jumpState === 'swim' ? 11.0 : 20.0;
+      const prAlpha = 1.0 - Math.exp(-pitchRollDecay * dt);
+      f.currentPitch = THREE.MathUtils.lerp(f.currentPitch, targetPitch, prAlpha);
+      f.currentRoll = THREE.MathUtils.lerp(f.currentRoll, targetRoll, prAlpha);
 
       if (f.forwardAxis === 'x') {
         f.root.rotation.z = f.currentPitch;
@@ -681,48 +739,79 @@ export async function buildFish(water) {
 
       // ── Bone rotations (Wave propagation Head -> Tail) ─────────
       const isAir = f.jumpState === 'airborne';
+      
+      // Calculate bone wag multipliers with correct structural decay
+      const frontWagAmp = f.activeAmp * (isAir ? 0.25 : 0.15);
+      const backWagAmp  = f.activeAmp * (isAir ? 0.50 : 0.45);
+      const tailWagAmp  = f.activeAmp * (isAir ? 0.90 : 0.90);
+
+      // Curvature-induced bend is applied only when swimming (disabled in air/turn to avoid pinching)
+      const finalCurvatureYaw = (f.jumpState === 'swim' && !f.isTurning) ? pathCurvatureYaw : 0.0;
+
+      // U-turn bend
+      const turnBend = f.isTurning ? Math.max(-0.5, Math.min(0.5, yawDiff)) * 1.0 : 0.0;
+
+      // Airborne 3D crescent curve (yaw bend)
+      let airYawBend = 0.0;
+      if (f.jumpState === 'airborne') {
+        const t_progress = Math.min(1.0, f.airT / f.airTime);
+        airYawBend = Math.sin(t_progress * Math.PI) * 0.3 * f.jumpRoll;
+      }
+
+      const sinPhase = Math.sin(phase);
+
       if (b.spineFront) {
         const r = b.rest.spineFront;
-        const wag = isAir ? Math.sin(time * 30.0) * f.activeAmp * 1.5 : Math.sin(phase) * f.activeAmp * 0.25;
+        const wag = sinPhase * frontWagAmp;
         b.spineFront.rotation.set(
           r.x + curlFront,
-          r.y, // cleared old roll-steer twist bug
-          r.z + wag + pathCurvatureYaw * 0.8
+          r.y,
+          r.z + wag + finalCurvatureYaw * 0.8 + turnBend * 0.8 + airYawBend * 0.8
         );
       }
       if (b.spineBack) {
         const r = b.rest.spineBack;
-        const wag = isAir ? Math.sin(time * 30.0 - 0.45) * f.activeAmp * 1.5 : Math.sin(phase - 0.45) * f.activeAmp * 0.55;
+        const wag = -sinPhase * backWagAmp; // out of phase!
         b.spineBack.rotation.set(
           r.x + curlBack,
-          r.y, // cleared old roll-steer twist bug
-          r.z + wag + pathCurvatureYaw * 0.5
+          r.y,
+          r.z + wag + finalCurvatureYaw * 0.5 + turnBend * 0.6 + airYawBend * 0.6
         );
       }
       if (b.tail) {
         const r = b.rest.tail;
-        const amp = f.activeAmp;
-        const wag = isAir ? Math.sin(time * 30.0 - 0.90) * amp * 1.8 : Math.sin(phase - 0.90) * amp * 0.95;
-        b.tail.rotation.set(r.x, r.y, r.z + wag);
+        const wag = -sinPhase * tailWagAmp; // out of phase!
+        b.tail.rotation.set(
+          r.x,
+          r.y,
+          r.z + wag + turnBend * 0.4 + airYawBend * 0.4
+        );
       }
       if (b.root) {
-        const r = b.rest.root;
-        const wag = isAir ? Math.sin(time * 30.0) * f.activeAmp * 0.15 : Math.sin(phase) * f.activeAmp * 0.10;
-        b.root.rotation.set(r.x, r.y, r.z - wag);
+        b.root.rotation.copy(b.rest.root); // root bone remains stable to avoid side-drift jitter
       }
 
       // ── Pectoral fin idle paddle & steer ───────────────────────
-      const finPhase = time * (f.activeFreq * 0.6) * 2 * Math.PI + f.finPhase;
       const finAmp = f.activeFinAmp;
       if (b.finL) {
         const r = b.rest.finL;
         const steerTuck = Math.max(0, -dL_dt * f.dir) * 0.4;
-        b.finL.rotation.set(r.x + Math.sin(finPhase) * finAmp, r.y + steerTuck, r.z);
+        
+        // Coordinated 2D rowing motion in phase with the tail wag
+        const rx = r.x + sinPhase * 0.33 * finAmp;
+        const ry = r.y - sinPhase * 0.20 * finAmp + steerTuck;
+        const rz = r.z + sinPhase * 0.10 * finAmp;
+        b.finL.rotation.set(rx, ry, rz);
       }
       if (b.finR) {
         const r = b.rest.finR;
         const steerTuck = Math.max(0, dL_dt * f.dir) * 0.4;
-        b.finR.rotation.set(r.x + Math.sin(finPhase + Math.PI) * finAmp, r.y + steerTuck, r.z);
+        
+        // Coordinated 2D rowing motion in phase with the tail wag
+        const rx = r.x - sinPhase * 0.33 * finAmp;
+        const ry = r.y + sinPhase * 0.40 * finAmp + steerTuck;
+        const rz = r.z - sinPhase * 0.17 * finAmp;
+        b.finR.rotation.set(rx, ry, rz);
       }
     }
   };
