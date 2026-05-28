@@ -114,7 +114,7 @@ export async function buildRocks() {
     
     const cz = riverCenter(rx);
     const hw = riverHalfWidth(rx);
-    const rz = cz + rand(-0.5, 0.5) * hw;
+    const rz = cz + rand(0.55, 0.75) * hw * (Math.random() < 0.5 ? 1 : -1);
     
     // Main submerged boulder
     const mainScale = rand(0.9, 1.4);

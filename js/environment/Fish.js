@@ -553,8 +553,8 @@ export async function buildFish(water) {
       const vx_swim = v_path * f.dir * tx;
       const vz_swim = v_path * f.dir * tz;
       
-      const L = Math.sin(lateralPhase) * (hw * 0.55);
-      const dL_dt = 0.7 * Math.cos(lateralPhase) * (hw * 0.55);
+      const L = Math.sin(lateralPhase) * (hw * 0.36);
+      const dL_dt = 0.7 * Math.cos(lateralPhase) * (hw * 0.36);
       const vx_lat = dL_dt * nx;
       const vz_lat = dL_dt * nz;
 
@@ -600,7 +600,9 @@ export async function buildFish(water) {
         // Fade lateral weave and sway smoothly during turns
         let weaveFactorTarget = f.isTurning ? 0.0 : 1.0;
         if (f.weaveFactor === undefined) f.weaveFactor = 1.0;
-        f.weaveFactor = THREE.MathUtils.lerp(f.weaveFactor, weaveFactorTarget, 8.0 * dt);
+        // Fade out quickly (8.0) for responsive U-turn entry, fade in slowly (1.5) to avoid sudden lateral veering after turns/jumps
+        const weaveLerpRate = weaveFactorTarget === 0.0 ? 8.0 : 1.5;
+        f.weaveFactor = THREE.MathUtils.lerp(f.weaveFactor, weaveFactorTarget, weaveLerpRate * dt);
 
         const L_active = L * f.weaveFactor;
         const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * f.weaveFactor;
@@ -634,7 +636,7 @@ export async function buildFish(water) {
             // Reset lateral phase so the fish starts its weave smoothly from the center line
             f.lateralPhaseAccumulator = 0;
             f.lateralPhase = 0;
-            f.weaveFactor = 1.0;
+            f.weaveFactor = 0.0; // Start at 0 and fade in slowly
           }
         } else {
           f.vx = vx_swim_total;
@@ -785,14 +787,14 @@ export async function buildFish(water) {
           f.nextJump = time + 7.0 + Math.random() * 11.0;
 
           // Reset the lateral phase so the fish starts weaving from the center (landing line)
-          // instead of forcing a massive lateral slide to a random phase.
+          // and set weaveFactor to 0.0 so the weave fades in slowly.
           f.lateralPhaseAccumulator = 0;
           f.lateralPhase = 0;
+          f.weaveFactor = 0.0;
 
           // Set landing offset so there is no snap when returning to swim state
-          const wf = f.weaveFactor !== undefined ? f.weaveFactor : 1.0;
           const L_active = 0.0; // since lateralPhase is now 0
-          const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * wf;
+          const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * 0.0; // weaveFactor is 0
           const targetX = f.x + (L_active + sway) * nx;
           const targetZ = cz + L_active + sway * nz;
 
