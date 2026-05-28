@@ -296,6 +296,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     rotatingAssembly,
     horses,
     panel: controlPanel.group,
+    speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     angle: 0,
@@ -311,7 +312,8 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     const ease = controlPanel.tick(delta);
 
     // 1. Platform rotation
-    controller.angle += controller.maxSpeed * ease * delta;
+    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    controller.angle += controller.maxSpeed * ease * speedMult * delta;
     rotatingAssembly.rotation.y = - controller.angle;
 
     // 2. Horse bobbing (each horse has phase offset) and rider updates
@@ -354,30 +356,10 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     }
 
     // 4. Panel feedback update (handled by ControlPanel.tick)
+    if (ease === 0) {
+      controller.speedMultiplier = 1.0;
+    }
   };
-
-  // ── Raycast Toggle Handler ──
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-
-    dom.addEventListener('pointerdown', (ev) => {
-      if (pick(ev)) controller.toggle();
-    });
-
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
-    });
-  }
 
   group.userData.controller = controller;
   return group;

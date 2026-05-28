@@ -248,6 +248,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     wheelSpin,
     spinHub,
     panel: controlPanel.group,
+    speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     get phase() { return controlPanel.phase; },
@@ -266,7 +267,8 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     // Ease the speed factor using our reusable ControlPanel's tick
     const ease = controlPanel.tick(delta);
 
-    controller.angle += controller.maxSpeed * ease * delta;
+    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    controller.angle += controller.maxSpeed * ease * speedMult * delta;
     wheelSpin.rotation.z = controller.angle;
 
     // Counter-rotate every gondola by -angle (about its cabin centre) so its world
@@ -279,25 +281,11 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
         r.pivot.rotation.z = r.restZ + Math.sin(time * SWAY_FREQ * Math.PI * 2 + r.phase) * SWAY_AMP;
       }
     }
-  };
 
-  // ── Click-to-toggle via raycasting on the panel. ──
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-    dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
-    });
-  }
+    if (ease === 0) {
+      controller.speedMultiplier = 1.0;
+    }
+  };
 
   group.userData.controller = controller;
   return group;
