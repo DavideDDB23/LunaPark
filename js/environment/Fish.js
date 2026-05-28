@@ -378,7 +378,8 @@ export async function buildFish(water) {
       phaseAccumulator: 0,
       jumpOffsetX:  0,
       jumpOffsetZ:  0,
-      weaveFactor:  1.0
+      weaveFactor:  1.0,
+      curvatureFactor: 1.0
     });
   }
 
@@ -816,7 +817,10 @@ export async function buildFish(water) {
       const tailWagAmp  = f.activeAmp * (isAir ? 1.08 : 1.08);
 
       // Curvature-induced bend is applied only when swimming (disabled in air/turn to avoid pinching)
-      const finalCurvatureYaw = (f.jumpState === 'swim' && !f.isTurning) ? pathCurvatureYaw : 0.0;
+      // We smoothly interpolate the factor to prevent spine-bend jerks on transitions
+      const targetCurvatureFactor = (f.jumpState === 'swim' && !f.isTurning) ? 1.0 : 0.0;
+      f.curvatureFactor = THREE.MathUtils.lerp(f.curvatureFactor !== undefined ? f.curvatureFactor : 1.0, targetCurvatureFactor, 5.0 * dt);
+      const finalCurvatureYaw = pathCurvatureYaw * f.curvatureFactor;
 
       // U-turn bend
       const turnBend = f.isTurning ? Math.max(-0.5, Math.min(0.5, yawDiff)) * 1.0 : 0.0;
