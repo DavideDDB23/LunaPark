@@ -619,8 +619,8 @@ export async function buildFish(water) {
           targetTravelAngle = pathAngle + steerAngle;
         }
 
-        // Check for jump trigger (only if far from endpoints, not turning, and not under/near the bridge)
-        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning && Math.abs(f.x) > 14.0) {
+        // Check for jump trigger (only if far from endpoints/bridge, not turning, and close to the river center line)
+        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning && Math.abs(f.x) > 14.0 && Math.abs(L) < hw * 0.15) {
           f.jumpState = 'takeoff';
           // 28% chance of full barrel roll, otherwise partial twist
           f.jumpRoll = Math.random() < 0.28
@@ -632,8 +632,8 @@ export async function buildFish(water) {
           f.vz = v_path * f.dir * tz * 1.6;
           f.vy = 5.5 + Math.random() * 2.5;
           
-          f.takeoffX = f.x + (L + sway) * nx;
-          f.takeoffZ = f.z;
+          f.takeoffX = f.x; // launch strictly from the center line to stay far from bank rocks
+          f.takeoffZ = cz;
           f.takeoffY = f.y;
         }
 
