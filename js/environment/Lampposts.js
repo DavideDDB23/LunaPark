@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
+import { eventBus } from '../utils/EventBus.js';
 
 const LAMP_URL = 'assets/models/low_poly_garden_lamp__stylized_outdoor_light.glb';
 export const LAMPPOST_LAYER = 1;
@@ -55,6 +56,9 @@ export async function buildLampposts() {
     lampRoot.position.set(x, groundOffset, z);
     lampRoot.userData.lampId = id;
     lampRoot.userData.on = false;
+    lampRoot.userData.isManual = false;
+    lampRoot.userData.targetOn = false;
+    lampRoot.userData.nightFactor = 0.0;
 
     const lampMesh = source.clone(true);
     lampMesh.scale.setScalar(scale);
@@ -72,6 +76,47 @@ export async function buildLampposts() {
     lampRoot.userData.pointLight = pointLight;
     group.add(lampRoot);
   }
+
+  // Listen for time phase changes to drive automated lighting
+  eventBus.on('time-phase-change', (data) => {
+    const isNight = data.isNight;
+    const nightFactor = data.nightFactor;
+    
+    for (const lampRoot of group.children) {
+      // Reset manual override on sunrise/sunset transition boundaries
+      if (lampRoot.userData.targetOn !== isNight) {
+        lampRoot.userData.isManual = false;
+      }
+      lampRoot.userData.targetOn = isNight;
+      lampRoot.userData.nightFactor = nightFactor;
+    }
+  });
+
+  // Smooth transition (0.8s) -> Rate = 14 / 0.8 = 17.5 units per second
+  group.userData.tick = (delta, time) => {
+    for (const lampRoot of group.children) {
+      const pl = lampRoot.userData.pointLight;
+      if (!pl) continue;
+
+      let targetIntensity = 0;
+      if (lampRoot.userData.targetOn) {
+        if (lampRoot.userData.isManual) {
+          targetIntensity = 14;
+        } else {
+          const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
+          targetIntensity = nf * 14;
+        }
+      }
+
+      const rate = 17.5 * delta;
+      const diff = targetIntensity - pl.intensity;
+      if (Math.abs(diff) > 0.01) {
+        pl.intensity += Math.sign(diff) * Math.min(rate, Math.abs(diff));
+      } else {
+        pl.intensity = targetIntensity;
+      }
+    }
+  };
 
   return group;
 }
