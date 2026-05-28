@@ -26,7 +26,7 @@ import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/
 const WATER_LEVEL = 0.25;
 const FISH_URL = 'assets/models/clown_fish_low_poly_animated.glb';
 const FISH_COUNT = 8;
-const TARGET_FISH_LENGTH = 0.65;
+const TARGET_FISH_LENGTH = 0.90;
 
 const BONE_NAMES = {
   root:       'bone_root_00',
@@ -348,7 +348,7 @@ export async function buildFish(water) {
       bones,
       forwardAxis: tmpl.forwardAxis,
       x: seedX,
-      y: WATER_LEVEL + (-0.22 - Math.random() * 0.05),
+      y: WATER_LEVEL + (-0.28 - Math.random() * 0.04),
       z: riverCenter(seedX),
       baseSpeed: 1.6 + Math.random() * 1.0,
       dir: Math.random() < 0.5 ? -1 : 1,
@@ -367,7 +367,7 @@ export async function buildFish(water) {
       airT: 0,
       diveT: 0,
       jumpRoll:     0,
-      depthVariant: -0.22 - Math.random() * 0.05,
+      depthVariant: -0.28 - Math.random() * 0.04,
       // Swim state variables (Burst-and-Coast)
       swimState:    Math.random() < 0.5 ? 'burst' : 'coast',
       stateTimer:   1.0 + Math.random() * 2.0,
