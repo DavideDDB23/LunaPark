@@ -375,7 +375,10 @@ export async function buildFish(water) {
       activeFreq:   3.6,
       activeAmp:    0.35,
       activeFinAmp: 0.30,
-      phaseAccumulator: 0
+      phaseAccumulator: 0,
+      jumpOffsetX:  0,
+      jumpOffsetZ:  0,
+      weaveFactor:  1.0
     });
   }
 
@@ -441,6 +444,15 @@ export async function buildFish(water) {
     for (const f of fishes) {
       const b = f.bones;
 
+      // Accumulate phases smoothly using dt to prevent lag-induced snaps
+      f.phaseAccumulator = (f.phaseAccumulator || 0) + dt * f.activeFreq * 2 * Math.PI;
+      f.lateralPhaseAccumulator = (f.lateralPhaseAccumulator || 0) + dt * 0.7;
+      f.bobPhaseAccumulator = (f.bobPhaseAccumulator || 0) + dt * 1.8;
+      f.coastSpeedPhaseAccumulator = (f.coastSpeedPhaseAccumulator || 0) + dt * 0.5;
+
+      const phase = f.phaseAccumulator + f.wagPhase;
+      const lateralPhase = f.lateralPhaseAccumulator + f.lateralPhase;
+
       // ── Swim state machine (Burst-and-Coast) ──────────────────
       f.stateTimer -= dt;
       if (f.stateTimer <= 0) {
@@ -490,7 +502,7 @@ export async function buildFish(water) {
         targetFinAmp = 0.05;
       } else {
         // Coasting / drifting
-        targetSpeedMultiplier = 0.45 + Math.sin(time * 0.5 + f.bobPhase) * 0.15;
+        targetSpeedMultiplier = 0.45 + Math.sin(f.coastSpeedPhaseAccumulator + f.bobPhase) * 0.15;
         targetFreq = f.baseFreq * targetSpeedMultiplier;
         targetAmp = 0.35 * targetSpeedMultiplier;
         targetFinAmp = 0.45;
@@ -516,9 +528,7 @@ export async function buildFish(water) {
       f.activeAmp = THREE.MathUtils.lerp(f.activeAmp, targetAmp, ampAlpha);
       f.activeFinAmp = THREE.MathUtils.lerp(f.activeFinAmp, targetFinAmp, ampAlpha);
 
-      // Accumulate phase smoothly to avoid frequency change snaps
-      f.phaseAccumulator += dt * f.activeFreq * 2 * Math.PI;
-      const phase = f.phaseAccumulator + f.wagPhase;
+
 
       // ── River Path Properties (Curvilinear coordinates) ─────────
       const cz = riverCenter(f.x);
@@ -542,7 +552,6 @@ export async function buildFish(water) {
       const vx_swim = v_path * f.dir * tx;
       const vz_swim = v_path * f.dir * tz;
       
-      const lateralPhase = time * 0.7 + f.lateralPhase;
       const L = Math.sin(lateralPhase) * (hw * 0.55);
       const dL_dt = 0.7 * Math.cos(lateralPhase) * (hw * 0.55);
       const vx_lat = dL_dt * nx;
@@ -551,7 +560,7 @@ export async function buildFish(water) {
       const vx_swim_total = vx_swim + vx_lat;
       const vz_swim_total = vz_swim + vz_lat;
       
-      const y_target = WATER_LEVEL + f.depthVariant + Math.sin(time * 1.8 + f.bobPhase) * 0.02;
+      const y_target = WATER_LEVEL + f.depthVariant + Math.sin(f.bobPhaseAccumulator + f.bobPhase) * 0.02;
 
       let curlBack  = 0;
       let curlFront = 0;
@@ -590,8 +599,14 @@ export async function buildFish(water) {
         
         f.z = cz + L_active + sway * nz;
 
-        // Position root
-        f.root.position.set(f.x + (L_active + sway) * nx, f.y, f.z);
+        // Position root with smooth jump offset decay
+        f.jumpOffsetX = (f.jumpOffsetX || 0) * Math.exp(-4.0 * dt);
+        f.jumpOffsetZ = (f.jumpOffsetZ || 0) * Math.exp(-4.0 * dt);
+        f.root.position.set(
+          f.x + (L_active + sway) * nx + f.jumpOffsetX,
+          f.y,
+          f.z + f.jumpOffsetZ
+        );
 
         if (f.isTurning) {
           f.vx = 0.01 * f.dir; // minimal speed
@@ -611,7 +626,7 @@ export async function buildFish(water) {
         } else {
           f.vx = vx_swim_total;
           f.vz = vz_swim_total;
-          f.vy = 1.8 * 0.02 * Math.cos(time * 1.8 + f.bobPhase); // vertical change speed
+          f.vy = 1.8 * 0.02 * Math.cos(f.bobPhaseAccumulator + f.bobPhase); // vertical change speed
           
           // Heading Stabilization: Align with path tangent + subtle clamped steer angle
           const pathAngle = Math.atan2(tz * f.dir, tx * f.dir);
@@ -635,6 +650,12 @@ export async function buildFish(water) {
           f.takeoffX = f.x; // launch strictly from the center line to stay far from bank rocks
           f.takeoffZ = cz;
           f.takeoffY = f.y;
+
+          // Calculate current physical position just before takeoff to smooth transition
+          const currentPosX = f.x + (L_active + sway) * nx;
+          const currentPosZ = cz + L_active + sway * nz;
+          f.jumpOffsetX = currentPosX - f.takeoffX;
+          f.jumpOffsetZ = currentPosZ - f.takeoffZ;
         }
 
         targetRoll = dL_dt * 0.08 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.04 * f.dir;
@@ -645,7 +666,14 @@ export async function buildFish(water) {
         f.takeoffZ += f.vz * dt;
         f.takeoffY += f.vy * dt;
         
-        f.root.position.set(f.takeoffX, f.takeoffY, f.takeoffZ);
+        f.jumpOffsetX = (f.jumpOffsetX || 0) * Math.exp(-6.0 * dt);
+        f.jumpOffsetZ = (f.jumpOffsetZ || 0) * Math.exp(-6.0 * dt);
+
+        f.root.position.set(
+          f.takeoffX + f.jumpOffsetX,
+          f.takeoffY,
+          f.takeoffZ + f.jumpOffsetZ
+        );
         f.x = f.takeoffX; // sync path position
 
         targetTravelAngle = Math.atan2(f.vz, f.vx);
@@ -670,7 +698,14 @@ export async function buildFish(water) {
         f.airY += f.vy * dt;
         f.airZ += f.vz * dt;
 
-        f.root.position.set(f.airX, f.airY, f.airZ);
+        f.jumpOffsetX = (f.jumpOffsetX || 0) * Math.exp(-6.0 * dt);
+        f.jumpOffsetZ = (f.jumpOffsetZ || 0) * Math.exp(-6.0 * dt);
+
+        f.root.position.set(
+          f.airX + f.jumpOffsetX,
+          f.airY,
+          f.airZ + f.jumpOffsetZ
+        );
         f.x = f.airX;
 
         f.airT += dt;
@@ -729,6 +764,16 @@ export async function buildFish(water) {
         if (Math.abs(f.diveY - y_target) < 0.035 && Math.abs(f.vy) < 0.35) {
           f.jumpState = 'swim';
           f.nextJump = time + 7.0 + Math.random() * 11.0;
+
+          // Set landing offset so there is no snap when returning to swim state
+          const wf = f.weaveFactor !== undefined ? f.weaveFactor : 1.0;
+          const L_active = L * wf;
+          const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * wf;
+          const targetX = f.x + (L_active + sway) * nx;
+          const targetZ = cz + L_active + sway * nz;
+
+          f.jumpOffsetX = f.diveX - targetX;
+          f.jumpOffsetZ = f.diveZ - targetZ;
         }
       }
 
