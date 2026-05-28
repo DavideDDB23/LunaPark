@@ -88,11 +88,11 @@ Each ride has a small 3D control panel placed next to it.
 
 ## 🔴 INTERACTIONS
 
-- [ ] **Click lampposts**: individual lamppost click toggles that lamp on or off (with a smooth tween, 0.8s)
-- [ ] **Scroll wheel near a ride**: hovering the mouse over a ride and scrolling changes that ride's speed (up = faster, down = slower)
-- [ ] **Ride decoration light colour picker**: an HTML colour picker that changes the colour of all the decorative lights on the rides
-- [ ] **Space bar**: toggles the time-of-day auto-advance on/off (time automatically moves forward)
-- [ ] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
+- [x] **Click lampposts**: individual lamppost click toggles that lamp on or off (with a smooth tween, 0.8s)
+- [x] **Scroll wheel near a ride**: hovering the mouse over a ride and scrolling changes that ride's speed (up = faster, down = slower)
+- [x] **Ride decoration light colour picker**: an HTML colour picker that changes the colour of all the decorative lights on the rides
+- [x] **Space bar**: toggles the time-of-day auto-advance on/off (time automatically moves forward)
+- [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
 
 ---
 
