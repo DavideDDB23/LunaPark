@@ -374,6 +374,8 @@ export async function buildFish(water) {
     });
   }
 
+  group.userData.fishes = fishes; // debug: expose for camera tracking / forced jumps
+
   group.userData.tick = (delta, time, _windSpeed) => {
     // Clamp delta to prevent physics glitches during lag spikes
     const dt = Math.min(delta, 0.05);
