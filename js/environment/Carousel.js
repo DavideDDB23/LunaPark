@@ -184,9 +184,17 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   }
 
   const ridePointLights = [];
+  
+  // Central Pillar Light
+  const centerLight = new THREE.PointLight(0xffdd88, 0, 45, 1.2);
+  centerLight.position.set(0, 3.5, 0);
+  rotatingAssembly.add(centerLight);
+  ridePointLights.push(centerLight);
+
+  // Canopy Rim Lights
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xffdd88, 0, 15, 1.5);
+    const pl = new THREE.PointLight(0xffdd88, 0, 35, 1.5);
     pl.position.set(13.22 * Math.cos(angle), 7.1, 13.22 * Math.sin(angle));
     rotatingAssembly.add(pl);
     ridePointLights.push(pl);
@@ -365,8 +373,9 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
         b.material.emissiveIntensity = 1.0 + pulse * 1.5;
       });
       ridePointLights.forEach((pl, idx) => {
+        const isCenter = idx === 0;
         const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
-        pl.intensity = (1.0 + pulse * 1.5) * 8.0;
+        pl.intensity = isCenter ? (1.0 + pulse * 0.5) * 120.0 : (1.0 + pulse * 1.5) * 35.0;
       });
     } else {
       bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });

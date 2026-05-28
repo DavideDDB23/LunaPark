@@ -131,9 +131,17 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   wheelSpin.updateMatrixWorld(true);
 
   const ridePointLights = [];
+  
+  // Axle Center Light for massive ground/structure glow
+  const hubLight = new THREE.PointLight(0xffdd88, 0, 90, 1.2);
+  hubLight.position.set(0, 0, 0);
+  wheelSpin.add(hubLight);
+  ridePointLights.push(hubLight);
+
+  // Rim Lights
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xffdd88, 0, 20, 1.5);
+    const pl = new THREE.PointLight(0xffdd88, 0, 40, 1.5);
     pl.position.set(20 * Math.cos(angle), 20 * Math.sin(angle), 0);
     wheelSpin.add(pl);
     ridePointLights.push(pl);
@@ -305,8 +313,9 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
     if (isNight) {
       ridePointLights.forEach((pl, idx) => {
+        const isHub = idx === 0;
         const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
-        pl.intensity = (1.0 + pulse * 1.5) * 8.0;
+        pl.intensity = isHub ? (1.0 + pulse * 0.5) * 150.0 : (1.0 + pulse * 1.5) * 40.0;
       });
     } else {
       ridePointLights.forEach((pl) => { pl.intensity = 0.0; });

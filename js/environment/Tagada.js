@@ -450,9 +450,17 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   }
 
   const ridePointLights = [];
+  
+  // Central Disc Light
+  const centerLight = new THREE.PointLight(0xff00ff, 0, 45, 1.2);
+  centerLight.position.set(0, 1.5, 0);
+  discMeshGroup.add(centerLight);
+  ridePointLights.push(centerLight);
+
+  // Rim Lights
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xff00ff, 0, 15, 1.5);
+    const pl = new THREE.PointLight(0xff00ff, 0, 35, 1.5);
     pl.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
     discMeshGroup.add(pl);
     ridePointLights.push(pl);
@@ -620,8 +628,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         b.material.emissiveIntensity = 1.2 + pulse * 2.0;
       });
       ridePointLights.forEach((pl, idx) => {
+        const isCenter = idx === 0;
         const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
-        pl.intensity = (1.2 + pulse * 2.0) * 8.0;
+        pl.intensity = isCenter ? (1.2 + pulse * 0.5) * 120.0 : (1.2 + pulse * 2.0) * 35.0;
       });
     } else {
       bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });
