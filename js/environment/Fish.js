@@ -473,17 +473,18 @@ export async function buildFish(water) {
       let targetFinAmp = 0.30;
 
       if (f.jumpState === 'airborne') {
-        // Thrashing escape leap — faster wag, fins spread wide at apex then tuck
+        // Graceful leap — body stays mostly streamlined, fins flare like glider wings,
+        // tail beats calmly. (Old version thrashed at 1.6× freq and read as flailing.)
         const t_air = f.airTime > 0 ? Math.min(1.0, f.airT / f.airTime) : 0;
         const apexBulge = Math.sin(t_air * Math.PI);
-        targetSpeedMultiplier = 1.8;
-        targetFreq = f.baseFreq * 1.6;
-        targetAmp = 0.38 + apexBulge * 0.12;
-        targetFinAmp = 0.08 + apexBulge * 0.55; // spread like wings at apex, tuck on entry
+        targetSpeedMultiplier = 1.2;
+        targetFreq = f.baseFreq * 1.1;
+        targetAmp = 0.20 + apexBulge * 0.06;
+        targetFinAmp = 0.12 + apexBulge * 0.50; // flare like wings at apex, tuck on entry
       } else if (f.jumpState === 'takeoff') {
         targetSpeedMultiplier = 1.8;
         targetFreq = f.baseFreq * 1.2;
-        targetAmp = 0.40;
+        targetAmp = 0.30;
         targetFinAmp = 0.10;
       } else if (f.jumpState === 'dive') {
         targetSpeedMultiplier = 1.0;
@@ -512,11 +513,11 @@ export async function buildFish(water) {
       // Pre-jump charge: ramp up speed/amp in the 1.2s before any leap
       if (f.jumpState === 'swim' && !f.isTurning) {
         const timeToJump = f.nextJump - time;
-        if (timeToJump > 0 && timeToJump < 1.2) {
-          const chargeRamp = 1.0 - timeToJump / 1.2;
-          targetSpeedMultiplier = Math.max(targetSpeedMultiplier, 1.5 + chargeRamp * 1.0);
-          targetFreq = Math.max(targetFreq, f.baseFreq * (1.4 + chargeRamp * 1.2));
-          targetAmp  = Math.max(targetAmp,  0.38 + chargeRamp * 0.12);
+        if (timeToJump > 0 && timeToJump < 1.0) {
+          const chargeRamp = 1.0 - timeToJump / 1.0;
+          targetSpeedMultiplier = Math.max(targetSpeedMultiplier, 1.3 + chargeRamp * 0.5);
+          targetFreq = Math.max(targetFreq, f.baseFreq * (1.2 + chargeRamp * 0.6));
+          targetAmp  = Math.max(targetAmp,  0.36 + chargeRamp * 0.10);
         }
       }
 
@@ -555,8 +556,8 @@ export async function buildFish(water) {
       
       const L = Math.sin(lateralPhase) * (hw * 0.36);
       const dL_dt = 0.7 * Math.cos(lateralPhase) * (hw * 0.36);
-      const vx_lat = dL_dt * nx;
-      const vz_lat = dL_dt * nz;
+      const vx_lat = dL_dt * f.weaveFactor * nx;
+      const vz_lat = dL_dt * f.weaveFactor * nz;
 
       const vx_swim_total = vx_swim + vx_lat;
       const vz_swim_total = vz_swim + vz_lat;
@@ -645,7 +646,7 @@ export async function buildFish(water) {
           
           // Heading Stabilization: Align with path tangent + subtle clamped steer angle
           const pathAngle = Math.atan2(tz * f.dir, tx * f.dir);
-          const steerAngle = Math.atan2(dL_dt, v_path) * 0.15; // limited steer deviation (max ~10 deg)
+          const steerAngle = Math.atan2(dL_dt * f.weaveFactor, v_path) * 0.15; // limited steer deviation (max ~10 deg)
           targetTravelAngle = pathAngle + steerAngle;
         }
 
@@ -658,10 +659,11 @@ export async function buildFish(water) {
               ? Math.PI * (1.6 + Math.random() * 0.8) * (Math.random() < 0.5 ? 1 : -1)
               : (Math.random() - 0.5) * 2.2;
 
-            // Higher, faster takeoff for more dramatic arc
-            f.vx = v_path * f.dir * tx * 1.6;
-            f.vz = v_path * f.dir * tz * 1.6;
-            f.vy = 5.5 + Math.random() * 2.5;
+            // Mostly-vertical leap: only a slight forward carry. A big horizontal boost
+            // here is what made the fish "shoot" forward then coast back to swim speed.
+            f.vx = v_path * f.dir * tx * 1.05;
+            f.vz = v_path * f.dir * tz * 1.05;
+            f.vy = 5.2 + Math.random() * 2.0;
             
             f.takeoffX = f.x; // launch strictly from the center line to stay far from bank rocks
             f.takeoffZ = cz;
@@ -678,7 +680,7 @@ export async function buildFish(water) {
           }
         }
 
-        targetRoll = dL_dt * 0.08 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.04 * f.dir;
+        targetRoll = dL_dt * f.weaveFactor * 0.08 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.04 * f.dir;
         targetPitch = Math.atan2(f.vy, Math.sqrt(f.vx * f.vx + f.vz * f.vz));
       }
       else if (f.jumpState === 'takeoff') {
@@ -737,11 +739,12 @@ export async function buildFish(water) {
         // Signature air twist roll
         targetRoll = Math.sin(t_progress * Math.PI) * f.jumpRoll;
 
-        // Dramatic C-arc body at apex; streamlines nose-first before water entry
+        // Gentle arch that follows the ballistic arc, then streamlines nose-first for entry.
+        // Much subtler than the old tight C — reads as an elegant leap, not a curled ball.
         const arcFactor   = Math.sin(t_progress * Math.PI);
-        const streamline  = Math.max(0.0, (t_progress - 0.72) / 0.28); // last 28% tucks
-        curlFront =  arcFactor * 0.35 * (1.0 - streamline); // head pitches up at apex
-        curlBack  = -arcFactor * 0.78 * (1.0 - streamline); // belly curves hard inward
+        const streamline  = Math.max(0.0, (t_progress - 0.62) / 0.38); // last 38% straightens out
+        curlFront =  arcFactor * 0.12 * (1.0 - streamline); // slight head lift over the top
+        curlBack  = -arcFactor * 0.26 * (1.0 - streamline); // soft belly arc
 
         // Spawn continuous spray droplets as the fish enters/exits surface boundary
         if (f.airY < WATER_LEVEL + 0.15 && f.airY >= WATER_LEVEL) {
@@ -749,26 +752,30 @@ export async function buildFish(water) {
         }
 
         if (f.airY < WATER_LEVEL) {
+          triggerFullSplash(f.airX, f.airZ, f.vx, f.vy, f.vz, true); // Entry splash (full impact speed)
           f.jumpState = 'dive';
           f.diveX = f.airX;
           f.diveY = f.airY;
           f.diveZ = f.airZ;
-
-          triggerFullSplash(f.airX, f.airZ, f.vx, f.vy, f.vz, true); // Entry splash
+          f.vy *= 0.45; // water impact kills most vertical speed → shallow, controlled plunge
         }
       }
       else if (f.jumpState === 'dive') {
-        // Underwater recovery - apply water resistance drag and spring depth recovery
-        // Underwater recovery - apply water resistance drag towards path speed (no lateral weave skew)
-        f.vx = THREE.MathUtils.lerp(f.vx, vx_swim, 5.5 * dt);
-        f.vz = THREE.MathUtils.lerp(f.vz, vz_swim, 5.5 * dt);
+        // Underwater recovery — critically-damped depth return (no bob/overshoot) and a
+        // quick settle of horizontal speed back to swim speed (kills the post-jump coast).
+        f.vx = THREE.MathUtils.lerp(f.vx, vx_swim, 8.0 * dt);
+        f.vz = THREE.MathUtils.lerp(f.vz, vz_swim, 8.0 * dt);
 
-        const springForceY = (y_target - f.diveY) * 16.0 - f.vy * 4.0;
+        const k = 14.0;
+        const cDamp = 2.0 * Math.sqrt(k) * 1.05; // ζ≈1.05 → critically damped, smooth ease-out, no bounce
+        const springForceY = (y_target - f.diveY) * k - f.vy * cDamp;
         f.vy += springForceY * dt;
 
         f.diveX += f.vx * dt;
         f.diveY += f.vy * dt;
         f.diveZ += f.vz * dt;
+        // Never plunge unrealistically deep on entry
+        if (f.diveY < y_target - 0.30) { f.diveY = y_target - 0.30; if (f.vy < 0) f.vy = 0; }
 
         f.root.position.set(f.diveX, f.diveY, f.diveZ);
         f.x = f.diveX;
@@ -782,7 +789,7 @@ export async function buildFish(water) {
           spawnContinuousTrailDroplets(f.diveX, WATER_LEVEL + 0.01, f.diveZ, f.vx * 0.35, f.vy * 0.35, f.vz * 0.35, 1, true);
         }
 
-        if (Math.abs(f.diveY - y_target) < 0.035 && Math.abs(f.vy) < 0.35) {
+        if (Math.abs(f.diveY - y_target) < 0.05 && Math.abs(f.vy) < 0.4) {
           f.jumpState = 'swim';
           f.nextJump = time + 7.0 + Math.random() * 11.0;
 
