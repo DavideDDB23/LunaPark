@@ -105,8 +105,6 @@ export function collectBones(fig) {
     }
   }
   
-  fetch('/log', { method: 'POST', body: `collectBones: Figure ${fig.name || 'unnamed'} has bones in rig: [${allBonesInRig.join(', ')}], collected map keys: [${foundBones.join(', ')}]` }).catch(() => {});
-  
   return map;
 }
 

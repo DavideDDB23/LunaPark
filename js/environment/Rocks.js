@@ -87,8 +87,8 @@ export async function buildRocks() {
     }
   }
 
-  // 1. Organic Rock Clusters along both banks (75% spawn rate every 6 units)
-  const STEP = 6.0;
+  // 1. Organic Rock Clusters along both banks (95% spawn rate every 2.8 units for a dense, continuous border)
+  const STEP = 2.8;
   for (let x = RIVER_X_MIN + 3; x <= RIVER_X_MAX - 3; x += STEP) {
     if (Math.abs(x) < BRIDGE_CLEAR) continue;
     
@@ -96,12 +96,12 @@ export async function buildRocks() {
     const hw = riverHalfWidth(x);
     
     // Left bank cluster
-    if (Math.random() < 0.75) {
+    if (Math.random() < 0.95) {
       spawnBankCluster(x, cz, hw, -1);
     }
     
     // Right bank cluster
-    if (Math.random() < 0.75) {
+    if (Math.random() < 0.95) {
       spawnBankCluster(x, cz, hw, 1);
     }
   }

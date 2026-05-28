@@ -250,7 +250,11 @@ export async function buildFish(water) {
   }
 
   function triggerSplashDroplets(x, z, vx, vy, vz, isEntry) {
-    const numDroplets = isEntry ? (24 + Math.floor(Math.random() * 12)) : (12 + Math.floor(Math.random() * 6));
+    const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    const speedBonus = Math.floor(speed * 2.0);
+    const numDroplets = isEntry
+      ? (36 + speedBonus + Math.floor(Math.random() * 16))
+      : (14 + Math.floor(Math.random() * 8));
     
     for (let k = 0; k < numDroplets; k++) {
       const part = particles.find(p => !p.active);
@@ -331,6 +335,7 @@ export async function buildFish(water) {
     inst.scale.setScalar(tmpl.scale);
 
     const root = new THREE.Group();
+    root.userData.isFishRoot = true;
     root.add(inst);
     group.add(root);
 
@@ -455,11 +460,13 @@ export async function buildFish(water) {
       let targetFinAmp = 0.30;
 
       if (f.jumpState === 'airborne') {
-        // Graceful air leap settings
+        // Thrashing escape leap — faster wag, fins spread wide at apex then tuck
+        const t_air = f.airTime > 0 ? Math.min(1.0, f.airT / f.airTime) : 0;
+        const apexBulge = Math.sin(t_air * Math.PI);
         targetSpeedMultiplier = 1.8;
-        targetFreq = f.baseFreq * 0.4;
-        targetAmp = 0.20;
-        targetFinAmp = 0.10;
+        targetFreq = f.baseFreq * 1.6;
+        targetAmp = 0.38 + apexBulge * 0.12;
+        targetFinAmp = 0.08 + apexBulge * 0.55; // spread like wings at apex, tuck on entry
       } else if (f.jumpState === 'takeoff') {
         targetSpeedMultiplier = 1.8;
         targetFreq = f.baseFreq * 1.2;
@@ -478,15 +485,26 @@ export async function buildFish(water) {
         targetFinAmp = 0.45;
       } else if (f.swimState === 'burst') {
         targetSpeedMultiplier = 1.5;
-        targetFreq = f.baseFreq * 1.5; // speed-synchronized frequency
-        targetAmp = 0.35 * 1.3;        // speed-synchronized amplitude
-        targetFinAmp = 0.05; // tuck fins during burst
+        targetFreq = f.baseFreq * 1.5;
+        targetAmp = 0.35 * 1.3;
+        targetFinAmp = 0.05;
       } else {
-        // Coasting / drifting (decelerating)
+        // Coasting / drifting
         targetSpeedMultiplier = 0.45 + Math.sin(time * 0.5 + f.bobPhase) * 0.15;
-        targetFreq = f.baseFreq * targetSpeedMultiplier; // speed-synchronized
-        targetAmp = 0.35 * targetSpeedMultiplier;        // speed-synchronized
-        targetFinAmp = 0.45; // flare fins to stabilize
+        targetFreq = f.baseFreq * targetSpeedMultiplier;
+        targetAmp = 0.35 * targetSpeedMultiplier;
+        targetFinAmp = 0.45;
+      }
+
+      // Pre-jump charge: ramp up speed/amp in the 1.2s before any leap
+      if (f.jumpState === 'swim' && !f.isTurning) {
+        const timeToJump = f.nextJump - time;
+        if (timeToJump > 0 && timeToJump < 1.2) {
+          const chargeRamp = 1.0 - timeToJump / 1.2;
+          targetSpeedMultiplier = Math.max(targetSpeedMultiplier, 1.5 + chargeRamp * 1.0);
+          targetFreq = Math.max(targetFreq, f.baseFreq * (1.4 + chargeRamp * 1.2));
+          targetAmp  = Math.max(targetAmp,  0.38 + chargeRamp * 0.12);
+        }
       }
 
       // Smoothly interpolate active state values (Frame-rate independent)
@@ -601,15 +619,18 @@ export async function buildFish(water) {
           targetTravelAngle = pathAngle + steerAngle;
         }
 
-        // Check for jump trigger (only if far from endpoints and not turning)
-        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning) {
+        // Check for jump trigger (only if far from endpoints, not turning, and not under/near the bridge)
+        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning && Math.abs(f.x) > 14.0) {
           f.jumpState = 'takeoff';
-          f.jumpRoll = (Math.random() - 0.5) * 1.2;
-          
-          // Boost takeoff velocities, aligned strictly to path tangent (straight jumps!)
-          f.vx = v_path * f.dir * tx * 1.4;
-          f.vz = v_path * f.dir * tz * 1.4;
-          f.vy = 4.0 + Math.random() * 1.8;
+          // 28% chance of full barrel roll, otherwise partial twist
+          f.jumpRoll = Math.random() < 0.28
+            ? Math.PI * (1.6 + Math.random() * 0.8) * (Math.random() < 0.5 ? 1 : -1)
+            : (Math.random() - 0.5) * 2.2;
+
+          // Higher, faster takeoff for more dramatic arc
+          f.vx = v_path * f.dir * tx * 1.6;
+          f.vz = v_path * f.dir * tz * 1.6;
+          f.vy = 5.5 + Math.random() * 2.5;
           
           f.takeoffX = f.x + (L + sway) * nx;
           f.takeoffZ = f.z;
@@ -661,9 +682,11 @@ export async function buildFish(water) {
         // Signature air twist roll
         targetRoll = Math.sin(t_progress * Math.PI) * f.jumpRoll;
 
-        // Custom spine bending in air
-        curlBack = -Math.cos(t_progress * Math.PI) * 0.25;
-        curlFront = -Math.cos(t_progress * Math.PI) * 0.10;
+        // Dramatic C-arc body at apex; streamlines nose-first before water entry
+        const arcFactor   = Math.sin(t_progress * Math.PI);
+        const streamline  = Math.max(0.0, (t_progress - 0.72) / 0.28); // last 28% tucks
+        curlFront =  arcFactor * 0.35 * (1.0 - streamline); // head pitches up at apex
+        curlBack  = -arcFactor * 0.78 * (1.0 - streamline); // belly curves hard inward
 
         // Spawn continuous spray droplets as the fish enters/exits surface boundary
         if (f.airY < WATER_LEVEL + 0.15 && f.airY >= WATER_LEVEL) {
@@ -742,10 +765,10 @@ export async function buildFish(water) {
       // ── Bone rotations (Wave propagation Head -> Tail) ─────────
       const isAir = f.jumpState === 'airborne';
       
-      // Calculate bone wag multipliers with correct structural decay
-      const frontWagAmp = f.activeAmp * (isAir ? 0.25 : 0.15);
-      const backWagAmp  = f.activeAmp * (isAir ? 0.50 : 0.45);
-      const tailWagAmp  = f.activeAmp * (isAir ? 0.90 : 0.90);
+      // Bone wave amplitudes: tail dominates, head barely moves
+      const frontWagAmp = f.activeAmp * (isAir ? 0.18 : 0.11);
+      const backWagAmp  = f.activeAmp * (isAir ? 0.58 : 0.52);
+      const tailWagAmp  = f.activeAmp * (isAir ? 1.08 : 1.08);
 
       // Curvature-induced bend is applied only when swimming (disabled in air/turn to avoid pinching)
       const finalCurvatureYaw = (f.jumpState === 'swim' && !f.isTurning) ? pathCurvatureYaw : 0.0;
@@ -753,44 +776,49 @@ export async function buildFish(water) {
       // U-turn bend
       const turnBend = f.isTurning ? Math.max(-0.5, Math.min(0.5, yawDiff)) * 1.0 : 0.0;
 
-      // Airborne 3D crescent curve (yaw bend)
+      // Airborne lateral C-curve (yaw bend) — capped regardless of barrel roll magnitude
       let airYawBend = 0.0;
       if (f.jumpState === 'airborne') {
         const t_progress = Math.min(1.0, f.airT / f.airTime);
-        airYawBend = Math.sin(t_progress * Math.PI) * 0.3 * f.jumpRoll;
+        const normalizedRoll = Math.max(-1, Math.min(1, f.jumpRoll / Math.PI));
+        airYawBend = Math.sin(t_progress * Math.PI) * 0.38 * normalizedRoll;
       }
 
-      const sinPhase = Math.sin(phase);
+      // Traveling wave: each segment lags the previous by 60° — creates visible wave running nose→tail
+      const WAVE_LAG = Math.PI / 3;
+      const sinPhase = Math.sin(phase); // kept for fin rowing (front-node phase)
+      const wagFront = sinPhase * frontWagAmp;
+      const wagBack  = Math.sin(phase - WAVE_LAG) * backWagAmp;
+      const wagTail  = Math.sin(phase - 2 * WAVE_LAG) * tailWagAmp;
 
       if (b.spineFront) {
         const r = b.rest.spineFront;
-        const wag = sinPhase * frontWagAmp;
         b.spineFront.rotation.set(
           r.x + curlFront,
           r.y,
-          r.z + wag + finalCurvatureYaw * 0.8 + turnBend * 0.8 + airYawBend * 0.8
+          r.z + wagFront + finalCurvatureYaw * 0.8 + turnBend * 0.8 + airYawBend * 0.8
         );
       }
       if (b.spineBack) {
         const r = b.rest.spineBack;
-        const wag = -sinPhase * backWagAmp; // out of phase!
         b.spineBack.rotation.set(
           r.x + curlBack,
           r.y,
-          r.z + wag + finalCurvatureYaw * 0.5 + turnBend * 0.6 + airYawBend * 0.6
+          r.z + wagBack + finalCurvatureYaw * 0.5 + turnBend * 0.6 + airYawBend * 0.6
         );
       }
       if (b.tail) {
         const r = b.rest.tail;
-        const wag = -sinPhase * tailWagAmp; // out of phase!
         b.tail.rotation.set(
           r.x,
           r.y,
-          r.z + wag + turnBend * 0.4 + airYawBend * 0.4
+          r.z + wagTail + turnBend * 0.4 + airYawBend * 0.4
         );
       }
       if (b.root) {
-        b.root.rotation.copy(b.rest.root); // root bone remains stable to avoid side-drift jitter
+        // Very subtle reactive counter-wag on head (opposite to spineFront — feels alive)
+        const r = b.rest.root;
+        b.root.rotation.set(r.x, r.y, r.z - wagFront * 0.09);
       }
 
       // ── Pectoral fin idle paddle & steer ───────────────────────
