@@ -579,12 +579,19 @@ export async function buildFish(water) {
           f.x += ds_dt * dt;
 
           // U-turn triggers at boundaries
-          if (f.x > RIVER_X_MAX - 12 && f.dir === 1) {
+          if ((f.x > RIVER_X_MAX - 12 && f.dir === 1) || (f.x < RIVER_X_MIN + 12 && f.dir === -1)) {
             f.isTurning = true;
-            f.targetDir = -1;
-          } else if (f.x < RIVER_X_MIN + 12 && f.dir === -1) {
-            f.isTurning = true;
-            f.targetDir = 1;
+            f.targetDir = f.dir === 1 ? -1 : 1;
+            
+            // Set weave factor to 0 immediately to center the fish for the turn,
+            // but calculate a smooth offset so it doesn't snap physically.
+            const L_active = L * f.weaveFactor;
+            const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * f.weaveFactor;
+            
+            f.weaveFactor = 0.0;
+            
+            f.jumpOffsetX = (L_active + sway) * nx;
+            f.jumpOffsetZ = (L_active + sway) * nz;
           }
         }
 
@@ -623,6 +630,11 @@ export async function buildFish(water) {
           if (Math.abs(yawDiff) < 0.15) {
             f.dir = f.targetDir;
             f.isTurning = false;
+            
+            // Reset lateral phase so the fish starts its weave smoothly from the center line
+            f.lateralPhaseAccumulator = 0;
+            f.lateralPhase = 0;
+            f.weaveFactor = 1.0;
           }
         } else {
           f.vx = vx_swim_total;
@@ -636,27 +648,32 @@ export async function buildFish(water) {
         }
 
         // Check for jump trigger (only if far from endpoints/bridge, not turning, and close to the river center line)
-        if (time >= f.nextJump && f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning && Math.abs(f.x) > 14.0 && Math.abs(L) < hw * 0.15) {
-          f.jumpState = 'takeoff';
-          // 28% chance of full barrel roll, otherwise partial twist
-          f.jumpRoll = Math.random() < 0.28
-            ? Math.PI * (1.6 + Math.random() * 0.8) * (Math.random() < 0.5 ? 1 : -1)
-            : (Math.random() - 0.5) * 2.2;
+        if (time >= f.nextJump) {
+          if (f.x > RIVER_X_MIN + 25 && f.x < RIVER_X_MAX - 25 && !f.isTurning && Math.abs(f.x) > 14.0 && Math.abs(L) < hw * 0.15) {
+            f.jumpState = 'takeoff';
+            // 28% chance of full barrel roll, otherwise partial twist
+            f.jumpRoll = Math.random() < 0.28
+              ? Math.PI * (1.6 + Math.random() * 0.8) * (Math.random() < 0.5 ? 1 : -1)
+              : (Math.random() - 0.5) * 2.2;
 
-          // Higher, faster takeoff for more dramatic arc
-          f.vx = v_path * f.dir * tx * 1.6;
-          f.vz = v_path * f.dir * tz * 1.6;
-          f.vy = 5.5 + Math.random() * 2.5;
-          
-          f.takeoffX = f.x; // launch strictly from the center line to stay far from bank rocks
-          f.takeoffZ = cz;
-          f.takeoffY = f.y;
+            // Higher, faster takeoff for more dramatic arc
+            f.vx = v_path * f.dir * tx * 1.6;
+            f.vz = v_path * f.dir * tz * 1.6;
+            f.vy = 5.5 + Math.random() * 2.5;
+            
+            f.takeoffX = f.x; // launch strictly from the center line to stay far from bank rocks
+            f.takeoffZ = cz;
+            f.takeoffY = f.y;
 
-          // Calculate current physical position just before takeoff to smooth transition
-          const currentPosX = f.x + (L_active + sway) * nx;
-          const currentPosZ = cz + L_active + sway * nz;
-          f.jumpOffsetX = currentPosX - f.takeoffX;
-          f.jumpOffsetZ = currentPosZ - f.takeoffZ;
+            // Calculate current physical position just before takeoff to smooth transition
+            const currentPosX = f.x + (L_active + sway) * nx;
+            const currentPosZ = cz + L_active + sway * nz;
+            f.jumpOffsetX = currentPosX - f.takeoffX;
+            f.jumpOffsetZ = currentPosZ - f.takeoffZ;
+          } else {
+            // Cannot jump at this position (e.g. near bridge/banks/ends); defer jump check smoothly
+            f.nextJump = time + 0.5 + Math.random() * 0.5;
+          }
         }
 
         targetRoll = dL_dt * 0.08 * f.dir + Math.cos(phase - 0.45) * f.activeAmp * 0.04 * f.dir;
