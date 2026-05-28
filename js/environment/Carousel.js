@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
 import { loadVisitorTemplates, makeRider, updateRider, ACTIONS_SEATED_GENERAL, getPassengerWorldHeight } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 
 const HORSE_MODEL_URL = 'assets/models/carousel_horse.glb';
 
@@ -181,6 +182,11 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     rotatingAssembly.add(bulb);
     bulbs.push(bulb);
   }
+
+  eventBus.on('color-change', (hex) => {
+    bulbMat.color.set(hex);
+    bulbMat.emissive.set(hex);
+  });
 
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
   const MODEL_ROTATION_OFFSET = Math.PI * 0.5;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 
 // Ride Animation Constants
 const MAX_SPIN_SPEED = 2.0;       // rad/s platform rotation at full speed
@@ -448,6 +449,13 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     bulbs.push(bulb);
   }
 
+  eventBus.on('color-change', (hex) => {
+    bulbs.forEach(b => {
+      b.material.color.set(hex);
+      b.material.emissive.set(hex);
+    });
+  });
+
   // 9. Control Panel (semaphore + lever)
   const controlPanel = new ControlPanel({ initialRunning: true });
   // Place control panel next to the Tagada pedestal base (Northeast relative to the ride position)
@@ -462,6 +470,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     armPivot,
     discMeshGroup,
     panel: controlPanel.group,
+    speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     spinAngle: 0,
@@ -481,11 +490,12 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const ease = controlPanel.tick(delta);
 
     // Accumulate angles scaled by ease and delta for glitch-free smooth stop/deceleration
-    controller.spinAngle += controller.maxSpeed * ease * delta;
-    controller.pitchAngle += PITCH_FREQ * ease * delta;
-    controller.rollAngle += ROLL_FREQ * ease * delta;
-    controller.bumpAngle += BUMP_FREQ * ease * delta;
-    controller.armYawAngle += ARM_YAW_SPEED * ease * delta;
+    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    controller.spinAngle += controller.maxSpeed * ease * speedMult * delta;
+    controller.pitchAngle += PITCH_FREQ * ease * speedMult * delta;
+    controller.rollAngle += ROLL_FREQ * ease * speedMult * delta;
+    controller.bumpAngle += BUMP_FREQ * ease * speedMult * delta;
+    controller.armYawAngle += ARM_YAW_SPEED * ease * speedMult * delta;
 
     const idleEase = 1 - ease;
 
@@ -604,30 +614,11 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         b.material.emissiveIntensity = 0.0;
       });
     }
+
+    if (ease === 0) {
+      controller.speedMultiplier = 1.0;
+    }
   };
-
-  // 11. Raycast Click-to-Toggle Handler on the Control Panel
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-
-    dom.addEventListener('pointerdown', (ev) => {
-      if (pick(ev)) controller.toggle();
-    });
-
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
-    });
-  }
 
   group.userData.controller = controller;
   return group;

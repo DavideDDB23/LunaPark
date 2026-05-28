@@ -16,6 +16,8 @@ import { buildFerrisWheel } from "./environment/FerrisWheel.js";
 import { buildCarousel } from "./environment/Carousel.js";
 import { buildTagada } from "./environment/Tagada.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
+import { eventBus } from './utils/EventBus.js';
+import { InteractionManager } from './utils/InteractionManager.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -65,6 +67,7 @@ if (windInput && windValEl) {
 }
 
 let dayNight = null;
+let autoAdvance = true;
 
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
@@ -134,6 +137,96 @@ async function init() {
   // Initial time = noon.
   dayNight.setHour(12);
 
+  // --- Interaction Manager & Event Wiring ---
+  const interactionManager = new InteractionManager(camera, renderer, scene);
+
+  // Register lampposts
+  lamps.children.forEach(lamp => {
+    interactionManager.registerClickable(lamp);
+  });
+
+  // Register ride control panels
+  interactionManager.registerClickable(ferrisWheel.userData.controller.panel);
+  interactionManager.registerClickable(carousel.userData.controller.panel);
+  interactionManager.registerClickable(tagada.userData.controller.panel);
+
+  // Register rides for speed-scrolling
+  interactionManager.registerRide(ferrisWheel);
+  interactionManager.registerRide(carousel);
+  interactionManager.registerRide(tagada);
+
+  // EventBus: click interactions
+  eventBus.on('interact-click', ({ object }) => {
+    // Check if lamppost clicked
+    let curr = object;
+    while (curr && !curr.userData.lampId) {
+      curr = curr.parent;
+    }
+    if (curr && curr.userData.lampId) {
+      curr.userData.isManual = true;
+      curr.userData.targetOn = !curr.userData.targetOn;
+      return;
+    }
+
+    // Check if control panel clicked
+    curr = object;
+    while (curr && curr.name !== 'controlPanel') {
+      curr = curr.parent;
+    }
+    if (curr) {
+      if (ferrisWheel.userData.controller.panel === curr) ferrisWheel.userData.controller.toggle();
+      if (carousel.userData.controller.panel === curr) carousel.userData.controller.toggle();
+      if (tagada.userData.controller.panel === curr) tagada.userData.controller.toggle();
+    }
+  });
+
+  // EventBus: speed adjustments
+  eventBus.on('speed-scroll', ({ rideId, delta }) => {
+    let controller = null;
+    if (rideId === 'ferrisWheel') controller = ferrisWheel.userData.controller;
+    if (rideId === 'carousel') controller = carousel.userData.controller;
+    if (rideId === 'tagada') controller = tagada.userData.controller;
+
+    if (controller) {
+      controller.speedMultiplier = Math.max(0.2, Math.min(3.0, controller.speedMultiplier + delta));
+    }
+  });
+
+  // HUD Interactive Elements
+  const colorInput = document.getElementById('lightColor');
+  if (colorInput) {
+    colorInput.addEventListener('input', () => {
+      eventBus.emit('color-change', colorInput.value);
+    });
+    // Emit initial value on load
+    setTimeout(() => eventBus.emit('color-change', colorInput.value), 100);
+  }
+
+  const autoCheckbox = document.getElementById('autoTime');
+  if (autoCheckbox) {
+    autoCheckbox.addEventListener('change', () => {
+      autoAdvance = autoCheckbox.checked;
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) {
+        return;
+      }
+      autoAdvance = !autoAdvance;
+      if (autoCheckbox) autoCheckbox.checked = autoAdvance;
+    }
+  });
+
+  const helpBtn = document.getElementById('helpBtn');
+  const helpPanel = document.getElementById('helpPanel');
+  if (helpBtn && helpPanel) {
+    helpBtn.addEventListener('click', () => {
+      helpPanel.style.display = helpPanel.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+
   console.log("hiding loader"); loaderEl.classList.add("hidden");
 }
 
@@ -169,6 +262,22 @@ function animate() {
   const wind = getWindSpeed();
   controls.update(delta);
 
+  if (autoAdvance && dayNight) {
+    const hoursPerSec = 0.4;
+    let nextHour = dayNight.t * 24 + hoursPerSec * delta;
+    if (nextHour >= 24) nextHour -= 24;
+    dayNight.setHour(nextHour);
+
+    const timeInput = document.getElementById('timeOfDay');
+    const timeVal = document.getElementById('timeVal');
+    if (timeInput) timeInput.value = nextHour;
+    if (timeVal) {
+      const h = Math.floor(nextHour);
+      const m = Math.floor((nextHour - h) * 60);
+      timeVal.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
+
   const river = environmentGroup.getObjectByName('river');
   if (river && river.userData.update) river.userData.update(delta, time);
 
@@ -189,6 +298,11 @@ function animate() {
 
   const tagada = environmentGroup.getObjectByName('tagada');
   if (tagada && tagada.userData.tick) tagada.userData.tick(delta, time);
+
+  const lamps = environmentGroup.getObjectByName('lampposts');
+  if (lamps && lamps.userData.tick) {
+    lamps.userData.tick(delta, time);
+  }
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
