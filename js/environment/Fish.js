@@ -740,8 +740,9 @@ export async function buildFish(water) {
       }
       else if (f.jumpState === 'dive') {
         // Underwater recovery - apply water resistance drag and spring depth recovery
-        f.vx = THREE.MathUtils.lerp(f.vx, vx_swim_total, 5.5 * dt);
-        f.vz = THREE.MathUtils.lerp(f.vz, vz_swim_total, 5.5 * dt);
+        // Underwater recovery - apply water resistance drag towards path speed (no lateral weave skew)
+        f.vx = THREE.MathUtils.lerp(f.vx, vx_swim, 5.5 * dt);
+        f.vz = THREE.MathUtils.lerp(f.vz, vz_swim, 5.5 * dt);
 
         const springForceY = (y_target - f.diveY) * 16.0 - f.vy * 4.0;
         f.vy += springForceY * dt;
@@ -766,9 +767,14 @@ export async function buildFish(water) {
           f.jumpState = 'swim';
           f.nextJump = time + 7.0 + Math.random() * 11.0;
 
+          // Reset the lateral phase so the fish starts weaving from the center (landing line)
+          // instead of forcing a massive lateral slide to a random phase.
+          f.lateralPhaseAccumulator = 0;
+          f.lateralPhase = 0;
+
           // Set landing offset so there is no snap when returning to swim state
           const wf = f.weaveFactor !== undefined ? f.weaveFactor : 1.0;
-          const L_active = L * wf;
+          const L_active = 0.0; // since lateralPhase is now 0
           const sway = Math.sin(phase - 0.45) * f.activeAmp * 0.14 * f.dir * wf;
           const targetX = f.x + (L_active + sway) * nx;
           const targetZ = cz + L_active + sway * nz;
