@@ -105,8 +105,6 @@ export function collectBones(fig) {
     }
   }
   
-  fetch('/log', { method: 'POST', body: `collectBones: Figure ${fig.name || 'unnamed'} has bones in rig: [${allBonesInRig.join(', ')}], collected map keys: [${foundBones.join(', ')}]` }).catch(() => {});
-  
   return map;
 }
 
@@ -276,6 +274,7 @@ export function makeRider(template, height, { pool, facingY = 0, phase = 0, stan
   pivot.add(fig);
   return {
     pivot, fig, bones: collectBones(fig), pool, phase, standing, scale, seatedStyle,
+    height,
     from: pool.includes('rest') || pool.includes('standRest') ? (pool.includes('standRest') ? 'standRest' : 'rest') : pool[0],
     to: pick(pool), tStart: 0, transDur: 0.7,
     nextSwitch: phase * 0.7 + Math.random() * 3, // stagger first switch

@@ -41,6 +41,7 @@ function buildRiverSurfaceGeometry() {
 
 const vertexShader = /* glsl */ `
   uniform float uTime;
+  uniform vec4 uRipples[8]; // x, z, age, intensity
   varying vec2 vUv;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -67,9 +68,44 @@ const vertexShader = /* glsl */ `
     float dx = w1.y + w2.y + w3.y + w4.y;
     float dz = w1.z + w2.z + w3.z + w4.z;
 
-    pos.y += h;
+    // Concentric wave packet ripples triggered by fish entry/exit
+    float drip = 0.0;
+    float dr_dx = 0.0;
+    float dr_dz = 0.0;
+    
+    for (int i = 0; i < 8; i++) {
+      vec4 r = uRipples[i];
+      if (r.w > 0.0) {
+        float dist = distance(pos.xz, r.xy);
+        float age = r.z;
+        float speed = 4.2;
+        float wavelength = 1.0;
+        float k = 6.2831853 / wavelength;
+        
+        float waveFront = speed * age;
+        float distToFront = abs(dist - waveFront);
+        
+        float amp = r.w * 0.18 * exp(-dist * 0.45) * smoothstep(1.5, 0.0, age);
+        float envelope = exp(-distToFront * distToFront * 3.5);
+        float frontLimit = smoothstep(waveFront + 0.8, waveFront - 0.2, dist);
+        
+        // Primary gravity wave + secondary capillary wave
+        float waveVal = sin(k * dist - 16.0 * age) + 0.35 * sin(2.2 * k * dist - 28.0 * age);
+        
+        drip += amp * waveVal * envelope * frontLimit;
+        
+        // Analytical derivative of displacement with respect to dist
+        float dWave_dDist = amp * (k * cos(k * dist - 16.0 * age) + 0.35 * 2.2 * k * cos(2.2 * k * dist - 28.0 * age)) * envelope * frontLimit;
+        float dirX = (pos.x - r.x) / (dist + 0.001);
+        float dirZ = (pos.z - r.y) / (dist + 0.001);
+        dr_dx += dWave_dDist * dirX;
+        dr_dz += dWave_dDist * dirZ;
+      }
+    }
 
-    vNormal = normalize(vec3(-dx, 1.0, -dz));
+    pos.y += h + drip;
+
+    vNormal = normalize(vec3(-(dx + dr_dx), 1.0, -(dz + dr_dz)));
     vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
@@ -79,6 +115,7 @@ const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform vec3 uSunDir;
   uniform float uNight;       // 0 = full day, 1 = full night
+  uniform vec4 uRipples[8];
   varying vec2 vUv;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -122,6 +159,30 @@ const fragmentShader = /* glsl */ `
     float foamRipple = smoothstep(0.55, 1.0, noise(vec2(vUv.x * 200.0 + uTime * 2.0, vUv.y * 40.0)));
     col = mix(col, foamCol, foamStrip * (0.6 + foamRipple * 0.4));
 
+    // Dynamic wave foam from fish ripples
+    float totalFoam = 0.0;
+    for (int i = 0; i < 8; i++) {
+      vec4 r = uRipples[i];
+      if (r.w > 0.0) {
+        float dist = distance(vWorldPos.xz, r.xy);
+        float age = r.z;
+        float speed = 4.2;
+        float waveFront = speed * age;
+        float distToFront = abs(dist - waveFront);
+        
+        float foamAmt = exp(-distToFront * distToFront * 5.0) * r.w * 0.8 * exp(-dist * 0.2) * smoothstep(1.5, 0.0, age);
+        
+        float angle = atan(vWorldPos.z - r.y, vWorldPos.x - r.x);
+        float n = noise(vec2(angle * 12.0, (dist - waveFront) * 15.0 + uTime * 2.0));
+        
+        float threshold = 0.35 + (age / 1.5) * 0.35;
+        float foamVal = smoothstep(threshold, threshold + 0.1, n);
+        
+        totalFoam += foamAmt * foamVal;
+      }
+    }
+    col = mix(col, foamCol, clamp(totalFoam, 0.0, 1.0));
+
     // Night dim — push toward a deep moon-tinted blue so river doesn't glow at midnight.
     vec3 nightTint = vec3(0.02, 0.06, 0.14);
     col = mix(col, nightTint + col * 0.18, clamp(uNight, 0.0, 1.0));
@@ -139,6 +200,7 @@ export function buildWater() {
       uTime: { value: 0 },
       uSunDir: { value: new THREE.Vector3(0.5, 1.0, 0.3).normalize() },
       uNight: { value: 0.0 },
+      uRipples: { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) },
     },
     vertexShader,
     fragmentShader,
@@ -152,9 +214,47 @@ export function buildWater() {
   mesh.name = 'river_surface';
   group.add(mesh);
 
+  const activeRipples = [];
+
+  group.userData.triggerRipple = (x, z, intensity = 1.0) => {
+    // Find finished/expired ripple or create a new slot if under capacity
+    let rip = activeRipples.find(r => r.age >= 1.5);
+    if (!rip && activeRipples.length < 8) {
+      rip = { x: 0, z: 0, age: 0, intensity: 0 };
+      activeRipples.push(rip);
+    } else if (!rip) {
+      // Evict oldest active ripple to maintain budget
+      rip = activeRipples.reduce((oldest, current) => current.age > oldest.age ? current : oldest, activeRipples[0]);
+    }
+    
+    if (rip) {
+      rip.x = x;
+      rip.z = z;
+      rip.age = 0;
+      rip.intensity = intensity;
+    }
+  };
+
   group.userData.tick = (delta) => {
     material.uniforms.uTime.value += delta;
+
+    // Update ripple durations
+    for (const rip of activeRipples) {
+      rip.age += delta;
+    }
+
+    // Populate uniform array
+    const uRips = material.uniforms.uRipples.value;
+    for (let i = 0; i < 8; i++) {
+      if (i < activeRipples.length && activeRipples[i].age < 1.5) {
+        const r = activeRipples[i];
+        uRips[i].set(r.x, r.z, r.age, r.intensity);
+      } else {
+        uRips[i].set(0, 0, 0, 0);
+      }
+    }
   };
+  
   return group;
 }
 

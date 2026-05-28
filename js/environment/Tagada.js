@@ -461,6 +461,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const controller = {
     armPivot,
     discMeshGroup,
+    seats,
     panel: controlPanel.group,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
@@ -621,11 +622,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
 
     dom.addEventListener('pointerdown', (ev) => {
       if (pick(ev)) controller.toggle();
-    });
-
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
     });
   }
 

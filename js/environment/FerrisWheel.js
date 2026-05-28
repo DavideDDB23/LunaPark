@@ -293,10 +293,6 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
       return ray.intersectObject(controlPanel.group, true).length > 0;
     };
     dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
-    });
   }
 
   group.userData.controller = controller;

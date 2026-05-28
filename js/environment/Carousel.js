@@ -129,20 +129,20 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   trimMesh.position.y = 0.3;
   rotatingAssembly.add(trimMesh);
 
-  // Central column: Mirror-finished main support cylinder (radius 2.0, height 5.5)
-  const columnMesh = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 5.5, 24), mirrorMat);
-  columnMesh.position.y = 0.3 + 0.3 + 2.75 + 1.0; // above base + raised by 1.0
+  // Central column: Mirror-finished main support cylinder (radius 2.0, height 6.3) resting on platform surface, touching canopy underside
+  const columnMesh = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 6.3, 24), mirrorMat);
+  columnMesh.position.y = 0.6 + 3.15; // centered: bottom at y=0.6 (platform surface), top at y=6.9 (canopy rim bottom)
   columnMesh.castShadow = true;
   columnMesh.receiveShadow = true;
   rotatingAssembly.add(columnMesh);
 
   // Column gold moldings (decorative bands)
   const bottomBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
-  bottomBand.position.y = 0.3 + 0.3 + 0.1 + 1.0;
+  bottomBand.position.y = 0.6 + 0.1; // base of column, on platform surface
   rotatingAssembly.add(bottomBand);
 
   const topBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
-  topBand.position.y = 0.3 + 0.3 + 5.4 + 1.0;
+  topBand.position.y = 6.9 - 0.1; // top of column
   rotatingAssembly.add(topBand);
 
   // Canopy conical roof: Cone of radius 13.2, height 3.5
@@ -200,7 +200,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     // Stationary pole (gold) — horse slides up/down on it via horseContainer bobbing.
     // Slightly thicker than GLB's built-in pole to conceal it during bob.
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.18, 7.2, 12), goldMat
+      new THREE.CylinderGeometry(0.06, 0.06, 7.2, 12), goldMat
     );
     pole.position.y = 3.6; // centered: spans Y 0–7.2 in mountGroup space
     pole.castShadow = true;
@@ -371,11 +371,6 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
     dom.addEventListener('pointerdown', (ev) => {
       if (pick(ev)) controller.toggle();
-    });
-
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
     });
   }
 
