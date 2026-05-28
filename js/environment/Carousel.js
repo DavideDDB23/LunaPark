@@ -200,7 +200,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     // Stationary pole (gold) — horse slides up/down on it via horseContainer bobbing.
     // Slightly thicker than GLB's built-in pole to conceal it during bob.
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.18, 7.2, 12), goldMat
+      new THREE.CylinderGeometry(0.06, 0.06, 7.2, 12), goldMat
     );
     pole.position.y = 3.6; // centered: spans Y 0–7.2 in mountGroup space
     pole.castShadow = true;
@@ -371,11 +371,6 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
     dom.addEventListener('pointerdown', (ev) => {
       if (pick(ev)) controller.toggle();
-    });
-
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
     });
   }
 

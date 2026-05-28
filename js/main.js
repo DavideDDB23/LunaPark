@@ -67,8 +67,9 @@ if (windInput && windValEl) {
 
 let dayNight = null;
 let cameraManager = null;
+const fpvTmpVec = new THREE.Vector3();
 
-cameraManager = new CameraManager(camera, controls, renderer, () => {
+cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const rides = [];
   const tmpVec = new THREE.Vector3();
   const fw = environmentGroup.getObjectByName('ferrisWheel');
@@ -84,18 +85,89 @@ cameraManager = new CameraManager(camera, controls, renderer, () => {
       return best?.gondolaMesh || null;
     },
     getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getRiders: () => {
+      const c = fw.userData.controller;
+      let best = null, bestY = -Infinity;
+      for (const gm of c.gondolaMounts) {
+        gm.gondolaMesh.getWorldPosition(tmpVec);
+        if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
+      }
+      return best ? best.passengers : [];
+    },
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      fpvTmpVec.set(0, 1.8, 1.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      fpvTmpVec.set(0, 1.8, 10.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    }
   });
   const cr = environmentGroup.getObjectByName('carousel');
   if (cr) rides.push({
     group: cr,
     getFpvTarget: () => cr.userData.controller.horses[0]?.container || null,
     getFpvOffset: () => new THREE.Vector3(0, 2.5, 0),
+    getRiders: () => {
+      const r = cr.userData.controller.horses[0]?.rider;
+      return r ? [r] : [];
+    },
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      const horse = cr.userData.controller.horses[0];
+      if (!horse) return;
+      const h = horse.rider ? horse.rider.height : 3.28;
+      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
+      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
+      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
+      fpvTmpVec.set(px - 0.15, py + h * 0.82, pz);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      const horse = cr.userData.controller.horses[0];
+      if (!horse) return;
+      const h = horse.rider ? horse.rider.height : 3.28;
+      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
+      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
+      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
+      fpvTmpVec.set(px - 10.0, py + h * 0.82, pz + 2.5);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    }
   });
   const tg = environmentGroup.getObjectByName('tagada');
   if (tg) rides.push({
     group: tg,
     getFpvTarget: () => tg.userData.controller.discMeshGroup.getObjectByName('seat_group_0') || null,
     getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getRiders: () => {
+      const r = tg.userData.controller.seats[0]?.rider;
+      return r ? [r] : [];
+    },
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      const seat = tg.userData.controller.seats[0];
+      if (!seat) return;
+      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
+      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
+      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
+      const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
+      fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      const seat = tg.userData.controller.seats[0];
+      if (!seat) return;
+      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
+      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
+      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
+      const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
+      fpvTmpVec.set(px, py + h * 0.82, pz + 10.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    }
   });
   return rides;
 });
@@ -204,7 +276,6 @@ function animate() {
   if (!cameraManager || cameraManager.state !== 'flying') {
     controls.update(delta);
   }
-  if (cameraManager) cameraManager.tick(delta);
 
   const river = environmentGroup.getObjectByName('river');
   if (river && river.userData.update) river.userData.update(delta, time);
@@ -226,6 +297,8 @@ function animate() {
 
   const tagada = environmentGroup.getObjectByName('tagada');
   if (tagada && tagada.userData.tick) tagada.userData.tick(delta, time);
+
+  if (cameraManager) cameraManager.tick(delta);
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

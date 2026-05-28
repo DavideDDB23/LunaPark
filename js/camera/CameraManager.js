@@ -14,8 +14,9 @@ const FPV_OFFSET = new THREE.Vector3(0, 1.5, 0);
 const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export class CameraManager {
-  constructor(camera, controls, renderer, getRides) {
+  constructor(camera, scene, controls, renderer, getRides) {
     this.camera = camera;
+    this.scene = scene;
     this.controls = controls;
     this.renderer = renderer;
     this.getRides = getRides;
@@ -28,6 +29,9 @@ export class CameraManager {
     this._fpvTarget = null;
     this._fpvOffset = FPV_OFFSET.clone();
     this._fpvRide = null;
+    this._preFpvPos = null;
+    this._preFpvTarget = null;
+    this._hiddenRiders = [];
     this._ray = new THREE.Raycaster();
     this._ndc = new THREE.Vector2();
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -40,6 +44,7 @@ export class CameraManager {
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
     this._onPointerUp = this._onPointerUp.bind(this);
+    this._onPointerHover = this._onPointerHover.bind(this);
     this._bindEvents();
   }
 
@@ -79,12 +84,14 @@ export class CameraManager {
     const rides = this.getRides();
     if (!rides || rides.length === 0) return;
 
+    const referencePos = (this.state === 'flying') ? this._flyTo : this.camera.position;
+
     let closestRide = null;
     let closestDist = Infinity;
     for (const ride of rides) {
       ride.group.getWorldPosition(this._tmpVec);
-      const dist = this.camera.position.distanceTo(this._tmpVec);
-      if (dist < 60 && dist < closestDist) {
+      const dist = referencePos.distanceTo(this._tmpVec);
+      if (dist < 80 && dist < closestDist) {
         closestDist = dist;
         closestRide = ride;
       }
@@ -94,23 +101,81 @@ export class CameraManager {
     const target = closestRide.getFpvTarget();
     if (!target) return;
 
+    // Save camera position and target before entering FPV
+    if (this.state === 'flying') {
+      this._preFpvPos = this._flyTo.clone();
+      this._preFpvTarget = this._lookTo.clone();
+    } else {
+      this._preFpvPos = this.camera.position.clone();
+      this._preFpvTarget = this.controls.target.clone();
+    }
+
     this._fpvTarget = target;
     this._fpvRide = closestRide;
     this._fpvOffset.copy(closestRide.getFpvOffset());
+
+    // Hide riders of this ride to prevent clipping
+    this._hiddenRiders = [];
+    if (closestRide.getRiders) {
+      const riders = closestRide.getRiders();
+      if (riders && riders.length > 0) {
+        for (const rider of riders) {
+          if (rider && rider.pivot) {
+            rider.pivot.visible = false;
+            this._hiddenRiders.push(rider);
+          }
+        }
+      }
+    }
+
     this.state = 'fpv';
     this.controls.enabled = false;
   }
 
   exitFPV() {
     if (this.state !== 'fpv') return;
-    this.state = 'orbit';
-    this._fpvTarget = null;
-    if (this._fpvRide) {
-      this._fpvRide.group.getWorldPosition(this._tmpVec);
-      this.controls.target.copy(this._tmpVec);
+
+    const prePos = this._preFpvPos;
+    const preTarget = this._preFpvTarget;
+
+    this._preFpvPos = null;
+    this._preFpvTarget = null;
+
+    if (prePos && preTarget) {
+      // Calculate current look direction of the camera to determine starting look target
+      this._tmpQuat.copy(this.camera.quaternion);
+      this._tmpForward.set(0, 0, -1).applyQuaternion(this._tmpQuat);
+      const currentLookTarget = this.camera.position.clone().add(this._tmpForward.multiplyScalar(20));
+
+      this._startFlight(
+        this.camera.position.clone(),
+        prePos,
+        currentLookTarget,
+        preTarget
+      );
+    } else {
+      // Fallback
+      this.state = 'orbit';
+      if (this._fpvRide) {
+        this._fpvRide.group.getWorldPosition(this._tmpVec);
+        this.controls.target.copy(this._tmpVec);
+      }
+      this.controls.enabled = true;
+      this._cleanupFPV();
     }
+  }
+
+  _cleanupFPV() {
+    this._fpvTarget = null;
     this._fpvRide = null;
-    this.controls.enabled = true;
+    if (this._hiddenRiders && this._hiddenRiders.length > 0) {
+      for (const rider of this._hiddenRiders) {
+        if (rider && rider.pivot) {
+          rider.pivot.visible = true;
+        }
+      }
+      this._hiddenRiders = [];
+    }
   }
 
   get isFPV() { return this.state === 'fpv'; }
@@ -123,6 +188,7 @@ export class CameraManager {
   destroy() {
     window.removeEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown);
+    this.renderer.domElement.removeEventListener('pointermove', this._onPointerHover);
     window.removeEventListener('pointermove', this._onPointerMove);
     window.removeEventListener('pointerup', this._onPointerUp);
   }
@@ -130,6 +196,7 @@ export class CameraManager {
   _startFlight(fromPos, toPos, fromLook, toLook) {
     this.state = 'flying';
     this.controls.enabled = false;
+    this._cleanupFPV();
 
     // Reset OrbitControls momentum/delta to prevent jumps upon landing
     if (this.controls._sphericalDelta) {
@@ -177,13 +244,25 @@ export class CameraManager {
   }
 
   _tickFPV() {
-    if (!this._fpvTarget) { this.exitFPV(); return; }
-    this._fpvTarget.getWorldPosition(this._tmpVec);
-    this.camera.position.copy(this._tmpVec).add(this._fpvOffset);
-    this._fpvTarget.getWorldQuaternion(this._tmpQuat);
-    this._tmpForward.set(0, 0, -1).applyQuaternion(this._tmpQuat);
-    this._lookTo.copy(this._tmpVec).add(this._tmpForward);
-    this.camera.lookAt(this._lookTo);
+    if (!this._fpvRide || !this._fpvTarget) { this.exitFPV(); return; }
+
+    if (this._fpvRide.getFpvCameraPos) {
+      this._fpvRide.getFpvCameraPos(this._fpvTarget, this.camera.position);
+    } else {
+      this._fpvTarget.getWorldPosition(this._tmpVec);
+      this.camera.position.copy(this._tmpVec).add(this._fpvOffset);
+    }
+
+    if (this._fpvRide.getFpvLookTarget) {
+      this._fpvRide.getFpvLookTarget(this._fpvTarget, this._lookTo);
+      this.camera.lookAt(this._lookTo);
+    } else {
+      this._fpvTarget.getWorldPosition(this._tmpVec);
+      this._fpvTarget.getWorldQuaternion(this._tmpQuat);
+      this._tmpForward.set(0, 0, -1).applyQuaternion(this._tmpQuat);
+      this._lookTo.copy(this._tmpVec).add(this._tmpForward);
+      this.camera.lookAt(this._lookTo);
+    }
   }
 
   _onKeyDown(ev) {
@@ -193,7 +272,7 @@ export class CameraManager {
       this.flyToPreset(parseInt(key));
     } else if (key === 'c' || key === 'C') {
       if (this.state === 'fpv') { this.exitFPV(); }
-      else if (this.state === 'orbit') { this.enterFPV(); }
+      else if (this.state === 'orbit' || this.state === 'flying') { this.enterFPV(); }
     } else if (key === 'Escape') {
       if (this.state === 'fpv') this.exitFPV();
       else if (this.state === 'flying') {
@@ -247,6 +326,23 @@ export class CameraManager {
       -((ev.clientY - rect.top) / rect.height) * 2 + 1
     );
     this._ray.setFromCamera(this._ndc, this.camera);
+
+    // Overriding click-to-fly when clicking a control panel
+    const intersects = this._ray.intersectObjects(this.scene.children, true);
+    let hitControlPanel = false;
+    for (const hit of intersects) {
+      let obj = hit.object;
+      while (obj) {
+        if (obj.name === 'controlPanel') {
+          hitControlPanel = true;
+          break;
+        }
+        obj = obj.parent;
+      }
+      if (hitControlPanel) break;
+    }
+    if (hitControlPanel) return;
+
     const hit = new THREE.Vector3();
     if (this._ray.ray.intersectPlane(this._groundPlane, hit)) {
       hit.x = THREE.MathUtils.clamp(hit.x, -95, 95);
@@ -255,8 +351,41 @@ export class CameraManager {
     }
   }
 
+  _onPointerHover(ev) {
+    if (this.state !== 'orbit') return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this._ndc.set(
+      ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+      -((ev.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this._ray.setFromCamera(this._ndc, this.camera);
+    const intersects = this._ray.intersectObjects(this.scene.children, true);
+    
+    let hitControlPanel = false;
+    for (const hit of intersects) {
+      let obj = hit.object;
+      while (obj) {
+        if (obj.name === 'controlPanel') {
+          hitControlPanel = true;
+          break;
+        }
+        obj = obj.parent;
+      }
+      if (hitControlPanel) break;
+    }
+
+    if (hitControlPanel) {
+      this.renderer.domElement.style.cursor = 'pointer';
+    } else {
+      if (this.renderer.domElement.style.cursor === 'pointer') {
+        this.renderer.domElement.style.cursor = '';
+      }
+    }
+  }
+
   _bindEvents() {
     window.addEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown);
+    this.renderer.domElement.addEventListener('pointermove', this._onPointerHover);
   }
 }
