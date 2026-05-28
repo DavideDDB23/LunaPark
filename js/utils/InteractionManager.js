@@ -68,6 +68,8 @@ export class InteractionManager {
       const hits = this.raycaster.intersectObjects(this.rideObjects, true);
       if (hits.length > 0) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         // Find root ride object with controller
         let curr = hits[0].object;
         while (curr && !curr.userData.controller) {
@@ -82,7 +84,7 @@ export class InteractionManager {
 
     dom.addEventListener('pointermove', onMove);
     dom.addEventListener('pointerdown', onDown);
-    dom.addEventListener('wheel', onWheel, { passive: false });
+    dom.addEventListener('wheel', onWheel, { passive: false, capture: true });
 
     // Mobile Touch Events
     dom.addEventListener('touchmove', onMove);

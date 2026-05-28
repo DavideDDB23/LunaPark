@@ -30,6 +30,7 @@
 import * as THREE from 'three';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 import {
   loadVisitorTemplates,
   makeRider,
@@ -128,6 +129,19 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   wheelSpin.name = 'ferris_wheelSpin';
   spinHub.add(wheelSpin);
   wheelSpin.updateMatrixWorld(true);
+
+  const ridePointLights = [];
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xffdd88, 0, 20, 1.5);
+    pl.position.set(20 * Math.cos(angle), 20 * Math.sin(angle), 0);
+    wheelSpin.add(pl);
+    ridePointLights.push(pl);
+  }
+
+  eventBus.on('color-change', (hex) => {
+    ridePointLights.forEach(pl => pl.color.set(hex));
+  });
 
   wheelSpin.attach(wheelNode); // the visual ring now spins with us
 
@@ -284,6 +298,18 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
     if (ease === 0) {
       controller.speedMultiplier = 1.0;
+    }
+
+    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
+    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+
+    if (isNight) {
+      ridePointLights.forEach((pl, idx) => {
+        const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
+        pl.intensity = (1.0 + pulse * 1.5) * 8.0;
+      });
+    } else {
+      ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
   };
 

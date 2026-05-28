@@ -188,7 +188,7 @@ async function init() {
     if (rideId === 'tagada') controller = tagada.userData.controller;
 
     if (controller) {
-      controller.speedMultiplier = Math.max(0.2, Math.min(3.0, controller.speedMultiplier + delta));
+      controller.speedMultiplier = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
     }
   });
 
@@ -198,8 +198,6 @@ async function init() {
     colorInput.addEventListener('input', () => {
       eventBus.emit('color-change', colorInput.value);
     });
-    // Emit initial value on load
-    setTimeout(() => eventBus.emit('color-change', colorInput.value), 100);
   }
 
   const autoCheckbox = document.getElementById('autoTime');
@@ -228,6 +226,11 @@ async function init() {
   }
 
   console.log("hiding loader"); loaderEl.classList.add("hidden");
+
+  // Emit initial light color after all async objects are loaded and listening
+  if (colorInput) {
+    eventBus.emit('color-change', colorInput.value);
+  }
 }
 
 function setupTimeOfDayUI() {

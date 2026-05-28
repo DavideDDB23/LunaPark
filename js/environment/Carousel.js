@@ -183,9 +183,19 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     bulbs.push(bulb);
   }
 
+  const ridePointLights = [];
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xffdd88, 0, 15, 1.5);
+    pl.position.set(13.22 * Math.cos(angle), 7.1, 13.22 * Math.sin(angle));
+    rotatingAssembly.add(pl);
+    ridePointLights.push(pl);
+  }
+
   eventBus.on('color-change', (hex) => {
     bulbMat.color.set(hex);
     bulbMat.emissive.set(hex);
+    ridePointLights.forEach(pl => pl.color.set(hex));
   });
 
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
@@ -350,15 +360,17 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
 
     if (isNight) {
-      // Blinking bulbs with phase offsets
       bulbs.forEach((b, idx) => {
-        const pulse = Math.sin(time * 5.0 + idx * 0.4) * 0.5 + 0.5; // [0, 1]
-        b.material.emissiveIntensity = 1.0 + pulse * 1.5; // warm pulse
+        const pulse = Math.sin(time * 5.0 + idx * 0.4) * 0.5 + 0.5;
+        b.material.emissiveIntensity = 1.0 + pulse * 1.5;
+      });
+      ridePointLights.forEach((pl, idx) => {
+        const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
+        pl.intensity = (1.0 + pulse * 1.5) * 8.0;
       });
     } else {
-      bulbs.forEach((b) => {
-        b.material.emissiveIntensity = 0.0;
-      });
+      bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });
+      ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
 
     // 4. Panel feedback update (handled by ControlPanel.tick)

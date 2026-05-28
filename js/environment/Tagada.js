@@ -449,11 +449,21 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     bulbs.push(bulb);
   }
 
+  const ridePointLights = [];
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xff00ff, 0, 15, 1.5);
+    pl.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
+    discMeshGroup.add(pl);
+    ridePointLights.push(pl);
+  }
+
   eventBus.on('color-change', (hex) => {
     bulbs.forEach(b => {
       b.material.color.set(hex);
       b.material.emissive.set(hex);
     });
+    ridePointLights.forEach(pl => pl.color.set(hex));
   });
 
   // 9. Control Panel (semaphore + lever)
@@ -609,10 +619,13 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         const pulse = Math.sin(time * 6.0 + idx * 0.5) * 0.5 + 0.5;
         b.material.emissiveIntensity = 1.2 + pulse * 2.0;
       });
-    } else {
-      bulbs.forEach((b) => {
-        b.material.emissiveIntensity = 0.0;
+      ridePointLights.forEach((pl, idx) => {
+        const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
+        pl.intensity = (1.2 + pulse * 2.0) * 8.0;
       });
+    } else {
+      bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });
+      ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
 
     if (ease === 0) {
