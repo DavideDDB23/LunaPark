@@ -34,10 +34,11 @@ export class CameraManager {
     this._tmpVec = new THREE.Vector3();
     this._tmpQuat = new THREE.Quaternion();
     this._tmpForward = new THREE.Vector3();
-    this._lookAtInterp = new THREE.Vector3();
     this._clickStart = { x: 0, y: 0 };
+    this._hasMoved = false;
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onPointerDown = this._onPointerDown.bind(this);
+    this._onPointerMove = this._onPointerMove.bind(this);
     this._onPointerUp = this._onPointerUp.bind(this);
     this._bindEvents();
   }
@@ -54,9 +55,17 @@ export class CameraManager {
   }
 
   flyToWorldPoint(targetPos) {
-    const dir = this.camera.position.clone().sub(this.controls.target).normalize();
-    const flyTo = targetPos.clone().add(dir.multiplyScalar(8));
-    flyTo.y = Math.max(flyTo.y, targetPos.y + 3);
+    const fixedHeight = 12;
+    const distance = 22;
+    const dir = this.camera.position.clone().sub(targetPos);
+    dir.y = 0;
+    if (dir.lengthSq() < 0.0001) {
+      dir.set(0, 0, 1);
+    } else {
+      dir.normalize();
+    }
+    const flyTo = targetPos.clone().add(dir.multiplyScalar(distance));
+    flyTo.y = fixedHeight;
     this._startFlight(
       this.camera.position.clone(),
       flyTo,
@@ -114,12 +123,22 @@ export class CameraManager {
   destroy() {
     window.removeEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown);
-    this.renderer.domElement.removeEventListener('pointerup', this._onPointerUp);
+    window.removeEventListener('pointermove', this._onPointerMove);
+    window.removeEventListener('pointerup', this._onPointerUp);
   }
 
   _startFlight(fromPos, toPos, fromLook, toLook) {
     this.state = 'flying';
     this.controls.enabled = false;
+
+    // Reset OrbitControls momentum/delta to prevent jumps upon landing
+    if (this.controls._sphericalDelta) {
+      this.controls._sphericalDelta.set(0, 0, 0);
+    }
+    if (this.controls._panOffset) {
+      this.controls._panOffset.set(0, 0, 0);
+    }
+
     this._flyFrom.copy(fromPos);
     this._flyTo.copy(toPos);
     this._lookFrom.copy(fromLook);
@@ -133,24 +152,28 @@ export class CameraManager {
       this._flyProgress = 1;
       this.camera.position.copy(this._flyTo);
       this.controls.target.copy(this._lookTo);
+      
+      // Reset OrbitControls momentum/delta again to be absolutely sure
+      if (this.controls._sphericalDelta) {
+        this.controls._sphericalDelta.set(0, 0, 0);
+      }
+      if (this.controls._panOffset) {
+        this.controls._panOffset.set(0, 0, 0);
+      }
+
+      this.controls.update();
+
+      // Save the target state so future resets/restores refer to this stable landing pose
+      this.controls.saveState();
+
       this.controls.enabled = true;
       this.state = 'orbit';
       return;
     }
     const t = smoothstep(this._flyProgress);
-    const ROTATION_PHASE = 0.4;
-
-    if (t < ROTATION_PHASE) {
-      const re = smoothstep(t / ROTATION_PHASE);
-      this.camera.position.copy(this._flyFrom);
-      this._lookAtInterp.lerpVectors(this._lookFrom, this._lookTo, re * 0.3);
-      this.camera.lookAt(this._lookAtInterp);
-    } else {
-      const se = smoothstep((t - ROTATION_PHASE) / (1 - ROTATION_PHASE));
-      this.camera.position.lerpVectors(this._flyFrom, this._flyTo, se);
-      this._lookAtInterp.lerpVectors(this._lookFrom, this._lookTo, 0.3 + se * 0.7);
-      this.camera.lookAt(this._lookAtInterp);
-    }
+    this.camera.position.lerpVectors(this._flyFrom, this._flyTo, t);
+    this.controls.target.lerpVectors(this._lookFrom, this._lookTo, t);
+    this.camera.lookAt(this.controls.target);
   }
 
   _tickFPV() {
@@ -176,6 +199,17 @@ export class CameraManager {
       else if (this.state === 'flying') {
         this.camera.position.copy(this._flyTo);
         this.controls.target.copy(this._lookTo);
+
+        if (this.controls._sphericalDelta) {
+          this.controls._sphericalDelta.set(0, 0, 0);
+        }
+        if (this.controls._panOffset) {
+          this.controls._panOffset.set(0, 0, 0);
+        }
+
+        this.controls.update();
+        this.controls.saveState();
+
         this.controls.enabled = true;
         this.state = 'orbit';
       }
@@ -187,14 +221,25 @@ export class CameraManager {
     if (ev.target !== this.renderer.domElement) return;
     this._clickStart.x = ev.clientX;
     this._clickStart.y = ev.clientY;
+    this._hasMoved = false;
+    window.addEventListener('pointermove', this._onPointerMove);
+    window.addEventListener('pointerup', this._onPointerUp);
+  }
+
+  _onPointerMove(ev) {
+    const dx = Math.abs(ev.clientX - this._clickStart.x);
+    const dy = Math.abs(ev.clientY - this._clickStart.y);
+    if (dx > 5 || dy > 5) {
+      this._hasMoved = true;
+    }
   }
 
   _onPointerUp(ev) {
+    window.removeEventListener('pointermove', this._onPointerMove);
+    window.removeEventListener('pointerup', this._onPointerUp);
+
     if (ev.button !== 0 || this.state !== 'orbit') return;
-    if (ev.target !== this.renderer.domElement) return;
-    const dx = Math.abs(ev.clientX - this._clickStart.x);
-    const dy = Math.abs(ev.clientY - this._clickStart.y);
-    if (dx >= 5 || dy >= 5) return;
+    if (this._hasMoved) return;
 
     const rect = this.renderer.domElement.getBoundingClientRect();
     this._ndc.set(
@@ -213,6 +258,5 @@ export class CameraManager {
   _bindEvents() {
     window.addEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown);
-    this.renderer.domElement.addEventListener('pointerup', this._onPointerUp);
   }
 }

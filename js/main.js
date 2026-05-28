@@ -201,7 +201,9 @@ function animate() {
   const delta = clock.getDelta();
   const time = clock.getElapsedTime();
   const wind = getWindSpeed();
-  controls.update(delta);
+  if (!cameraManager || cameraManager.state !== 'flying') {
+    controls.update(delta);
+  }
   if (cameraManager) cameraManager.tick(delta);
 
   const river = environmentGroup.getObjectByName('river');
