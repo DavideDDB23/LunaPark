@@ -16,6 +16,7 @@ import { buildFerrisWheel } from "./environment/FerrisWheel.js";
 import { buildCarousel } from "./environment/Carousel.js";
 import { buildTagada } from "./environment/Tagada.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
+import { CameraManager } from './camera/CameraManager.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -65,6 +66,39 @@ if (windInput && windValEl) {
 }
 
 let dayNight = null;
+let cameraManager = null;
+
+cameraManager = new CameraManager(camera, controls, renderer, () => {
+  const rides = [];
+  const tmpVec = new THREE.Vector3();
+  const fw = environmentGroup.getObjectByName('ferrisWheel');
+  if (fw) rides.push({
+    group: fw,
+    getFpvTarget: () => {
+      const c = fw.userData.controller;
+      let best = null, bestY = -Infinity;
+      for (const gm of c.gondolaMounts) {
+        gm.gondolaMesh.getWorldPosition(tmpVec);
+        if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
+      }
+      return best?.gondolaMesh || null;
+    },
+    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+  });
+  const cr = environmentGroup.getObjectByName('carousel');
+  if (cr) rides.push({
+    group: cr,
+    getFpvTarget: () => cr.userData.controller.horses[0]?.container || null,
+    getFpvOffset: () => new THREE.Vector3(0, 2.5, 0),
+  });
+  const tg = environmentGroup.getObjectByName('tagada');
+  if (tg) rides.push({
+    group: tg,
+    getFpvTarget: () => tg.userData.controller.discMeshGroup.getObjectByName('seat_group_0') || null,
+    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+  });
+  return rides;
+});
 
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
@@ -168,6 +202,7 @@ function animate() {
   const time = clock.getElapsedTime();
   const wind = getWindSpeed();
   controls.update(delta);
+  if (cameraManager) cameraManager.tick(delta);
 
   const river = environmentGroup.getObjectByName('river');
   if (river && river.userData.update) river.userData.update(delta, time);
@@ -201,4 +236,4 @@ init()
     loaderEl.textContent = 'Failed to load scene — see console.';
   });
 
-window.__lp = { THREE, scene, camera, renderer, controls };
+window.__lp = { THREE, scene, camera, renderer, controls, cameraManager };
