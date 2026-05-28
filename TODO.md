@@ -58,11 +58,10 @@ No imported animations — all motion is JavaScript math.
 - [x] At the end of the arm, a circular seat platform that spins fast independently
 - [x] 8 seats arranged around the disc, each with a passenger
 - [x] Placed in the **southwest** area (around −40, 0, +40)
-- [x] Fix legs in `passengers.js` (`applyChairSeatedLegs`)
-- [x] Fix position of some passenger models (some are clipped into the chair)
-- [ ] Fix arm override (hands-up animation) when the ride is on
-- [ ] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
-- [ ] If no model is found, change with "Calcio in culo" or "torre di caduta" or "space star"
+ - [x] Fix legs in `passengers.js` (`applyChairSeatedLegs`)
+ - [x] Fix position of some passenger models (some are clipped into the chair)
+ - [x] Fix arm override (hands-up animation) when the ride is on
+ - [x] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
 
 ---
 
@@ -70,19 +69,19 @@ No imported animations — all motion is JavaScript math.
 
 Each ride has a small 3D control panel placed next to it.
 
-- [ ] Each panel has a **semaphore light** (red = stopped, green = running)
-- [ ] Each panel has a **lever** that tips forward when the ride is on
-- [ ] Clicking a panel starts or stops its ride
-- [ ] Starting a ride: speed eases in gradually over ~1.5 seconds
-- [ ] Stopping a ride: speed eases out gradually over ~2 seconds
+- [x] Each panel has a **semaphore light** (red = stopped, green = running)
+- [x] Each panel has a **lever** that tips forward when the ride is on
+- [x] Clicking a panel starts or stops its ride
+- [x] Starting a ride: speed eases in gradually over ~1.5 seconds
+- [x] Stopping a ride: speed eases out gradually over ~2 seconds
 
 ---
 
 ## 🔴 CAMERA & NAVIGATION
 
-- [ ] **Click-to-fly**: click anywhere in the scene (ground, ride, stall) and the camera smoothly flies to that point over ~1.2 seconds with easing
-- [ ] **6 preset viewpoints**: pressing keys 1–6 flies instantly to preset camera positions (overview, Ferris Wheel close-up, Carousel, Roller Coaster, Tagada, Stage)
-- [ ] **FPV Gondola Camera**: press C when close to the Ferris Wheel → camera enters a gondola and you ride it from the inside. Press ESC to exit back to normal view.
+ - [x] **Click-to-fly**: click anywhere in the scene (ground, ride, stall) and the camera smoothly flies to that point over ~1.2 seconds with easing
+ - [x] **6 preset viewpoints**: pressing keys 1–6 flies instantly to preset camera positions (overview, Ferris Wheel close-up, Carousel, Roller Coaster, Tagada, Stage)
+ - [x] **FPV Gondola Camera**: press C when close to the Ferris Wheel → camera enters a gondola and you ride it from the inside. Press ESC to exit back to normal view.
 
 ---
 
@@ -93,6 +92,7 @@ Each ride has a small 3D control panel placed next to it.
 - [x] **Ride decoration light colour picker**: an HTML colour picker that changes the colour of all the decorative lights on the rides
 - [x] **Space bar**: toggles the time-of-day auto-advance on/off (time automatically moves forward)
 - [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
+ - [ ] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message)
 
 ---
 
@@ -100,11 +100,12 @@ Each ride has a small 3D control panel placed next to it.
 
 A heads-up display showing the current time of day. Already partially designed — needs to be wired in.
 
-- [ ] Digital clock showing the current hour:minute (e.g. "14:30")
-- [ ] Semicircular arc with a sun/moon icon tracking its position across the sky
-- [ ] Day / Dusk / Night phase label
-- [ ] Manual time slider (drag to change time of day)
-- [ ] Auto-advance toggle button
+ - [x] Digital clock showing the current hour:minute (e.g. "14:30")
+ - [ ] Semicircular arc with a sun/moon icon tracking its position across the sky
+ - [ ] Day / Dusk / Night phase label
+ - [x] Manual time slider (drag to change time of day)
+ - [x] Auto-advance toggle button
+ - [ ] Slow down auto-advance speed (reduce rate of time progression)
 
 ---
 
@@ -121,10 +122,10 @@ A heads-up display showing the current time of day. Already partially designed �
 
 ## 🔴 RIDE DECORATION LIGHTS
 
-- [ ] Coloured point lights attached to each ride structure
-- [ ] During the day: off
-- [ ] During the night: blinking/pulsing with a sine wave, each light slightly out of phase with the others so they don't all blink at the same time
-- [ ] Colour controlled by the HTML colour picker
+- [x] Coloured point lights attached to each ride structure
+- [x] During the day: off
+- [x] During the night: blinking/pulsing with a sine wave, each light slightly out of phase with the others so they don't all blink at the same time
+- [x] Colour controlled by the HTML colour picker
 
 ---
 
@@ -132,10 +133,11 @@ A heads-up display showing the current time of day. Already partially designed �
 
 A small HUD panel overlaid on the scene with:
 
-- [ ] Time of day slider (0–24h) — already partially wired
-- [ ] Ride light colour picker
-- [ ] "?" help button that opens a list of all keyboard/mouse controls
-- [ ] Auto day/night toggle button
+ - [x] Time of day slider (0–24h) — already partially wired
+ - [x] Ride light colour picker
+ - [x] "?" help button that opens a list of all keyboard/mouse controls
+ - [x] Auto day/night toggle button
+ - [ ] Improve GUI (top-left): reorganize layout, clarify labels, group controls
 
 ---
 
