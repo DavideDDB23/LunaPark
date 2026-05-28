@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 
 // Ride Animation Constants
 const MAX_SPIN_SPEED = 2.0;       // rad/s platform rotation at full speed
@@ -448,6 +449,31 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     bulbs.push(bulb);
   }
 
+  const ridePointLights = [];
+  
+  // Central Disc Light
+  const centerLight = new THREE.PointLight(0xff00ff, 0, 45, 1.2);
+  centerLight.position.set(0, 1.5, 0);
+  discMeshGroup.add(centerLight);
+  ridePointLights.push(centerLight);
+
+  // Rim Lights
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xff00ff, 0, 35, 1.5);
+    pl.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
+    discMeshGroup.add(pl);
+    ridePointLights.push(pl);
+  }
+
+  eventBus.on('color-change', (hex) => {
+    bulbs.forEach(b => {
+      b.material.color.set(hex);
+      b.material.emissive.set(hex);
+    });
+    ridePointLights.forEach(pl => pl.color.set(hex));
+  });
+
   // 9. Control Panel (semaphore + lever)
   const controlPanel = new ControlPanel({ initialRunning: true });
   // Place control panel next to the Tagada pedestal base (Northeast relative to the ride position)
@@ -463,6 +489,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     discMeshGroup,
     seats,
     panel: controlPanel.group,
+    speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     spinAngle: 0,
@@ -482,11 +509,12 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const ease = controlPanel.tick(delta);
 
     // Accumulate angles scaled by ease and delta for glitch-free smooth stop/deceleration
-    controller.spinAngle += controller.maxSpeed * ease * delta;
-    controller.pitchAngle += PITCH_FREQ * ease * delta;
-    controller.rollAngle += ROLL_FREQ * ease * delta;
-    controller.bumpAngle += BUMP_FREQ * ease * delta;
-    controller.armYawAngle += ARM_YAW_SPEED * ease * delta;
+    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    controller.spinAngle += controller.maxSpeed * ease * speedMult * delta;
+    controller.pitchAngle += PITCH_FREQ * ease * speedMult * delta;
+    controller.rollAngle += ROLL_FREQ * ease * speedMult * delta;
+    controller.bumpAngle += BUMP_FREQ * ease * speedMult * delta;
+    controller.armYawAngle += ARM_YAW_SPEED * ease * speedMult * delta;
 
     const idleEase = 1 - ease;
 
@@ -600,30 +628,21 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         const pulse = Math.sin(time * 6.0 + idx * 0.5) * 0.5 + 0.5;
         b.material.emissiveIntensity = 1.2 + pulse * 2.0;
       });
-    } else {
-      bulbs.forEach((b) => {
-        b.material.emissiveIntensity = 0.0;
+      ridePointLights.forEach((pl, idx) => {
+        const isCenter = idx === 0;
+        const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
+        pl.intensity = isCenter ? (1.2 + pulse * 0.5) * 120.0 : (1.2 + pulse * 2.0) * 35.0;
       });
+    } else {
+      bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });
+      ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
+    }
+
+    if (ease === 0) {
+      controller.speedMultiplier = 1.0;
     }
   };
 
-  // 11. Raycast Click-to-Toggle Handler on the Control Panel
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-
-    dom.addEventListener('pointerdown', (ev) => {
-      if (pick(ev)) controller.toggle();
-    });
-  }
 
   group.userData.controller = controller;
   return group;

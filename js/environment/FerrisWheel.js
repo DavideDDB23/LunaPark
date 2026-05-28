@@ -30,6 +30,7 @@
 import * as THREE from 'three';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 import {
   loadVisitorTemplates,
   makeRider,
@@ -128,6 +129,27 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   wheelSpin.name = 'ferris_wheelSpin';
   spinHub.add(wheelSpin);
   wheelSpin.updateMatrixWorld(true);
+
+  const ridePointLights = [];
+  
+  // Axle Center Light for massive ground/structure glow
+  const hubLight = new THREE.PointLight(0xffdd88, 0, 90, 1.2);
+  hubLight.position.set(0, 0, 0);
+  wheelSpin.add(hubLight);
+  ridePointLights.push(hubLight);
+
+  // Rim Lights
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xffdd88, 0, 40, 1.5);
+    pl.position.set(20 * Math.cos(angle), 20 * Math.sin(angle), 0);
+    wheelSpin.add(pl);
+    ridePointLights.push(pl);
+  }
+
+  eventBus.on('color-change', (hex) => {
+    ridePointLights.forEach(pl => pl.color.set(hex));
+  });
 
   wheelSpin.attach(wheelNode); // the visual ring now spins with us
 
@@ -248,6 +270,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     wheelSpin,
     spinHub,
     panel: controlPanel.group,
+    speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     get phase() { return controlPanel.phase; },
@@ -266,7 +289,8 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     // Ease the speed factor using our reusable ControlPanel's tick
     const ease = controlPanel.tick(delta);
 
-    controller.angle += controller.maxSpeed * ease * delta;
+    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    controller.angle += controller.maxSpeed * ease * speedMult * delta;
     wheelSpin.rotation.z = controller.angle;
 
     // Counter-rotate every gondola by -angle (about its cabin centre) so its world
@@ -279,21 +303,24 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
         r.pivot.rotation.z = r.restZ + Math.sin(time * SWAY_FREQ * Math.PI * 2 + r.phase) * SWAY_AMP;
       }
     }
-  };
 
-  // ── Click-to-toggle via raycasting on the panel. ──
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-    dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
-  }
+    if (ease === 0) {
+      controller.speedMultiplier = 1.0;
+    }
+
+    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
+    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+
+    if (isNight) {
+      ridePointLights.forEach((pl, idx) => {
+        const isHub = idx === 0;
+        const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
+        pl.intensity = isHub ? (1.0 + pulse * 0.5) * 150.0 : (1.0 + pulse * 1.5) * 40.0;
+      });
+    } else {
+      ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
+    }
+  };
 
   group.userData.controller = controller;
   return group;

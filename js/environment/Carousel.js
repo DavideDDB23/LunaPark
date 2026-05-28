@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
 import { loadVisitorTemplates, makeRider, updateRider, ACTIONS_SEATED_GENERAL, getPassengerWorldHeight } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 
 const HORSE_MODEL_URL = 'assets/models/carousel_horse.glb';
 
@@ -182,6 +183,29 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     bulbs.push(bulb);
   }
 
+  const ridePointLights = [];
+  
+  // Central Pillar Light
+  const centerLight = new THREE.PointLight(0xffdd88, 0, 45, 1.2);
+  centerLight.position.set(0, 3.5, 0);
+  rotatingAssembly.add(centerLight);
+  ridePointLights.push(centerLight);
+
+  // Canopy Rim Lights
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xffdd88, 0, 35, 1.5);
+    pl.position.set(13.22 * Math.cos(angle), 7.1, 13.22 * Math.sin(angle));
+    rotatingAssembly.add(pl);
+    ridePointLights.push(pl);
+  }
+
+  eventBus.on('color-change', (hex) => {
+    bulbMat.color.set(hex);
+    bulbMat.emissive.set(hex);
+    ridePointLights.forEach(pl => pl.color.set(hex));
+  });
+
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
   const MODEL_ROTATION_OFFSET = Math.PI * 0.5;
 
@@ -296,6 +320,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     rotatingAssembly,
     horses,
     panel: controlPanel.group,
+    speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     angle: 0,
@@ -311,7 +336,8 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     const ease = controlPanel.tick(delta);
 
     // 1. Platform rotation
-    controller.angle += controller.maxSpeed * ease * delta;
+    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    controller.angle += controller.maxSpeed * ease * speedMult * delta;
     rotatingAssembly.rotation.y = - controller.angle;
 
     // 2. Horse bobbing (each horse has phase offset) and rider updates
@@ -342,37 +368,26 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
 
     if (isNight) {
-      // Blinking bulbs with phase offsets
       bulbs.forEach((b, idx) => {
-        const pulse = Math.sin(time * 5.0 + idx * 0.4) * 0.5 + 0.5; // [0, 1]
-        b.material.emissiveIntensity = 1.0 + pulse * 1.5; // warm pulse
+        const pulse = Math.sin(time * 5.0 + idx * 0.4) * 0.5 + 0.5;
+        b.material.emissiveIntensity = 1.0 + pulse * 1.5;
+      });
+      ridePointLights.forEach((pl, idx) => {
+        const isCenter = idx === 0;
+        const pulse = Math.sin(time * 5.0 + idx * 1.6) * 0.5 + 0.5;
+        pl.intensity = isCenter ? (1.0 + pulse * 0.5) * 120.0 : (1.0 + pulse * 1.5) * 35.0;
       });
     } else {
-      bulbs.forEach((b) => {
-        b.material.emissiveIntensity = 0.0;
-      });
+      bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });
+      ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
 
     // 4. Panel feedback update (handled by ControlPanel.tick)
+    if (ease === 0) {
+      controller.speedMultiplier = 1.0;
+    }
   };
 
-  // ── Raycast Toggle Handler ──
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-
-    dom.addEventListener('pointerdown', (ev) => {
-      if (pick(ev)) controller.toggle();
-    });
-  }
 
   group.userData.controller = controller;
   return group;
