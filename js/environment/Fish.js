@@ -26,7 +26,7 @@ import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/
 const WATER_LEVEL = 0.25;
 const FISH_URL = 'assets/models/clown_fish_low_poly_animated.glb';
 const FISH_COUNT = 8;
-const TARGET_FISH_LENGTH = 0.90;
+const TARGET_FISH_LENGTH = 1.20;
 
 const BONE_NAMES = {
   root:       'bone_root_00',
