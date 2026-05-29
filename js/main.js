@@ -15,6 +15,7 @@ import { buildRiver } from "./environment/River.js";
 import { buildFerrisWheel } from "./environment/FerrisWheel.js";
 import { buildCarousel } from "./environment/Carousel.js";
 import { buildTagada } from "./environment/Tagada.js";
+import { buildCoaster } from "./environment/Coaster.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 
 const canvas = document.getElementById('c');
@@ -114,6 +115,11 @@ async function init() {
   environmentGroup.add(tagada);
   window.__lp.tagada = tagada.userData.controller;
 
+  console.log("buildCoaster");
+  const coaster = await buildCoaster({ position: [48, 0, 50], camera, renderer, anisotropy: maxAniso });
+  environmentGroup.add(coaster);
+  window.__lp.coaster = coaster.userData.controller;
+
   // Day/night controller — slider in HUD drives this.
   dayNight = new DayNightCycle({
     scene,
@@ -189,6 +195,9 @@ function animate() {
 
   const tagada = environmentGroup.getObjectByName('tagada');
   if (tagada && tagada.userData.tick) tagada.userData.tick(delta, time);
+
+  const coaster = environmentGroup.getObjectByName('coaster');
+  if (coaster && coaster.userData.tick) coaster.userData.tick(delta, time);
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

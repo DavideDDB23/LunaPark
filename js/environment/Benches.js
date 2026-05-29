@@ -41,7 +41,7 @@ export async function buildBenches() {
     PLACEMENTS.push([4.0, groundOffset, -z, -Math.PI / 2]);
     PLACEMENTS.push([-4.0, groundOffset, -z, Math.PI / 2]);
   }
-  // South path, East and West side  
+  // South path, East and West side
   for(let z of [35, 60, 85]) {
     PLACEMENTS.push([4.0, groundOffset, z, -Math.PI / 2]);
     PLACEMENTS.push([-4.0, groundOffset, z, Math.PI / 2]);

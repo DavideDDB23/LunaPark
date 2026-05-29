@@ -73,6 +73,15 @@ export function loadGLB(url) {
   });
 }
 
+// Like loadGLB but KEEPS gltf.animations. We never play them with an AnimationMixer — the
+// only use is reading baked keyframe tracks as geometry data (e.g. a coaster cart's translation
+// track traces the exact rail centre-line, which we then drive with our own procedural math).
+export function loadGLBWithAnimations(url) {
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(url, resolve, undefined, reject);
+  });
+}
+
 export async function loadObjMtl(objUrl, mtlUrl) {
   const mtlLoader = new MTLLoader();
   const materials = await new Promise((resolve, reject) => {

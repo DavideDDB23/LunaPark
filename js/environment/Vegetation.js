@@ -87,15 +87,19 @@ function inExclusionZone(x, z, blockLamps) {
 
   // 4 Rides + Control Panels exclusion zones (leaving space for the rides and line of sight to panels)
   const RIDES = [
-    [-50, -50, 28],    // Ferris Wheel (NW)
+    [-50, -50, 28],     // Ferris Wheel (NW)
     [-38.5, -30.2, 14], // Ferris Wheel Control Panel front area
-    [40, -40, 22],     // Carousel (NE)
-    [40, 40, 28],      // Roller Coaster (SE)
-    [-40, 40, 25],     // Tagada (SW)
+    [40, -40, 22],      // Carousel (NE)
+    [-40, 40, 25],      // Tagada (SW)
   ];
   for (const [rx, rz, rRad] of RIDES) {
     if (Math.hypot(x - rx, z - rz) < rRad) return true;
   }
+
+  // Roller Coaster (SE) — rectangular footprint ~57×64 centered at [48,50] (measured from the
+  // built ride bbox) plus a small margin. Tightly matched so no trees land on the structure and
+  // no large tree-free void is left where there is nothing.
+  if (x > 16 && x < 80 && z > 15 && z < 85) return true;
 
   // Food stalls (Kiosks)
   for (const [bx, bz] of BOOTHS) {
