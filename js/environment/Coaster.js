@@ -1,17 +1,18 @@
 // Fully procedural roller-coaster animation.
 //
-// animated_roller_coaster.glb (Sketchfab "Animated roller coaster", assetfactory) ships WITH a
-// baked 29 s keyframe animation. Project policy is that every motion is hand-written JS — we never
-// instantiate an AnimationMixer and never play the imported clip. Instead we use the clip purely as
-// a GEOMETRY DATA SOURCE: a cart's baked translation track traces the exact rail centre-line, so we
-// sample it once at load to build a closed CatmullRom curve, then drive our own train along it.
+// animated_roller_coaster.glb (Sketchfab "Animated roller coaster", assetfactory) ships with a
+// baked keyframe animation, but project policy is that EVERY motion is hand-written JS — exactly
+// like the Ferris wheel, carousel and tagada, whose motion is derived from the model's GEOMETRY,
+// never from an imported clip. So we ignore the animation entirely (loadGLB strips it) and recover
+// the rail centre-line straight from the rail-tube mesh: the tube is a circle swept along the track,
+// 24 vertices per ring, rings stored sequentially, so each ring's centroid is a centre-line point.
+// We build a closed CatmullRom from those centroids and drive our own train along it.
 //
 // Model layout (verified by GLB traversal):
-//   bumper_car_export_1.001 .. .006  → 6 baked carts (removed; we drive our own clones)
+//   bumper_car_export_1.001 .. .006  → 6 static carts (we keep one as a clone template, drop the rest)
 //   support_tall.010_*               → support pylons (static dressing)
-//   Circle.023_build_gen_1_0         → the rail tube (static dressing)
+//   Circle.023_build_gen_1_0         → the rail tube  ← centre-line source (24 verts/ring × 395 rings)
 //   panel_1.001_*                    → operator booth / sign (static dressing)
-//   anim "Scene"                     → per-cart translation/rotation/scale tracks (path source only)
 //
 // Mechanics, every frame:
 //   1. Two trains of four carriages each (8 total). Every carriage is positioned & oriented
@@ -24,21 +25,22 @@
 //      coasting speed follows gravity (slow on crests, fast in dips). Gated by the ControlPanel ease.
 
 import * as THREE from 'three';
-import { loadGLBWithAnimations } from '../utils/loaders.js';
+import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from './ControlPanel.js';
+import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
 
 const MODEL_URL = 'assets/models/animated_roller_coaster.glb';
-const TARGET_LONG = 64;      // world units — longest horizontal extent after auto-fit (kept compact
-                             // so the SE footprint clears the river and the south entrance plaza)
+const TARGET_LONG = 82;      // world units — longest horizontal extent after auto-fit. Sized so the
+                             // SE footprint fits inside the fence and clears the river/south plaza.
 const NUM_TRAINS = 2;        // trains running simultaneously on the circuit
 const CARS_PER_TRAIN = 4;    // carriages per train (each carriage animated independently)
 const NUM_CARS = NUM_TRAINS * CARS_PER_TRAIN; // 8 total
 const CAR_GAP = 1.15;        // gap between carriages, in car-lengths (1 = touching)
 const TRAIN_SPACING = 1.0 / NUM_TRAINS; // 0.5 — second train half a circuit ahead
-const CART_SCALE = 1.6;      // visual up-scale of each cart so riders read at park scale
+const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at park scale
 const G_EFF = 9.8;           // gravity for the energy model (world-units/s²)
-const CURVE_SAMPLES = 320;   // control points kept for the CatmullRom
-const NUM_FRAMES = 1000;     // resolution of the rotation-minimizing frame field
+const CURVE_SAMPLES = 80;    // control points kept for the CatmullRom
+const NUM_FRAMES = 4000;     // resolution of the rotation-minimizing frame field
 
 // Station state-machine speeds (world units/s)
 const V_LAUNCH_MAX = 26.0;
@@ -46,52 +48,70 @@ const V_LAUNCH_MIN = 3.0;
 const V_COAST_MIN = 14.0;
 const STATION_PAUSE = 3.0;
 
-// ── Recover the rail centre-line (model-local) from a cart's baked translation keyframes ──
-function extractCenterline(model, clip) {
-  const posTrack = clip.tracks.find((t) => t.name.endsWith('.position'));
-  if (!posTrack) throw new Error('Coaster: no .position track to recover the rail path');
-  const cartName = posTrack.name.slice(0, -'.position'.length);
-  const cartNode = model.getObjectByName(cartName);
-  if (!cartNode) throw new Error(`Coaster: cart node "${cartName}" not found`);
+// Passenger animation action pools
+const COASTER_REST_POOL = ['rest', 'relax', 'lookL', 'lookR'];
+const COASTER_RIDE_POOL = ['cheer', 'wave', 'cheer', 'wave', 'lookUp'];
+const COASTER_BRAKE_POOL = ['rest', 'relax'];
 
-  // The keyframe translations are in the cart's PARENT (RootNode) space. Convert each to
-  // model-local through the full nested transform via a throwaway probe child.
+const RAIL_MESH_NAME = 'Circle023_build_gen_1_0'; // GLTFLoader strips the dot from "Circle.023"
+const RAIL_RING = 24; // verts per ring of the swept-circle rail tube (9480 verts = 395 rings × 24)
+
+// ── Recover the rail centre-line (model-local) from the rail-tube GEOMETRY ──
+// The tube is a circle swept along the track; its vertices are stored as sequential rings of 24.
+// Each ring's centroid is a point on the rail centre-line. (Verified offline: ring size 24 yields a
+// smooth, closed, gap-free path; other ring sizes give chaotic ~90° average turns.)
+function extractCenterline(model) {
+  const railMesh = model.getObjectByName(RAIL_MESH_NAME);
+  if (!railMesh) throw new Error(`Coaster: rail mesh "${RAIL_MESH_NAME}" not found`);
   model.updateMatrixWorld(true);
-  const probe = new THREE.Object3D();
-  cartNode.parent.add(probe);
 
-  const vals = posTrack.values; // flat [x,y,z, ...]
-  const nKeys = vals.length / 3;
-  const w = new THREE.Vector3();
+  const pos = railMesh.geometry.attributes.position;
+  const nRings = Math.floor(pos.count / RAIL_RING);
+  const cen = new THREE.Vector3();
   const raw = [];
-  let prev = null;
-  const DEDUP_EPS2 = 8 * 8; // RootNode-local units²; merges the station-dwell duplicate keys
-  for (let i = 0; i < nKeys; i++) {
-    const x = vals[i * 3], y = vals[i * 3 + 1], z = vals[i * 3 + 2];
-    if (prev && (x - prev[0]) ** 2 + (y - prev[1]) ** 2 + (z - prev[2]) ** 2 < DEDUP_EPS2) continue;
-    prev = [x, y, z];
-    probe.position.set(x, y, z);
-    probe.updateMatrixWorld(true);
-    w.setFromMatrixPosition(probe.matrixWorld);
-    raw.push(model.worldToLocal(w.clone()));
+  for (let r = 0; r < nRings; r++) {
+    cen.set(0, 0, 0);
+    for (let j = 0; j < RAIL_RING; j++) {
+      const idx = r * RAIL_RING + j;
+      cen.x += pos.getX(idx); cen.y += pos.getY(idx); cen.z += pos.getZ(idx);
+    }
+    cen.multiplyScalar(1 / RAIL_RING);
+    railMesh.localToWorld(cen);           // ring centroid → world
+    raw.push(model.worldToLocal(cen.clone())); // → model-local (curve space)
   }
-  cartNode.parent.remove(probe);
 
-  // Down-sample to a manageable, evenly distributed control set (centripetal CatmullRom copes
-  // with the remaining uneven spacing). Drop the closing point if it coincides with the start.
-  const stride = Math.max(1, Math.round(raw.length / CURVE_SAMPLES));
+  // Low-pass filter the raw centroids to remove high-frequency mesh vertex noise
+  const n = raw.length;
+  let current = raw.map(p => p.clone());
+  const iterations = 8;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = [];
+    for (let i = 0; i < n; i++) {
+      const prev = current[(i - 1 + n) % n];
+      const curr = current[i];
+      const succ = current[(i + 1) % n];
+      next.push(new THREE.Vector3(
+        (prev.x + curr.x * 2 + succ.x) / 4,
+        (prev.y + curr.y * 2 + succ.y) / 4,
+        (prev.z + curr.z * 2 + succ.z) / 4
+      ));
+    }
+    current = next;
+  }
+
+  // Down-sample to a manageable control set; drop the closing point if it coincides with the start.
+  const stride = Math.max(1, Math.round(current.length / CURVE_SAMPLES));
   const pts = [];
-  for (let i = 0; i < raw.length; i += stride) pts.push(raw[i]);
+  for (let i = 0; i < current.length; i += stride) pts.push(current[i]);
   if (pts.length > 4 && pts[pts.length - 1].distanceTo(pts[0]) < 1e-3) pts.pop();
 
-  return { pts, cartNode };
+  return pts;
 }
 
 export async function buildCoaster({ position = [45, 0, 45], camera, renderer, anisotropy = 8 } = {}) {
-  const gltf = await loadGLBWithAnimations(MODEL_URL);
+  const templates = await loadVisitorTemplates(6);
+  const gltf = await loadGLB(MODEL_URL); // loadGLB strips the imported animation — we never use it
   const model = gltf.scene;
-  const clip = gltf.animations && gltf.animations[0];
-  if (!clip) throw new Error('Coaster: expected a baked animation clip to recover the rail path');
 
   // Shadows on; drop imported lights / ground plane so they don't fight the park.
   const toRemove = [];
@@ -109,10 +129,12 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   toRemove.forEach((o) => o.parent && o.parent.remove(o));
   model.updateMatrixWorld(true);
 
-  // ── Build the closed track curve from the recovered centre-line ──
-  const { pts: ctrlPts, cartNode: templateCartNode } = extractCenterline(model, clip);
+  // ── Build the closed track curve from the rail geometry ──
+  const ctrlPts = extractCenterline(model);
+  const templateCartNode = model.getObjectByName('bumper_car_export_1001'); // dot stripped by loader
+  if (!templateCartNode) throw new Error('Coaster: cart node "bumper_car_export_1001" not found');
   const curve = new THREE.CatmullRomCurve3(ctrlPts, true, 'catmullrom', 0.5);
-  curve.arcLengthDivisions = 1600;
+  curve.arcLengthDivisions = 20000;
   const trackLen = curve.getLength();
 
   // ── Precompute a rotation-minimizing (parallel-transport) frame field along the curve ──
@@ -160,19 +182,21 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   for (const v of upVectors) upDot += v.y;
   if (upDot < 0) for (const v of upVectors) v.negate();
 
-  const _up = new THREE.Vector3();
+  const upVectorsArray = upVectors;
   function getUpVectorAt(u, out) {
     let uc = u % 1; if (uc < 0) uc += 1;
     const f = uc * NUM_FRAMES, i0 = Math.floor(f), i1 = (i0 + 1) % (NUM_FRAMES + 1);
-    return out.lerpVectors(upVectors[i0], upVectors[i1], f - i0).normalize();
+    return out.lerpVectors(upVectorsArray[i0], upVectorsArray[i1], f - i0).normalize();
   }
 
   const _tan = new THREE.Vector3();
   const _mtx = new THREE.Matrix4();
   const _origin = new THREE.Vector3(0, 0, 0);
+  const _up = new THREE.Vector3();
   function frameQuat(u, out) {
     curve.getTangentAt(u % 1, _tan).normalize();
     getUpVectorAt(u, _up);
+    _tan.negate();
     _mtx.lookAt(_origin, _tan, _up);
     return out.setFromRotationMatrix(_mtx);
   }
@@ -183,9 +207,40 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   for (const p of samples) if (p.y > yTop) yTop = p.y;
   yTop += 0.5;
 
+  // ── Top group: ride auto-fit-scaled inside; panel stays at world (human) scale ──
+  const group = new THREE.Group();
+  group.name = 'coaster';
+
+  const rideScaled = new THREE.Group();
+  rideScaled.name = 'coaster_rideScaled';
+  rideScaled.add(model);
+  group.add(rideScaled);
+
+  // Rotate the coaster by 270 degrees around Y axis
+  rideScaled.rotation.y = Math.PI * 1.5;
+  group.updateMatrixWorld(true);
+
+  group.position.set(position[0], position[1], position[2]);
+  group.updateMatrixWorld(true);
+
+  // Auto-fit: scale the whole ride so its longest horizontal extent = TARGET_LONG.
+  let bbox = new THREE.Box3().setFromObject(rideScaled);
+  let size = bbox.getSize(new THREE.Vector3());
+  const scale = TARGET_LONG / (Math.max(size.x, size.z) || 1);
+  // Scale Y by scale * 1.35 to stretch height vertically by 1.35x
+  rideScaled.scale.set(scale, scale * 1.35, scale);
+  group.updateMatrixWorld(true);
+
+  // Re-measure and position Y so the lowest point of the static structure rests exactly on the ground
+  bbox = new THREE.Box3().setFromObject(rideScaled);
+  size = bbox.getSize(new THREE.Vector3());
+  const center = bbox.getCenter(new THREE.Vector3());
+  rideScaled.position.x += position[0] - center.x;
+  rideScaled.position.y += position[1] - bbox.min.y;
+  rideScaled.position.z += position[2] - center.z;
+  group.updateMatrixWorld(true);
+
   // ── Seat the template cart on the curve, capture its on-rail local pose, remove all baked carts ──
-  // The cart's authored static pose lies on the rail (it is keyframe 0 of the path), so the attach()
-  // trick captures the constant offset between the cart's local axes and our frame axes.
   const cartCentroid = new THREE.Box3().setFromObject(templateCartNode).getCenter(new THREE.Vector3());
   model.worldToLocal(cartCentroid);
   let uCar = 0, best = Infinity;
@@ -196,12 +251,28 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
 
   const dolly0 = new THREE.Group();
   dolly0.name = 'coaster_t0_c0';
-  model.add(dolly0);
-  dolly0.position.copy(curve.getPointAt(uCar));
-  frameQuat(uCar, dolly0.quaternion);
+  group.add(dolly0); // Add directly to group to avoid scale inheritance from rideScaled
+
+  // Position and orient dolly0 in group space:
+  const _pt0 = curve.getPointAt(uCar);
+  _pt0.applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+  dolly0.position.copy(_pt0);
+
+  const _q0 = new THREE.Quaternion();
+  frameQuat(uCar, _q0);
+  dolly0.quaternion.copy(rideScaled.quaternion).multiply(_q0);
   dolly0.updateMatrixWorld(true);
-  dolly0.attach(templateCartNode); // cart keeps world pose; local transform now = "sits on rail here"
-  templateCartNode.scale.multiplyScalar(CART_SCALE);
+
+  // Attach cart template
+  dolly0.attach(templateCartNode);
+  
+  // Rotate the cart template by 180 degrees (Math.PI) around its local Z axis (vertical dolly Y)
+  // so that the carriages and the passengers face forward in the direction of movement.
+  templateCartNode.rotateOnAxis(new THREE.Vector3(0, 0, 1), Math.PI);
+  
+  // Force uniform scale based on horizontal scale * CART_SCALE to prevent non-uniform scale skewing on carriages and riders
+  const baseScale = templateCartNode.scale.x * CART_SCALE;
+  templateCartNode.scale.set(baseScale, baseScale, baseScale);
 
   const carLocalPos = templateCartNode.position.clone();
   const carLocalQuat = templateCartNode.quaternion.clone();
@@ -216,15 +287,14 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const leftoverCarts = [];
   model.traverse((o) => {
     if (o !== templateCartNode && /^bumper_car_export_/.test(o.name) && o.parent && o.parent !== dolly0) {
-      // node groups named bumper_car_export_1.00X (the mesh children end with _rollercoastercart_0)
       if (!/_rollercoastercart_0$/.test(o.name)) leftoverCarts.push(o);
     }
   });
   leftoverCarts.forEach((o) => o.parent && o.parent.remove(o));
 
+  const trackLenWorld = trackLen * scale;
+
   // ── Build 2 trains × 4 carriages — every carriage on its own dolly, offset independently.
-  //    u_carriage = ((controller.u − offset) % 1 + 1) % 1
-  //    train t, carriage c → offset = −t*TRAIN_SPACING + c*spacingU
   const cars = [{ dolly: dolly0, offset: 0 }]; // train 0, carriage 0
   for (let i = 1; i < NUM_CARS; i++) {
     const t = Math.floor(i / CARS_PER_TRAIN);
@@ -239,54 +309,100 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     clone.scale.copy(carLocalScale);
     clone.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     dolly.add(clone);
-    model.add(dolly);
+    group.add(dolly); // Add directly to group to avoid scale inheritance
     cars.push({ dolly, offset });
   }
 
-  // ── Top group: ride auto-fit-scaled inside; panel stays at world (human) scale ──
-  const group = new THREE.Group();
-  group.name = 'coaster';
+  // ── Seat passengers in the carriages ──────────────────────────────────────────────────────
+  const riders = [];
+  const riderHeight = 3.28 * 0.88; // ~2.88 world units, same size as other riders in the park
+  const riderLocalH = riderHeight; // Since dolly is parented to group (scale 1), no scale counteraction is needed
 
-  const rideScaled = new THREE.Group();
-  rideScaled.name = 'coaster_rideScaled';
-  rideScaled.add(model);
-  group.add(rideScaled);
+  cars.forEach((car, carIdx) => {
+    const cart = car.dolly.children[0];
+    if (!cart) return;
 
-  group.position.set(position[0], position[1], position[2]);
-  group.updateMatrixWorld(true);
+    cart.updateMatrix();
 
-  // Auto-fit: scale the whole ride so its longest horizontal extent = TARGET_LONG.
-  let bbox = new THREE.Box3().setFromObject(rideScaled);
-  let size = bbox.getSize(new THREE.Vector3());
-  const scale = TARGET_LONG / (Math.max(size.x, size.z) || 1);
-  rideScaled.scale.setScalar(scale);
-  group.updateMatrixWorld(true);
+    [0, 1].forEach((seatIdx) => {
+      const template = templates[(carIdx * 2 + seatIdx) % templates.length];
+      if (!template) return;
 
-  // Re-measure; centre on X/Z and rest the base on the ground (y = 0 at the lowest point).
-  bbox = new THREE.Box3().setFromObject(rideScaled);
-  size = bbox.getSize(new THREE.Vector3());
-  const center = bbox.getCenter(new THREE.Vector3());
-  rideScaled.position.x += position[0] - center.x;
-  rideScaled.position.y += position[1] - bbox.min.y;
-  rideScaled.position.z += position[2] - center.z;
-  group.updateMatrixWorld(true);
+      const rider = makeRider(template, riderLocalH, {
+        pool: ['rest'],
+        facingY: Math.PI, // face forward (along track +Z)
+        phase: carIdx * 1.7 + seatIdx * 0.9,
+      });
 
-  const trackLenWorld = trackLen * scale;
-  const footprint = Math.max(size.x, size.z);
+      // Drop the figure so its hips sit at seat height (centre the hip bone on the seat point).
+      rider.fig.updateMatrixWorld(true);
+      const hip = rider.fig.getObjectByName('Hips');
+      let hy = riderLocalH * 0.45; // fallback: lower by ~hip height
+      if (hip) {
+        const hp = hip.getWorldPosition(new THREE.Vector3());
+        rider.fig.worldToLocal(hp);
+        hy = hp.y * rider.scale;
+      }
 
-  // ── Control panel (semaphore + lever), human-scaled, beside the ride ──
-  const controlPanel = new ControlPanel({ initialRunning: true });
-  controlPanel.group.position.set(footprint * 0.46, 0, footprint * 0.46);
+      // Seat coordinates in carriage local space
+      const seatPos = new THREE.Vector3(seatIdx === 0 ? -0.42 : 0.42, -0.35, 1.45 - hy / 3.8);
+      
+      // Parent rider.pivot directly to cart so it inherits the carriage's complete orientation
+      cart.add(rider.pivot);
+      
+      // Scale down by 1/cartScale to preserve normal visitor height
+      rider.pivot.scale.set(1 / cart.scale.x, 1 / cart.scale.y, 1 / cart.scale.z);
+      
+      // Align rider coordinates with cart local coordinates
+      const mappingMtx = new THREE.Matrix4().set(
+        1,  0,  0,  0,
+        0,  0, -1,  0,
+        0,  1,  0,  0,
+        0,  0,  0,  1
+      );
+      rider.pivot.quaternion.setFromRotationMatrix(mappingMtx);
+      
+      // Position at the seat coordinates in cart local space
+      rider.pivot.position.copy(seatPos);
+
+      riders.push(rider);
+    });
+  });
+
+  // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
+  // Smooth start/stop acceleration (rampUp: 1.0s, rampDown: 1.5s)
+  const controlPanel = new ControlPanel({ initialRunning: true, rampUp: 1.0, rampDown: 1.5 });
   group.add(controlPanel.group);
   group.updateMatrixWorld(true);
-  controlPanel.group.lookAt(position[0], position[1], position[2]);
-  controlPanel.group.rotateY(Math.PI);
+
+  // Place the panel near the central path (West side) facing South (+Z) towards the entrance
+  controlPanel.group.position.set(7.5 - position[0], 0, 33.0 - position[2]);
+  controlPanel.group.rotation.set(0, 0, 0);
+  group.updateMatrixWorld(true);
+
+  // ── Footprint for vegetation keep-out ──
+  model.updateMatrixWorld(true);
+  const FOOT_SAMPLES = 260;
+  const footPts = [];
+  const _fp = new THREE.Vector3();
+  for (let i = 0; i < FOOT_SAMPLES; i++) {
+    curve.getPointAt(i / FOOT_SAMPLES, _fp);
+    // Transform track curve points to world space
+    _fp.applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+    group.localToWorld(_fp);
+    footPts.push(_fp.x, _fp.z);
+  }
+  const panelWorld = new THREE.Vector3();
+  controlPanel.group.getWorldPosition(panelWorld);
+  footPts.push(panelWorld.x, panelWorld.z);
+  group.userData.footprint = { pts: footPts, pad: 7.0 };
 
   // ── Controller / station state-machine ──
   const controller = {
     cars,
     curve,
     u: uCar,
+    riders,
     panel: controlPanel.group,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
@@ -306,7 +422,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
 
   group.userData.tick = (delta, _time) => {
     const dt = Math.min(0.1, delta);
-    const ease = controlPanel.tick(dt);
+    const ease = controlPanel.tick(delta);
+    controller.ease = ease;
 
     if (ease > 0.0001) {
       let lap = (controller.u - uCar) % 1;
@@ -352,8 +469,52 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     for (const c of cars) {
       let u = (controller.u - c.offset) % 1;
       if (u < 0) u += 1;
-      c.dolly.position.copy(curve.getPointAt(u, _pt));
-      c.dolly.quaternion.copy(frameQuat(u, _q));
+      
+      // Get position on curve in model space
+      _pt.copy(curve.getPointAt(u));
+      // Transform from model space -> rideScaled space -> group space
+      _pt.applyMatrix4(model.matrix);
+      _pt.applyMatrix4(rideScaled.matrix);
+      c.dolly.position.copy(_pt);
+      
+      // Get orientation, apply rideScaled rotation
+      frameQuat(u, _q);
+      c.dolly.quaternion.copy(rideScaled.quaternion).multiply(_q);
+    }
+
+    // 4. Update riders dynamically (keeps idle breathing and head-turning active when stopped)
+    const timeVal = _time;
+
+    let activePool = COASTER_REST_POOL;
+    if (controller.state === 'LAUNCH' || controller.state === 'COASTING') {
+      activePool = COASTER_RIDE_POOL;
+    } else if (controller.state === 'BRAKING') {
+      activePool = COASTER_BRAKE_POOL;
+    }
+
+    for (const r of controller.riders) {
+      // If coaster state changed, set the new action pool and force immediate pose switch
+      if (r.pool !== activePool) {
+        r.pool = activePool;
+        r.from = r.to;
+        r.to = activePool[Math.floor(Math.random() * activePool.length)];
+        r.tStart = timeVal;
+        r.nextSwitch = timeVal + r.transDur + 2.5 + Math.random() * 4;
+      }
+      updateRider(r, timeVal);
+
+      // Add dynamic sway to torso and head based on ride state (inertia simulation)
+      const B = r.bones;
+      if (controller.state === 'LAUNCH' || controller.state === 'COASTING') {
+        const swayAmp = controller.state === 'LAUNCH' ? 0.12 : 0.06;
+        if (B.Torso) {
+          B.Torso.bone.rotation.x += swayAmp * Math.sin(timeVal * 5.0 + r.phase);
+          B.Torso.bone.rotation.z += 0.04 * Math.cos(timeVal * 3.0 + r.phase);
+        }
+        if (B.Head) {
+          B.Head.bone.rotation.x += 0.08 * Math.sin(timeVal * 6.0 + r.phase);
+        }
+      }
     }
   };
 

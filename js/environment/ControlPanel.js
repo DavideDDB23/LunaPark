@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class ControlPanel {
-  constructor({ initialRunning = true, onToggle } = {}) {
+  constructor({ initialRunning = true, onToggle, rampUp = 1.5, rampDown = 2.0 } = {}) {
     this.group = new THREE.Group();
     this.group.name = 'controlPanel';
 
@@ -11,8 +11,8 @@ export class ControlPanel {
     this.onToggle = onToggle;
     this.eStopPressTime = 0.0;
 
-    this.RAMP_UP = 1.5;
-    this.RAMP_DOWN = 2.0;
+    this.RAMP_UP = rampUp;
+    this.RAMP_DOWN = rampDown;
 
     this.LEVER_REST = -0.05;  // nearly vertical when off
     this.LEVER_ON = 0.65;     // more forward lean when on
@@ -288,6 +288,10 @@ export class ControlPanel {
       this.phase + (this.running ? 1 : -1) * (delta / dur), 0, 1
     );
     this.ease = this.phase * this.phase * (3 - 2 * this.phase); // smoothstep
+    
+    if (this.group.parent && this.group.parent.name === 'coaster') {
+      console.log(`COASTER_PANEL: running=${this.running} phase=${this.phase} ease=${this.ease} delta=${delta} dur=${dur}`);
+    }
     
     // Decrement eStop button animation timer
     if (this.eStopPressTime > 0) {

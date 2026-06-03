@@ -90,7 +90,13 @@ async function init() {
   console.log("buildFoodStalls"); const stalls = await buildFoodStalls();
   environmentGroup.add(stalls);
 
-  console.log("buildVegetation"); const vegetation = await buildVegetation();
+  // Coaster builds before vegetation so trees can be kept clear of its exact track footprint.
+  console.log("buildCoaster");
+  const coaster = await buildCoaster({ position: [52, 0, 54], camera, renderer, anisotropy: maxAniso });
+  environmentGroup.add(coaster);
+  window.__lp.coaster = coaster.userData.controller;
+
+  console.log("buildVegetation"); const vegetation = await buildVegetation({ coasterFootprint: coaster.userData.footprint });
   environmentGroup.add(vegetation);
 
   console.log("buildBenches"); const benches = await buildBenches();
@@ -114,11 +120,6 @@ async function init() {
   const tagada = await buildTagada({ position: [-40, 0, 40], camera, renderer, anisotropy: maxAniso });
   environmentGroup.add(tagada);
   window.__lp.tagada = tagada.userData.controller;
-
-  console.log("buildCoaster");
-  const coaster = await buildCoaster({ position: [48, 0, 50], camera, renderer, anisotropy: maxAniso });
-  environmentGroup.add(coaster);
-  window.__lp.coaster = coaster.userData.controller;
 
   // Day/night controller — slider in HUD drives this.
   dayNight = new DayNightCycle({

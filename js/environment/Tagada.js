@@ -23,49 +23,98 @@ const BUMP_AMP = 0.04;  // Sharp, short rotation jolts in radians
 
 const TAGADA_ACTIONS = ['cheer', 'wave', 'cheer', 'wave', 'lookUp', 'relax', 'rest'];
 
+// Jewel-tone seat palette (alternates around the disc)
+const SEAT_COLORS = [0xe53935, 0x1e88e5, 0xffb300, 0x8e24aa, 0x00acc1, 0x43a047, 0xf4511e, 0x3949ab];
 
-function createTagadaTexture() {
+// ── Glossy sunburst platform texture ────────────────────────────────────────
+function createPlatformTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
+  canvas.width = canvas.height = 1024;
   const ctx = canvas.getContext('2d');
+  const C = 512;
 
-  // Background base (dark steel gray/blue)
-  ctx.fillStyle = '#1c2038';
-  ctx.fillRect(0, 0, 512, 512);
+  // Radial gradient base (bright royal blue → deep blue, so the deck reads in daylight)
+  const g = ctx.createRadialGradient(C, C, 40, C, C, 512);
+  g.addColorStop(0, '#3f6fd1');
+  g.addColorStop(0.55, '#2a4ea0');
+  g.addColorStop(1, '#1c3370');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 1024, 1024);
 
-  // Draw concentric carnival rings
-  const center = 256;
-  const rings = [
-    { r: 240, color: '#d32f2f' }, // Red outer ring
-    { r: 220, color: '#f5f5f5' }, // White ring
-    { r: 180, color: '#1976d2' }, // Blue ring
-    { r: 155, color: '#fbc02d' }, // Yellow ring
-    { r: 120, color: '#f5f5f5' }, // White ring
-    { r: 85, color: '#d32f2f' },  // Red ring
-    { r: 50, color: '#fbc02d' }   // Yellow inner bullseye
-  ];
-
-  for (const ring of rings) {
+  // Sunburst rays — alternating bright gold / crimson wedges
+  const rays = 36;
+  for (let i = 0; i < rays; i++) {
+    const a0 = (i / rays) * Math.PI * 2;
+    const a1 = ((i + 1) / rays) * Math.PI * 2;
     ctx.beginPath();
-    ctx.arc(center, center, ring.r, 0, Math.PI * 2);
-    ctx.fillStyle = ring.color;
+    ctx.moveTo(C, C);
+    ctx.arc(C, C, 500, a0, a1);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(247,201,72,0.85)' : 'rgba(206,58,78,0.55)';
     ctx.fill();
   }
 
-  // Radial segments/lines to give depth during spin
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 4;
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
+  // Concentric carnival rings with metallic borders
+  const rings = [
+    { r: 500, c: '#c0143c' }, { r: 470, c: '#e8c25a' },
+    { r: 360, c: '#1565c0' }, { r: 330, c: '#f5f5f5' },
+    { r: 235, c: '#c0143c' }, { r: 205, c: '#e8c25a' },
+    { r: 110, c: '#11203f' },
+  ];
+  for (const ring of rings) {
     ctx.beginPath();
-    ctx.moveTo(center, center);
-    ctx.lineTo(center + Math.cos(angle) * 240, center + Math.sin(angle) * 240);
+    ctx.arc(C, C, ring.r, 0, Math.PI * 2);
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = ring.c;
+    ctx.stroke();
+    // bright chrome inner edge
+    ctx.beginPath();
+    ctx.arc(C, C, ring.r - 8, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.stroke();
   }
 
-  const texture = new THREE.CanvasTexture(canvas);
-  return texture;
+  // Star studs on the gold ring
+  ctx.fillStyle = '#fff4cf';
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const x = C + Math.cos(a) * 415, y = C + Math.sin(a) * 415;
+    ctx.beginPath();
+    for (let k = 0; k < 5; k++) {
+      const aa = a + (k / 5) * Math.PI * 2;
+      ctx.lineTo(x + Math.cos(aa) * 9, y + Math.sin(aa) * 9);
+      const ab = a + ((k + 0.5) / 5) * Math.PI * 2;
+      ctx.lineTo(x + Math.cos(ab) * 4, y + Math.sin(ab) * 4);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  return tex;
+}
+
+// ── Striped canopy (parasol) fabric texture ─────────────────────────────────
+function createCanopyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const stripes = 12;
+  for (let i = 0; i < stripes; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#c81d3a' : '#f3ead2';
+    ctx.fillRect((i / stripes) * 1024, 0, 1024 / stripes, 256);
+  }
+  // subtle vertical shading for fabric depth
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, 'rgba(255,255,255,0.18)');
+  g.addColorStop(1, 'rgba(0,0,0,0.30)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 1024, 256);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  return tex;
 }
 
 export async function buildTagada({ position = [-40, 0, 40], camera, renderer, anisotropy = 8 } = {}) {
@@ -76,399 +125,441 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   group.name = 'tagada';
   group.position.set(position[0], position[1], position[2]);
 
-  // Materials Setup
-  const metalPedestalMat = new THREE.MeshStandardMaterial({
-    color: 0x2b303b,
-    roughness: 0.4,
-    metalness: 0.8
-  });
+  // ── Materials ──────────────────────────────────────────────────────────────
+  const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe9eef2, metalness: 1.0, roughness: 0.12 });
+  const darkChromeMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 1.0, roughness: 0.22 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xd9a93a, metalness: 1.0, roughness: 0.2 });
+  const metalPedestalMat = new THREE.MeshStandardMaterial({ color: 0x222838, roughness: 0.4, metalness: 0.85 });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0xc7ccd2, metalness: 0.95, roughness: 0.18 });
+  const armAccentMat = new THREE.MeshStandardMaterial({ color: 0xe53935, metalness: 0.5, roughness: 0.35 });
 
-  const industrialArmMat = new THREE.MeshStandardMaterial({
-    color: 0xff8800, // Bright orange mechanical arm
-    roughness: 0.3,
-    metalness: 0.5
-  });
-
-  const chromeMat = new THREE.MeshStandardMaterial({
-    color: 0xdddddd,
-    metalness: 0.9,
-    roughness: 0.1
-  });
-
-  const discTex = createTagadaTexture();
+  const discTex = createPlatformTexture();
   discTex.anisotropy = anisotropy;
+  // Low-intensity emissive map keeps the sunburst readable at grazing angles / under the canopy.
   const platformMat = new THREE.MeshStandardMaterial({
-    map: discTex,
-    roughness: 0.7,
-    metalness: 0.2
+    map: discTex, emissive: 0xffffff, emissiveMap: discTex, emissiveIntensity: 0.22,
+    roughness: 0.6, metalness: 0.0,
   });
 
-  const seatMat = new THREE.MeshStandardMaterial({
-    color: 0x1177cc, // Blue vinyl cushions
-    roughness: 0.6,
-    metalness: 0.1
+  const canopyTex = createCanopyTexture();
+  canopyTex.anisotropy = anisotropy;
+  // Fabric also lights up: emissiveMap = the stripe texture, driven up at night in the tick.
+  const canopyMat = new THREE.MeshStandardMaterial({
+    map: canopyTex, emissive: 0xffffff, emissiveMap: canopyTex, emissiveIntensity: 0.0,
+    roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide,
   });
 
-  const seatFrameMat = new THREE.MeshStandardMaterial({
-    color: 0x4a4a4a,
-    roughness: 0.5,
-    metalness: 0.7
-  });
+  const seatFrameMat = new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.4, metalness: 0.8 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.95, roughness: 0.06 });
+  const baseConcreteMat = new THREE.MeshStandardMaterial({ color: 0x4c525a, roughness: 0.9, metalness: 0.05 });
+  const baseHousingMat = new THREE.MeshStandardMaterial({ color: 0x262b33, roughness: 0.5, metalness: 0.7 });
 
-  const railMat = new THREE.MeshStandardMaterial({
-    color: 0xeeeeee,
-    metalness: 0.95,
-    roughness: 0.05
-  });
+  // Emissive helpers — start subtle (glow by day), driven brighter at night in the tick.
+  const neon = (hex) => new THREE.MeshStandardMaterial({ color: hex, emissive: hex, emissiveIntensity: 0.3, roughness: 0.25, metalness: 0.1 });
 
-  const baseConcreteMat = new THREE.MeshStandardMaterial({
-    color: 0x5a5f66,
-    roughness: 0.9,
-    metalness: 0.05
-  });
+  // Animated-light registries
+  const canopyBulbs = [];
+  const ledRings = [];
+  const rimBulbs = [];
+  const basePanels = [];
+  const armStrips = [];
 
-  const baseHousingMat = new THREE.MeshStandardMaterial({
-    color: 0x2f333a,
-    roughness: 0.55,
-    metalness: 0.7
-  });
-
-  const accessMat = new THREE.MeshStandardMaterial({
-    color: 0x3b3f46,
-    roughness: 0.7,
-    metalness: 0.2
-  });
-
-  // 1. Static Pedestal / Base Platform
-  const pedestalGeo = new THREE.CylinderGeometry(9.5, 10.0, 1.2, 32);
-  const pedestal = new THREE.Mesh(pedestalGeo, metalPedestalMat);
-  pedestal.position.y = 0.6; // rest on grass
-  pedestal.castShadow = true;
-  pedestal.receiveShadow = true;
-  group.add(pedestal);
-
-  // Decorative brass ring around pedestal
-  const ringGeo = new THREE.TorusGeometry(9.6, 0.1, 8, 32);
-  const ring = new THREE.Mesh(ringGeo, chromeMat);
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.6;
-  group.add(ring);
-
-  // Foundation slab and base skirt for a more realistic base
-  const foundation = new THREE.Mesh(new THREE.CylinderGeometry(12.2, 12.2, 0.35, 40), baseConcreteMat);
-  foundation.position.y = 0.175;
-  foundation.receiveShadow = true;
+  // 1. ── Foundation + faceted illuminated base ───────────────────────────────
+  const foundation = new THREE.Mesh(new THREE.CylinderGeometry(12.4, 12.8, 0.4, 48), baseConcreteMat);
+  foundation.position.y = 0.2; foundation.receiveShadow = true;
   group.add(foundation);
 
-  const baseSkirt = new THREE.Mesh(new THREE.CylinderGeometry(10.8, 11.2, 0.8, 40), baseHousingMat);
-  baseSkirt.position.y = 0.4;
-  baseSkirt.castShadow = true;
-  baseSkirt.receiveShadow = true;
+  const baseSkirt = new THREE.Mesh(new THREE.CylinderGeometry(10.6, 11.4, 1.4, 48), baseHousingMat);
+  baseSkirt.position.y = 0.85; baseSkirt.castShadow = true; baseSkirt.receiveShadow = true;
   group.add(baseSkirt);
 
-  const motorBase = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.3, 0.8, 24), baseHousingMat);
-  motorBase.position.y = 0.8;
-  motorBase.castShadow = true;
-  motorBase.receiveShadow = true;
-  group.add(motorBase);
-
-  const motorCap = new THREE.Mesh(new THREE.CylinderGeometry(3.35, 3.35, 0.12, 24), chromeMat);
-  motorCap.position.y = 1.26;
-  motorCap.castShadow = true;
-  group.add(motorCap);
-
-  const pivotCollar = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.3, 0.2, 16), metalPedestalMat);
-  pivotCollar.position.y = 1.2;
-  pivotCollar.castShadow = true;
-  group.add(pivotCollar);
-
-  const boltGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.08, 8);
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2;
-    const bolt = new THREE.Mesh(boltGeo, chromeMat);
-    bolt.position.set(3.0 * Math.cos(angle), 1.26, 3.0 * Math.sin(angle));
-    bolt.castShadow = true;
-    group.add(bolt);
+  // Gold trim rings around the skirt
+  for (const yy of [0.25, 1.5]) {
+    const trim = new THREE.Mesh(new THREE.TorusGeometry(11.0, 0.12, 10, 64), goldMat);
+    trim.rotation.x = Math.PI / 2; trim.position.y = yy; trim.castShadow = true;
+    group.add(trim);
   }
 
-  const anchorGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.12, 8);
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
+  // Illuminated arched panels around the base skirt
+  const panelCount = 16;
+  for (let i = 0; i < panelCount; i++) {
+    const a = (i / panelCount) * Math.PI * 2;
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 1.5), neon(i % 2 ? 0x12c2ff : 0xff3cac));
+    panel.position.set(Math.cos(a) * 11.05, 0.85, Math.sin(a) * 11.05);
+    panel.rotation.y = -a;
+    group.add(panel);
+    basePanels.push(panel);
+  }
+
+  // Motor housing + chrome cap
+  const motorBase = new THREE.Mesh(new THREE.CylinderGeometry(3.0, 3.3, 1.0, 32), baseHousingMat);
+  motorBase.position.y = 1.6; motorBase.castShadow = true; motorBase.receiveShadow = true;
+  group.add(motorBase);
+  const motorCap = new THREE.Mesh(new THREE.CylinderGeometry(3.25, 3.25, 0.16, 32), chromeMat);
+  motorCap.position.y = 2.12; motorCap.castShadow = true;
+  group.add(motorCap);
+
+  // Marquee crown — a ring of chase bulbs on top of the base housing
+  const crownBulbGeo = new THREE.SphereGeometry(0.13, 12, 10);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const m = neon(0xfff1c0);
+    const bulb = new THREE.Mesh(crownBulbGeo, m);
+    bulb.position.set(Math.cos(a) * 3.25, 2.24, Math.sin(a) * 3.25);
+    group.add(bulb);
+    rimBulbs.push(bulb);
+  }
+
+  const pivotCollar = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.4, 24), goldMat);
+  pivotCollar.position.y = ARM_PIVOT_Y; pivotCollar.castShadow = true;
+  group.add(pivotCollar);
+
+  // Anchor studs around the foundation rim
+  const anchorGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.16, 8);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
     const anchor = new THREE.Mesh(anchorGeo, chromeMat);
-    anchor.position.set(11.2 * Math.cos(angle), 0.18, 11.2 * Math.sin(angle));
-    anchor.castShadow = true;
+    anchor.position.set(Math.cos(a) * 11.6, 0.22, Math.sin(a) * 11.6);
     group.add(anchor);
   }
 
-  // 2. Mechanical Arm Pivot Joint (sits at top of pedestal)
+  // 2. ── Arm pivot ───────────────────────────────────────────────────────────
   const armPivot = new THREE.Group();
   armPivot.name = 'tagada_arm_pivot';
   armPivot.position.set(0, ARM_PIVOT_Y, 0);
   armPivot.rotation.order = 'YXZ';
   group.add(armPivot);
 
-  // Mechanical hinge cylinder at the joint
-  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 2.0, 16), metalPedestalMat);
+  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 2.2, 24), darkChromeMat);
   hinge.rotation.z = Math.PI / 2;
   armPivot.add(hinge);
+  for (const sx of [-1, 1]) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.92, 0.12, 24), goldMat);
+    cap.rotation.z = Math.PI / 2; cap.position.x = sx * 1.1;
+    armPivot.add(cap);
+  }
 
-  // 3. Mechanical Arm Mesh
-  // Arm extends along +Y in armPivot space (height 10, offset by 5 to place pivot at base)
+  // 3. ── Arm ─────────────────────────────────────────────────────────────────
   const armLength = 9.0;
   const armGroup = new THREE.Group();
   armGroup.name = 'tagada_arm_group';
   armPivot.add(armGroup);
 
-  const mainArmGeo = new THREE.CylinderGeometry(0.5, 0.6, armLength, 16);
-  const mainArm = new THREE.Mesh(mainArmGeo, industrialArmMat);
-  mainArm.position.y = armLength / 2;
-  mainArm.castShadow = true;
-  mainArm.receiveShadow = true;
+  const mainArm = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.62, armLength, 24), armMat);
+  mainArm.position.y = armLength / 2; mainArm.castShadow = true; mainArm.receiveShadow = true;
   armGroup.add(mainArm);
 
-  // Hydraulic piston cylinders on the sides for premium appearance
-  const pistonCylinders = [];
-  for (let side of [-1, 1]) {
-    const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, armLength * 0.7, 12), chromeMat);
-    cylinder.position.set(side * 0.8, armLength * 0.4, -0.3);
-    cylinder.castShadow = true;
-    armGroup.add(cylinder);
-    pistonCylinders.push(cylinder);
+  // Gold collars along the arm
+  for (const t of [0.18, 0.5, 0.82]) {
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.22, 24), goldMat);
+    collar.position.y = armLength * t;
+    armGroup.add(collar);
   }
 
-  // 4. Spinning Disc Pivot (sits at the end of the arm)
+  // Cyan LED strips running up two sides of the arm
+  for (const sx of [-1, 1]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.08, armLength * 0.92, 0.16), neon(0x19e6ff));
+    strip.position.set(sx * 0.5, armLength * 0.5, 0.3);
+    armGroup.add(strip);
+    armStrips.push(strip);
+  }
+
+  // Hydraulic piston cylinders (kept for the telescoping look)
+  const pistonCylinders = [];
+  for (const side of [-1, 1]) {
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, armLength * 0.7, 16), chromeMat);
+    cyl.position.set(side * 0.78, armLength * 0.4, -0.32); cyl.castShadow = true;
+    armGroup.add(cyl);
+    pistonCylinders.push(cyl);
+  }
+
+  // 4. ── Disc pivot (tilts/bumps with the arm, does NOT spin) ─────────────────
   const discPivot = new THREE.Group();
   discPivot.name = 'tagada_disc_pivot';
   discPivot.position.set(0, armLength, 0);
   armGroup.add(discPivot);
 
-  // Hinge plate connecting arm to disc
-  const connector = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.4, 16), metalPedestalMat);
-  connector.position.y = -0.2;
+  const connector = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.5, 24), darkChromeMat);
+  connector.position.y = -0.25;
   discPivot.add(connector);
 
-  // 5. Disc Mesh Group
+  // 5. ── Spinning disc mesh group ────────────────────────────────────────────
   const discMeshGroup = new THREE.Group();
   discMeshGroup.name = 'tagada_disc_mesh';
   discPivot.add(discMeshGroup);
 
-  // Large Tagada Disc Platform
   const discRadius = 7.0;
-  const platformGeo = new THREE.CylinderGeometry(discRadius, discRadius, 0.4, 48);
-  const platform = new THREE.Mesh(platformGeo, platformMat);
-  platform.receiveShadow = true;
-  platform.castShadow = true;
+  const platform = new THREE.Mesh(new THREE.CylinderGeometry(discRadius, discRadius, 0.45, 64), platformMat);
+  platform.receiveShadow = true; platform.castShadow = true;
   discMeshGroup.add(platform);
 
-  // Outer chrome rim
-  const rimGeo = new THREE.CylinderGeometry(discRadius + 0.05, discRadius + 0.05, 0.5, 48);
-  const rim = new THREE.Mesh(rimGeo, chromeMat);
-  rim.castShadow = true;
-  discMeshGroup.add(rim);
+  // Decorative underbelly so the tilted disc looks finished from below (not a flat black disc).
+  // Matte crimson (not metal) so it reads as a bright colour rather than mirroring the dark ground.
+  const underMat = new THREE.MeshStandardMaterial({ color: 0xb0203f, roughness: 0.5, metalness: 0.15 });
+  const underBowl = new THREE.Mesh(new THREE.ConeGeometry(discRadius * 0.98, 1.7, 48, 1, true), underMat);
+  underBowl.position.y = -0.225 - 0.85; // apex points down beneath the deck
+  underBowl.rotation.x = Math.PI;        // open side up against the platform
+  discMeshGroup.add(underBowl);
+  // gold rim trim + glowing LED ring at the underbelly's widest edge (just below the deck)
+  const underTrim = new THREE.Mesh(new THREE.TorusGeometry(discRadius * 0.98, 0.13, 10, 64), goldMat);
+  underTrim.rotation.x = Math.PI / 2; underTrim.position.y = -0.28;
+  discMeshGroup.add(underTrim);
+  const underLed = new THREE.Mesh(new THREE.TorusGeometry(discRadius * 0.86, 0.07, 10, 64), neon(0xffd54a));
+  underLed.rotation.x = Math.PI / 2; underLed.position.y = -0.7;
+  discMeshGroup.add(underLed);
+  ledRings.push(underLed);
+  // radial gold spoke ribs across the underbelly
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(discRadius * 0.92, 0.12, 0.14), goldMat);
+    rib.position.set(Math.cos(a) * discRadius * 0.46, -0.5, Math.sin(a) * discRadius * 0.46);
+    rib.rotation.y = -a;
+    discMeshGroup.add(rib);
+  }
 
-  // 6. Security Railings and Seats
-  // A circular handrail around the outer edge of the disc
+  // Stacked chrome / gold rim with an embedded LED band
+  const rimChrome = new THREE.Mesh(new THREE.CylinderGeometry(discRadius + 0.12, discRadius + 0.12, 0.55, 64), chromeMat);
+  rimChrome.castShadow = true;
+  discMeshGroup.add(rimChrome);
+  const rimGold = new THREE.Mesh(new THREE.CylinderGeometry(discRadius + 0.16, discRadius + 0.16, 0.16, 64), goldMat);
+  rimGold.position.y = 0.32;
+  discMeshGroup.add(rimGold);
+
+  // Two emissive LED rings hugging the rim
+  for (const [ry, col] of [[0.12, 0x12c2ff], [-0.12, 0xff3cac]]) {
+    const led = new THREE.Mesh(new THREE.TorusGeometry(discRadius + 0.18, 0.07, 10, 96), neon(col));
+    led.rotation.x = Math.PI / 2; led.position.y = ry;
+    discMeshGroup.add(led);
+    ledRings.push(led);
+  }
+
+  // Central chrome hub with a glowing gem
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.5, 0.7, 32), chromeMat);
+  hub.position.y = 0.35; hub.castShadow = true;
+  discMeshGroup.add(hub);
+  const gemMat = neon(0x6cf0ff); gemMat.metalness = 0.3; gemMat.roughness = 0.1;
+  const gem = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 0), gemMat);
+  gem.position.y = 0.95;
+  discMeshGroup.add(gem);
+  ledRings.push(gem); // pulse with the LED rings
+
+  // 6. ── Perimeter handrail ──────────────────────────────────────────────────
   const railHeight = 1.1;
-  const railPolesCount = 20;
   const railRadius = discRadius - 0.25;
-
-  const handrailGeo = new THREE.TorusGeometry(railRadius, 0.06, 8, 48);
-  const handrail = new THREE.Mesh(handrailGeo, railMat);
-  handrail.rotation.x = Math.PI / 2;
-  handrail.position.y = railHeight;
-  handrail.castShadow = true;
+  const handrail = new THREE.Mesh(new THREE.TorusGeometry(railRadius, 0.06, 10, 64), railMat);
+  handrail.rotation.x = Math.PI / 2; handrail.position.y = railHeight; handrail.castShadow = true;
   discMeshGroup.add(handrail);
-
-  // Vertical guardrail posts
   const poleGeo = new THREE.CylinderGeometry(0.04, 0.04, railHeight, 8);
-  for (let i = 0; i < railPolesCount; i++) {
-    const angle = (i / railPolesCount) * Math.PI * 2;
-    // Skip 1 pole segment to act as the entrance gate
-    if (i === 0) continue;
+  for (let i = 0; i < 24; i++) {
+    if (i === 0) continue; // entrance gap
+    const a = (i / 24) * Math.PI * 2;
     const pole = new THREE.Mesh(poleGeo, railMat);
-    pole.position.set(railRadius * Math.cos(angle), railHeight / 2, railRadius * Math.sin(angle));
+    pole.position.set(railRadius * Math.cos(a), railHeight / 2, railRadius * Math.sin(a));
     pole.castShadow = true;
     discMeshGroup.add(pole);
   }
 
-  // Boarding access at the railing gap
-  const accessGroup = new THREE.Group();
-  accessGroup.name = 'tagada_access';
-  accessGroup.rotation.y = 0;
-  discMeshGroup.add(accessGroup);
-
-  const gateWidth = 1.4;
-  const gatePostGeo = new THREE.CylinderGeometry(0.06, 0.06, railHeight, 8);
-  for (let side of [-1, 1]) {
-    const post = new THREE.Mesh(gatePostGeo, railMat);
-    post.position.set(railRadius, railHeight / 2, side * gateWidth * 0.5);
-    post.castShadow = true;
-    accessGroup.add(post);
+  // Rim bulbs around the platform edge (alternating chase)
+  const rimBulbGeo = new THREE.SphereGeometry(0.12, 12, 10);
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    const bulb = new THREE.Mesh(rimBulbGeo, neon(i % 2 ? 0xfff1c0 : 0x12c2ff));
+    bulb.position.set((discRadius + 0.2) * Math.cos(a), 0.42, (discRadius + 0.2) * Math.sin(a));
+    discMeshGroup.add(bulb);
+    rimBulbs.push(bulb);
   }
 
-  const gateGroup = new THREE.Group();
-  gateGroup.position.set(railRadius, railHeight * 0.55, -gateWidth * 0.5);
-  accessGroup.add(gateGroup);
+  // 7. ── Grand parasol canopy (on discPivot, so it tilts but doesn't spin) ────
+  const canopy = new THREE.Group();
+  canopy.name = 'tagada_canopy';
+  discPivot.add(canopy);
 
-  const gateBar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, gateWidth), railMat);
-  gateBar.position.set(0, 0, gateWidth * 0.5);
-  gateGroup.add(gateBar);
-  gateGroup.rotation.y = Math.PI / 2;
+  const MAST_TOP = 5.0;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, MAST_TOP, 24), chromeMat);
+  mast.position.y = MAST_TOP / 2 + 0.4; mast.castShadow = true;
+  canopy.add(mast);
+  // gold spiral collars on the mast
+  for (let i = 0; i < 5; i++) {
+    const c = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.05, 8, 24), goldMat);
+    c.rotation.x = Math.PI / 2; c.position.y = 0.9 + i * 0.95;
+    canopy.add(c);
+  }
 
-  const deckWidth = 1.9;
-  const deckDepth = 2.1;
-  const deckThickness = 0.12;
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(deckDepth, deckThickness, deckWidth), accessMat);
-  deck.position.set(discRadius + deckDepth * 0.5 - 0.1, 0.2 + deckThickness * 0.5, 0);
-  deck.castShadow = true;
-  deck.receiveShadow = true;
-  accessGroup.add(deck);
+  const CANOPY_GORES = 12;
+  const canopyR = 8.4, canopyH = 3.1, canopyBaseY = MAST_TOP + 0.4;
+  const dome = new THREE.Mesh(new THREE.ConeGeometry(canopyR, canopyH, CANOPY_GORES, 1, true), canopyMat);
+  dome.position.y = canopyBaseY + canopyH / 2;
+  dome.castShadow = false; // don't shade the deck black — the parasol fully covers it
+  canopy.add(dome);
+  // gold under-trim ring at the hem
+  const hemRing = new THREE.Mesh(new THREE.TorusGeometry(canopyR, 0.14, 10, CANOPY_GORES * 2), goldMat);
+  hemRing.rotation.x = Math.PI / 2; hemRing.position.y = canopyBaseY;
+  canopy.add(hemRing);
 
+  // Ribs along the 12 gore edges + a bulb and a hanging pennant at each hem point
+  const apex = new THREE.Vector3(0, canopyBaseY + canopyH, 0);
+  const pennants = [];
+  for (let i = 0; i < CANOPY_GORES; i++) {
+    const a = (i / CANOPY_GORES) * Math.PI * 2;
+    const hem = new THREE.Vector3(Math.cos(a) * canopyR, canopyBaseY, Math.sin(a) * canopyR);
+    // rib
+    const ribLen = apex.distanceTo(hem);
+    const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, ribLen, 8), goldMat);
+    rib.position.copy(apex.clone().add(hem).multiplyScalar(0.5));
+    rib.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hem.clone().sub(apex).normalize());
+    canopy.add(rib);
+    // small bulbs running up the rib + a larger one at the hem
+    for (const tt of [0.35, 0.6, 0.82]) {
+      const rb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), neon(0xfff1c0));
+      rb.position.copy(apex.clone().lerp(hem, tt));
+      canopy.add(rb);
+      canopyBulbs.push(rb);
+    }
+    const bulb = new THREE.Mesh(rimBulbGeo, neon(0xfff1c0));
+    bulb.position.copy(hem); bulb.position.y -= 0.05;
+    canopy.add(bulb);
+    canopyBulbs.push(bulb);
+    // hanging triangular pennant between this hem point and the next
+    const a2 = ((i + 1) / CANOPY_GORES) * Math.PI * 2;
+    const hem2 = new THREE.Vector3(Math.cos(a2) * canopyR, canopyBaseY, Math.sin(a2) * canopyR);
+    const mid = hem.clone().add(hem2).multiplyScalar(0.5);
+    const pennShape = new THREE.Shape();
+    const w = hem.distanceTo(hem2) * 0.5;
+    pennShape.moveTo(-w, 0); pennShape.lineTo(w, 0); pennShape.lineTo(0, -0.85); pennShape.lineTo(-w, 0);
+    const penn = new THREE.Mesh(new THREE.ShapeGeometry(pennShape),
+      new THREE.MeshStandardMaterial({ color: i % 2 ? 0x12c2ff : 0xffd54a, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.1 }));
+    penn.position.copy(mid); penn.position.y = canopyBaseY - 0.02;
+    penn.lookAt(0, canopyBaseY - 0.02, 0); // face outward
+    canopy.add(penn);
+    pennants.push(penn);
+  }
 
-  // 7. Seats & Passengers Setup
+  // Finial — chrome ball + glowing star on top of the canopy
+  const finialPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.0, 12), goldMat);
+  finialPost.position.y = apex.y + 0.4;
+  canopy.add(finialPost);
+  const finialBall = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), chromeMat);
+  finialBall.position.y = apex.y + 0.95;
+  canopy.add(finialBall);
+  const starMat = neon(0xffe27a); starMat.emissiveIntensity = 0.6;
+  const finialStar = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), starMat);
+  finialStar.position.y = apex.y + 1.7;
+  canopy.add(finialStar);
+
+  // Warm light under the canopy that switches on at night to glow the deck + riders.
+  const canopyLight = new THREE.PointLight(0xffd9a0, 0.0, 26, 2.0);
+  canopyLight.position.set(0, canopyBaseY - 0.6, 0);
+  canopy.add(canopyLight);
+
+  // String lights draped from the finial down to each hem bulb
+  const stringMat = neon(0xfff1c0);
+  for (let i = 0; i < CANOPY_GORES; i++) {
+    const a = (i / CANOPY_GORES) * Math.PI * 2;
+    const hem = new THREE.Vector3(Math.cos(a) * (canopyR + 0.05), canopyBaseY + 0.1, Math.sin(a) * (canopyR + 0.05));
+    const top = new THREE.Vector3(0, apex.y + 0.2, 0);
+    const len = top.distanceTo(hem);
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, len, 5), darkChromeMat);
+    wire.position.copy(top.clone().add(hem).multiplyScalar(0.5));
+    wire.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), hem.clone().sub(top).normalize());
+    canopy.add(wire);
+  }
+
+  // 8. ── Seats & Passengers ──────────────────────────────────────────────────
   const seats = [];
-  const seatRadius = discRadius - 1.1; // 5.9, prevents passenger clipping outward
+  const seatRadius = discRadius - 1.1;
   const currentHumanHeight = getPassengerWorldHeight();
-  
-  // Scale down riders slightly to 88% to prevent shoulders/hips clipping into armrests or seat backrests
   const riderHeight = currentHumanHeight * 0.88;
 
-  // Create 8 seat slots spaced around the disc
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
+    const seatColor = SEAT_COLORS[i % SEAT_COLORS.length];
+    const seatMat = new THREE.MeshStandardMaterial({ color: seatColor, roughness: 0.5, metalness: 0.15 });
 
     const seatGroup = new THREE.Group();
     seatGroup.name = `seat_group_${i}`;
-    // Placed exactly on the platform top surface (y = 0.2)
-    seatGroup.position.set(seatRadius * Math.cos(angle), 0.2, seatRadius * Math.sin(angle));
-    
-    // Rotate seat to face the center of the disc platform
-    seatGroup.lookAt(0, 0.2, 0);
+    seatGroup.position.set(seatRadius * Math.cos(angle), 0.225, seatRadius * Math.sin(angle));
+    seatGroup.lookAt(0, 0.225, 0);
     discMeshGroup.add(seatGroup);
 
-    // Build procedural Seat Mesh (Cushion + Backrest)
-    // Seat base height matches biological knee length of scaled human model (hips sit at 0.80 above floor)
     const seatSurfaceY = 0.80;
-    const baseHeight = 0.65; // floor to bottom of cushion
+    const baseHeight = 0.65;
 
-    // Cushion: Box (width 1.2, height 0.15, depth 0.6) centered at 0.725
-    const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.15, 0.6), seatMat);
-    cushion.position.set(0, 0.725, 0);
-    cushion.castShadow = true;
-    cushion.receiveShadow = true;
+    // Bucket-style cushion (slightly rounded via bevel box proxy)
+    const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.18, 0.66), seatMat);
+    cushion.position.set(0, 0.72, 0); cushion.castShadow = true; cushion.receiveShadow = true;
     seatGroup.add(cushion);
 
-    // Seat back: Box (width 1.2, height 0.85, depth 0.15) at the back (-Z in seatGroup space)
-    const seatBack = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.85, 0.15), seatMat);
-    seatBack.position.set(0, seatSurfaceY + 0.425, -0.3);
-    seatBack.castShadow = true;
+    // Tall contoured backrest with a chrome top trim
+    const seatBack = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.95, 0.16), seatMat);
+    seatBack.position.set(0, seatSurfaceY + 0.5, -0.32); seatBack.castShadow = true;
     seatGroup.add(seatBack);
+    const backTrim = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.1, 0.2), chromeMat);
+    backTrim.position.set(0, seatSurfaceY + 0.98, -0.32);
+    seatGroup.add(backTrim);
 
-    // Dark frame base supporting the seat from the platform floor to the cushion base
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.22, baseHeight, 0.62), seatFrameMat);
-    frame.position.set(0, baseHeight / 2, 0);
+    // Dark frame pod
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.3, baseHeight, 0.7), seatFrameMat);
+    frame.position.set(0, baseHeight / 2, 0); frame.castShadow = true;
     seatGroup.add(frame);
 
-    // Seat divider side handles
-    const armrestGeo = new THREE.BoxGeometry(0.08, 0.5, 0.5);
-    for (let side of [-1, 1]) {
-      const armrest = new THREE.Mesh(armrestGeo, railMat);
-      armrest.position.set(side * 0.6, seatSurfaceY + 0.25, -0.05);
-      armrest.castShadow = true;
+    // Chrome side pods + a curved grab bar in front
+    const armrestGeo = new THREE.BoxGeometry(0.1, 0.5, 0.6);
+    for (const side of [-1, 1]) {
+      const armrest = new THREE.Mesh(armrestGeo, chromeMat);
+      armrest.position.set(side * 0.64, seatSurfaceY + 0.22, -0.02); armrest.castShadow = true;
       seatGroup.add(armrest);
     }
+    const grab = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 8, 16, Math.PI), chromeMat);
+    grab.rotation.x = Math.PI / 2; grab.rotation.z = Math.PI;
+    grab.position.set(0, seatSurfaceY + 0.28, 0.34);
+    seatGroup.add(grab);
 
-    // Add Passenger
+    // Add Passenger (seating logic unchanged — it is calibrated to the cushion height)
     let rider = null;
     if (visitors && visitors.length > 0) {
       const template = visitors[i % visitors.length];
-      rider = makeRider(template, riderHeight, {
-        pool: TAGADA_ACTIONS,
-        facingY: 0, // Faces forward (+Z) in local seatGroup space
-        phase: i * 1.3
-      });
+      rider = makeRider(template, riderHeight, { pool: TAGADA_ACTIONS, facingY: 0, phase: i * 1.3 });
 
-      // Update matrices to lock skeletal elements
       rider.fig.updateMatrixWorld(true);
-
       const hipBone = rider.fig.getObjectByName('Hips');
-      const seatSurfaceY = 0.80; // top of seat cushion
-      const targetZ = 0.08;      // slightly forward from backrest (backrest is at -0.3)
+      const targetZ = 0.08;
       const scale = riderHeight / template.height;
 
       if (hipBone) {
         const localHip = new THREE.Vector3();
         hipBone.getWorldPosition(localHip);
         rider.fig.worldToLocal(localHip);
-        
         const scaledHip = localHip.clone().multiplyScalar(scale);
-        
-        // Pivot position + scaledHip = (0.0, seatSurfaceY, targetZ)
         rider.pivot.position.set(0.0 - scaledHip.x, seatSurfaceY - scaledHip.y, targetZ - scaledHip.z);
       } else {
-        // Fallback if Hips bone is not found
-        const riderY = seatSurfaceY - riderHeight * 0.28;
-        rider.pivot.position.set(0.0, riderY, targetZ);
+        rider.pivot.position.set(0.0, seatSurfaceY - riderHeight * 0.28, targetZ);
       }
 
       rider.restX = rider.pivot.position.x;
       rider.restY = rider.pivot.position.y;
       rider.restZ = rider.pivot.position.z;
-
       seatGroup.add(rider.pivot);
     }
 
-    seats.push({
-      group: seatGroup,
-      rider: rider
-    });
+    seats.push({ group: seatGroup, rider });
   }
 
-  // 8. Emissive Blinking Bulbs for night lighting
-  const bulbs = [];
-  const bulbGeo = new THREE.SphereGeometry(0.1, 8, 8);
-  const bulbColors = [0xff00ff, 0x00ffff, 0xffff00, 0xff3300, 0x33ff00];
-
-  const bulbCount = 16;
-  for (let i = 0; i < bulbCount; i++) {
-    const angle = (i / bulbCount) * Math.PI * 2;
-    const color = bulbColors[i % bulbColors.length];
-
-    const bulbMat = new THREE.MeshStandardMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 0.0, // off by day
-      roughness: 0.1
-    });
-
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-    // Positioned on the chrome outer rim just below handrail height
-    bulb.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
-    discMeshGroup.add(bulb);
-    bulbs.push(bulb);
-  }
-
-  // 9. Control Panel (semaphore + lever)
+  // 9. ── Control Panel ────────────────────────────────────────────────────────
   const controlPanel = new ControlPanel({ initialRunning: true });
-  // Place control panel next to the Tagada pedestal base (Northeast relative to the ride position)
-  controlPanel.group.position.set(11, 0, -11);
+  controlPanel.group.position.set(12, 0, -12);
   group.add(controlPanel.group);
   group.updateMatrixWorld(true);
-  controlPanel.group.lookAt(position[0], position[1], position[2]); // Face the ride center horizontally
-  controlPanel.group.rotateY(Math.PI); // Orient panel outward to face approach path
+  controlPanel.group.lookAt(position[0], position[1], position[2]);
+  controlPanel.group.rotateY(Math.PI);
 
-  // 10. Controller object
+  // 10. ── Controller ──────────────────────────────────────────────────────────
   const controller = {
-    armPivot,
-    discMeshGroup,
+    armPivot, discMeshGroup,
     panel: controlPanel.group,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
-    spinAngle: 0,
-    pitchAngle: 0,
-    rollAngle: 0,
-    bumpAngle: 0,
-    armYawAngle: 0,
+    spinAngle: 0, pitchAngle: 0, rollAngle: 0, bumpAngle: 0, armYawAngle: 0,
+    nightMix: 0,
     maxSpeed: MAX_SPIN_SPEED,
     toggle() { controlPanel.toggle(); },
     start() { controlPanel.running = true; },
@@ -477,22 +568,17 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   };
 
   group.userData.tick = (delta, time) => {
-    // Tick the control panel state machine (handles RAMP_UP / RAMP_DOWN transition)
     const ease = controlPanel.tick(delta);
 
-    // Accumulate angles scaled by ease and delta for glitch-free smooth stop/deceleration
     controller.spinAngle += controller.maxSpeed * ease * delta;
     controller.pitchAngle += PITCH_FREQ * ease * delta;
     controller.rollAngle += ROLL_FREQ * ease * delta;
     controller.bumpAngle += BUMP_FREQ * ease * delta;
     controller.armYawAngle += ARM_YAW_SPEED * ease * delta;
-
     const idleEase = 1 - ease;
 
-    // 1. Disc Rotation
     discMeshGroup.rotation.y = controller.spinAngle;
 
-    // 2. Compound Mechanical Arm Oscillation (Yaw, Pitch, Roll)
     armPivot.rotation.y = controller.armYawAngle;
     armPivot.rotation.x = (BASE_PITCH + PITCH_AMP * Math.sin(controller.pitchAngle)) * ease;
     armPivot.rotation.z = ROLL_AMP * Math.sin(controller.rollAngle) * ease;
@@ -502,127 +588,96 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     mainArm.scale.set(1, armScale, 1);
     mainArm.position.y = targetArmLength / 2;
     discPivot.position.y = targetArmLength;
-    pistonCylinders.forEach((cyl) => {
-      cyl.scale.set(1, armScale, 1);
-      cyl.position.y = (armLength * 0.4) * armScale;
-    });
+    pistonCylinders.forEach((cyl) => { cyl.scale.set(1, armScale, 1); cyl.position.y = (armLength * 0.4) * armScale; });
+    armStrips.forEach((s) => { s.scale.set(1, armScale, 1); s.position.y = (armLength * 0.5) * armScale; });
 
-    // 3. Platform Shaking/Bumping effect directly on discPivot
     discPivot.rotation.x = Math.sin(controller.bumpAngle) * BUMP_AMP * ease;
     discPivot.rotation.z = Math.cos(controller.bumpAngle * 0.9) * (BUMP_AMP * 0.5) * ease;
 
-    // 3. Update Passenger poses and add dynamic shaking/jitter
+    // Passenger poses (unchanged behaviour)
     for (let i = 0; i < seats.length; i++) {
       const s = seats[i];
-      if (s.rider) {
-        updateRider(s.rider, time + s.rider.phase);
+      if (!s.rider) continue;
+      updateRider(s.rider, time + s.rider.phase);
+      const B = s.rider.bones;
+      applyChairSeatedLegs(B, s.rider.scale);
 
-        const B = s.rider.bones;
-
-        // --- LEG OVERRIDE (flat Tagada bench seat) ---
-        applyChairSeatedLegs(B, s.rider.scale);
-
-        // --- ARM OVERRIDE: raised hands when riding ---
-        // Only arm override at higher ease to preserve idle animations when stopped
-        const t = time + i * 1.3;
-        const variant = i % 4;
-
-        const arm = (name, dx, dy, dz) => {
-          const e = B[name];
-          if (!e) return;
-          pose(B, name, dx * ease, dy * ease, dz * ease);
-        };
-
-        if (ease >= 0.02) {
+      const t = time + i * 1.3;
+      const variant = i % 4;
+      const arm = (name, dx, dy, dz) => { if (B[name]) pose(B, name, dx * ease, dy * ease, dz * ease); };
+      if (ease >= 0.02) {
         if (variant === 0 || variant === 3) {
-          // Both arms up cheering
           const pump = Math.sin(t * 4.0) * 0.12;
-          arm('UpperArmR', 0.2 + pump, 2.2, -0.2);
-          arm('UpperArmL', -0.2 - pump, -2.2, 0.2);
-          arm('LowerArmR', 0.8, 0, 0);
-          arm('LowerArmL', 0.8, 0, 0);
+          arm('UpperArmR', 0.2 + pump, 2.2, -0.2); arm('UpperArmL', -0.2 - pump, -2.2, 0.2);
+          arm('LowerArmR', 0.8, 0, 0); arm('LowerArmL', 0.8, 0, 0);
         } else if (variant === 1) {
-          // Right arm wave, left holds rail
-          arm('UpperArmR', 0.2, 1.9, -0.2);
-          arm('LowerArmR', 1.1, Math.sin(t * 8) * 0.35, Math.sin(t * 8) * 0.35);
-          arm('UpperArmL', 0.5, -0.3, 0);
-          arm('LowerArmL', 0.8, 0, 0);
+          arm('UpperArmR', 0.2, 1.9, -0.2); arm('LowerArmR', 1.1, Math.sin(t * 8) * 0.35, Math.sin(t * 8) * 0.35);
+          arm('UpperArmL', 0.5, -0.3, 0); arm('LowerArmL', 0.8, 0, 0);
         } else {
-          // One arm up pointing, other relaxed
-          arm('UpperArmR', 0.1, 1.5 + Math.sin(t * 2.5) * 0.1, 0);
-          arm('LowerArmR', 0.3, 0, 0);
-          arm('UpperArmL', 0.5 + Math.sin(t * 2) * 0.06, -0.4, 0);
-          arm('LowerArmL', 0.7, 0, 0);
+          arm('UpperArmR', 0.1, 1.5 + Math.sin(t * 2.5) * 0.1, 0); arm('LowerArmR', 0.3, 0, 0);
+          arm('UpperArmL', 0.5 + Math.sin(t * 2) * 0.06, -0.4, 0); arm('LowerArmL', 0.7, 0, 0);
         }
-
-        } // end arm override
-
-        // Subtle torso lean-back and sway as ride intensifies
-        if (B.Torso) {
-          const tb = B.Torso.bone;
-          tb.rotation.x += -0.15 * ease;
-          tb.rotation.z += Math.sin(t * 1.5) * 0.05 * ease;
-        }
-
-        // Head tilts up and sways with excitement
-        if (B.Head) {
-          const hb = B.Head.bone;
-          hb.rotation.x += -0.15 * ease;
-          hb.rotation.y += Math.sin(t * 2.0) * 0.08 * ease;
-        }
-
-        // Tagada specific passenger vibration/shaking when running
-        const jitterX = Math.sin(time * JITTER_FREQ + i * 2.1) * JITTER_AMP * ease;
-        const jitterY = Math.cos(time * (JITTER_FREQ * 0.9) + i * 1.5) * JITTER_AMP * ease;
-        const jitterZ = Math.sin(time * (JITTER_FREQ * 1.1) + i * 0.7) * JITTER_AMP * ease;
-        
-        // Hips offset + dynamic jitter
-        s.rider.pivot.position.set(
-          s.rider.restX + jitterX,
-          s.rider.restY + jitterY,
-          s.rider.restZ + jitterZ
-        );
-
-        // Quick tilt/jolt rotation on the passenger pivot during bumps
-        s.rider.pivot.rotation.x = Math.sin(time * JITTER_FREQ * 0.8 + i) * 0.07 * ease;
-        s.rider.pivot.rotation.z = Math.cos(time * JITTER_FREQ * 0.8 + i * 1.4) * 0.07 * ease;
       }
+      if (B.Torso) { const tb = B.Torso.bone; tb.rotation.x += -0.15 * ease; tb.rotation.z += Math.sin(t * 1.5) * 0.05 * ease; }
+      if (B.Head) { const hb = B.Head.bone; hb.rotation.x += -0.15 * ease; hb.rotation.y += Math.sin(t * 2.0) * 0.08 * ease; }
+
+      const jitterX = Math.sin(time * JITTER_FREQ + i * 2.1) * JITTER_AMP * ease;
+      const jitterY = Math.cos(time * (JITTER_FREQ * 0.9) + i * 1.5) * JITTER_AMP * ease;
+      const jitterZ = Math.sin(time * (JITTER_FREQ * 1.1) + i * 0.7) * JITTER_AMP * ease;
+      s.rider.pivot.position.set(s.rider.restX + jitterX, s.rider.restY + jitterY, s.rider.restZ + jitterZ);
+      s.rider.pivot.rotation.x = Math.sin(time * JITTER_FREQ * 0.8 + i) * 0.07 * ease;
+      s.rider.pivot.rotation.z = Math.cos(time * JITTER_FREQ * 0.8 + i * 1.4) * 0.07 * ease;
     }
 
-    // 4. Emissive lights update
+    // ── Light show: smooth day↔night, with chase / pulse patterns ─────────────
     const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
     const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
+    const nf = controller.nightMix;
 
-    if (isNight) {
-      bulbs.forEach((b, idx) => {
-        // Night bulbs pulse with offset sine waves
-        const pulse = Math.sin(time * 6.0 + idx * 0.5) * 0.5 + 0.5;
-        b.material.emissiveIntensity = 1.2 + pulse * 2.0;
-      });
-    } else {
-      bulbs.forEach((b) => {
-        b.material.emissiveIntensity = 0.0;
-      });
+    // Canopy hem bulbs — rotating chase
+    for (let i = 0; i < canopyBulbs.length; i++) {
+      const chase = 0.5 + 0.5 * Math.sin(time * 7.0 - i * (Math.PI * 2 / canopyBulbs.length) * 3);
+      canopyBulbs[i].material.emissiveIntensity = 0.18 + nf * (0.4 + chase * 2.4);
     }
+    // Rim + crown bulbs — alternating twinkle
+    for (let i = 0; i < rimBulbs.length; i++) {
+      const on = (Math.floor(time * 5) + i) % 2 === 0 ? 1 : 0;
+      rimBulbs[i].material.emissiveIntensity = 0.12 + nf * (on ? 2.6 : 0.25);
+    }
+    // LED rings + gem — smooth colour pulse
+    for (let i = 0; i < ledRings.length; i++) {
+      const pulse = 0.5 + 0.5 * Math.sin(time * 2.4 + i * 1.3);
+      ledRings[i].material.emissiveIntensity = 0.25 + nf * (0.9 + pulse * 1.9);
+    }
+    // Base arched panels — slow breathing glow
+    for (let i = 0; i < basePanels.length; i++) {
+      const breathe = 0.5 + 0.5 * Math.sin(time * 1.4 + i * 0.4);
+      basePanels[i].material.emissiveIntensity = 0.12 + nf * (0.5 + breathe * 1.3);
+    }
+    // Arm strips
+    for (const s of armStrips) s.material.emissiveIntensity = 0.2 + nf * 1.6;
+    // Canopy fabric glows softly at night; warm under-light fades in
+    canopyMat.emissiveIntensity = nf * 0.5;
+    canopyLight.intensity = nf * 1.6;
+    // Finial star — always sparkles, spins gently
+    starMat.emissiveIntensity = 0.5 + nf * 2.2 + Math.sin(time * 5) * 0.2;
+    finialStar.rotation.y += delta * 0.7;
+    gem.rotation.y += delta * 1.1;
   };
 
-  // 11. Raycast Click-to-Toggle Handler on the Control Panel
+  // 11. ── Raycast Click-to-Toggle on the Control Panel ────────────────────────
   if (camera && renderer) {
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
     const dom = renderer.domElement;
-
     const pick = (ev) => {
       const r = dom.getBoundingClientRect();
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       return ray.intersectObject(controlPanel.group, true).length > 0;
     };
-
-    dom.addEventListener('pointerdown', (ev) => {
-      if (pick(ev)) controller.toggle();
-    });
-
+    dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
     dom.addEventListener('pointermove', (ev) => {
       if (pick(ev)) dom.style.cursor = 'pointer';
       else if (dom.style.cursor === 'pointer') dom.style.cursor = '';

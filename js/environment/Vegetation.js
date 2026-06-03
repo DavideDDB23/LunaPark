@@ -68,7 +68,7 @@ async function loadAll(names) {
   return out;
 }
 
-function inExclusionZone(x, z, blockLamps) {
+function inExclusionZone(x, z, blockLamps, coasterFP) {
   // Paths (North-South corridor)
   if (Math.abs(x) < 5) return true;
 
@@ -96,10 +96,17 @@ function inExclusionZone(x, z, blockLamps) {
     if (Math.hypot(x - rx, z - rz) < rRad) return true;
   }
 
-  // Roller Coaster (SE) — rectangular footprint ~57×64 centered at [48,50] (measured from the
-  // built ride bbox) plus a small margin. Tightly matched so no trees land on the structure and
-  // no large tree-free void is left where there is nothing.
-  if (x > 16 && x < 80 && z > 15 && z < 85) return true;
+  // Roller Coaster (SE) — keep trees clear of the ACTUAL track footprint (centre-line projected
+  // to world XZ, supplied by the coaster build). This bans trees only near the rails/supports, so
+  // trees still fill the loop's open interior and the corners — no whole-quadrant rectangle.
+  if (coasterFP) {
+    const pad2 = coasterFP.pad * coasterFP.pad;
+    const a = coasterFP.pts;
+    for (let i = 0; i < a.length; i += 2) {
+      const dx = x - a[i], dz = z - a[i + 1];
+      if (dx * dx + dz * dz < pad2) return true;
+    }
+  }
 
   // Food stalls (Kiosks)
   for (const [bx, bz] of BOOTHS) {
@@ -115,7 +122,7 @@ function inExclusionZone(x, z, blockLamps) {
   return false;
 }
 
-export async function buildVegetation() {
+export async function buildVegetation({ coasterFootprint = null } = {}) {
   const group = new THREE.Group();
   group.name = 'vegetation';
 
@@ -150,7 +157,7 @@ export async function buildVegetation() {
       attempts++;
       const x = (random() - 0.5) * 190;
       const z = (random() - 0.5) * 190;
-      if (inExclusionZone(x, z, blockLamps)) continue;
+      if (inExclusionZone(x, z, blockLamps, coasterFootprint)) continue;
       if (minSpacing > 0 && tooCloseToTree(x, z, minSpacing)) continue;
       const source = list[Math.floor(random() * list.length)];
       if (!source) continue;
