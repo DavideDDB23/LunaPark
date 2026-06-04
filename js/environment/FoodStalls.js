@@ -5,7 +5,6 @@ const STALL_URL = 'assets/models/stylized_carnival_booth.glb';
 
 const PLACEMENTS = [
   // Hub area stalls — kept clear of river band (|z|<15) and NS path (|x|<5).
-  ['stall_1',  14, -22, -Math.PI * 0.75], // NE quadrant
   ['stall_2', -14,  22,  Math.PI * 0.25], // SW quadrant
 ];
 

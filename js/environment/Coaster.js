@@ -41,7 +41,7 @@ const Y_STRETCH = 2.1;       // vertical exaggeration of the track. Taller loops
 const NUM_TRAINS = 2;        // trains running simultaneously on the circuit
 const CARS_PER_TRAIN = 4;    // carriages per train (each carriage animated independently)
 const NUM_CARS = NUM_TRAINS * CARS_PER_TRAIN; // 8 total
-const CAR_GAP = 1.0;         // centre-to-centre spacing in car-lengths (1 = nose-to-tail touching)
+const CAR_GAP = 1.02;        // gap between carriages, in car-lengths (1 = touching)
 const TRAIN_SPACING = 1.0 / NUM_TRAINS; // 0.5 — second train half a circuit ahead
 const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at park scale
 
@@ -523,6 +523,17 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       }
     }
   };
+
+  // ── Hide the GLB's built-in operator-booth sign ──
+  // The ride's name marquee is now a shared, free-standing RideSign (see js/environment/RideSign.js,
+  // placed in main.js). Keeping it out of `model` avoids the coaster's non-uniform Y_STRETCH that
+  // would otherwise distort it. Here we just hide the model's default panel art.
+  const oldSign = model.getObjectByName('panel_1001');
+  if (oldSign) {
+    oldSign.children.forEach((child) => {
+      child.visible = false;
+    });
+  }
 
   // ── Click-to-toggle via raycasting on the panel ──
   if (camera && renderer) {

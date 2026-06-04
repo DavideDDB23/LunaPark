@@ -68,7 +68,14 @@ async function loadAll(names) {
   return out;
 }
 
-function inExclusionZone(x, z, blockLamps, coasterFP) {
+function inExclusionZone(x, z, blockLamps, coasterFP, signKeepOut) {
+  // Ride frontages (name marquees + control panels) — keep trees clear so they read from the path.
+  if (signKeepOut) {
+    for (const [sx, sz, sr] of signKeepOut) {
+      if (Math.hypot(x - sx, z - sz) < sr) return true;
+    }
+  }
+
   // Paths (North-South corridor)
   if (Math.abs(x) < 5) return true;
 
@@ -122,7 +129,7 @@ function inExclusionZone(x, z, blockLamps, coasterFP) {
   return false;
 }
 
-export async function buildVegetation({ coasterFootprint = null } = {}) {
+export async function buildVegetation({ coasterFootprint = null, signKeepOut = null } = {}) {
   const group = new THREE.Group();
   group.name = 'vegetation';
 
@@ -157,7 +164,7 @@ export async function buildVegetation({ coasterFootprint = null } = {}) {
       attempts++;
       const x = (random() - 0.5) * 190;
       const z = (random() - 0.5) * 190;
-      if (inExclusionZone(x, z, blockLamps, coasterFootprint)) continue;
+      if (inExclusionZone(x, z, blockLamps, coasterFootprint, signKeepOut)) continue;
       if (minSpacing > 0 && tooCloseToTree(x, z, minSpacing)) continue;
       const source = list[Math.floor(random() * list.length)];
       if (!source) continue;

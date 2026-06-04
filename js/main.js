@@ -16,6 +16,7 @@ import { buildFerrisWheel } from "./environment/FerrisWheel.js";
 import { buildCarousel } from "./environment/Carousel.js";
 import { buildTagada } from "./environment/Tagada.js";
 import { buildCoaster } from "./environment/Coaster.js";
+import { buildRideSign } from "./environment/RideSign.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 
 const canvas = document.getElementById('c');
@@ -66,6 +67,7 @@ if (windInput && windValEl) {
 }
 
 let dayNight = null;
+let rideSigns = [];
 
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
@@ -96,7 +98,31 @@ async function init() {
   environmentGroup.add(coaster);
   window.__lp.coaster = coaster.userData.controller;
 
-  console.log("buildVegetation"); const vegetation = await buildVegetation({ coasterFootprint: coaster.userData.footprint });
+  // ── Ride frontage anchors (name marquee + on/off control panel), declared UP-FRONT so vegetation
+  //    keeps clear of them. Both face the central pedestrian path (x=0 corridor) and the entrance
+  //    gate (south, +z). The ControlPanel console and the sign board both face +Z, so one yaw aims
+  //    them at the walkway; SOUTH_BIAS angles that aim toward the entrance for arriving visitors.
+  const SOUTH_BIAS = 25;
+  const faceYaw = (x) => Math.atan2(-x, SOUTH_BIAS); // +Z → toward x=0 (path) and +z (entrance)
+  const FRONTAGES = [
+    { title: 'TANGLED TWISTER', theme: 'coaster',  groupName: 'coaster',     sign: [15, 0, 44],   panel: [9, 0, 50] },
+    { title: 'SKY WHEEL',       theme: 'ferris',    groupName: 'ferrisWheel', sign: [-26, 0, -38], panel: [-18, 0, -32] },
+    { title: 'GOLDEN CAROUSEL', theme: 'carousel',  groupName: 'carousel',    sign: [22, 0, -26],  panel: [15, 0, -20] },
+    { title: 'TURBO TAGADA',    theme: 'tagada',    groupName: 'tagada',      sign: [-22, 0, 28],  panel: [-15, 0, 34] },
+  ];
+  // Tree keep-out [x, z, radius] for each frontage so the signs/panels stay visible from the path:
+  // a circle at the sign, another IN FRONT of it (along its facing dir, toward the path), + the panel.
+  const signKeepOut = [];
+  for (const f of FRONTAGES) {
+    const yaw = faceYaw(f.sign[0]);
+    const fx = Math.sin(yaw), fz = Math.cos(yaw); // unit vector the sign faces (toward the path)
+    signKeepOut.push([f.sign[0], f.sign[2], 10.0]);
+    signKeepOut.push([f.sign[0] + fx * 9, f.sign[2] + fz * 9, 8.0]);
+    signKeepOut.push([f.panel[0], f.panel[2], 4.5]);
+  }
+
+  console.log("buildVegetation");
+  const vegetation = await buildVegetation({ coasterFootprint: coaster.userData.footprint, signKeepOut });
   environmentGroup.add(vegetation);
 
   console.log("buildBenches"); const benches = await buildBenches();
@@ -120,6 +146,30 @@ async function init() {
   const tagada = await buildTagada({ position: [-40, 0, 40], camera, renderer, anisotropy: maxAniso });
   environmentGroup.add(tagada);
   window.__lp.tagada = tagada.userData.controller;
+
+  // ── Place each ride's frontage: build the name marquee and move the ride's on/off control panel
+  //    to it, both facing the path/entrance (see FRONTAGES above). ──
+  console.log("buildRideFrontages");
+  rideSigns = FRONTAGES.map(({ title, theme, groupName, sign, panel }) => {
+    const group = environmentGroup.getObjectByName(groupName);
+
+    // Name marquee
+    const s = buildRideSign({ title, theme, anisotropy: maxAniso });
+    s.position.set(sign[0], sign[1], sign[2]);
+    s.rotation.y = faceYaw(sign[0]);
+    environmentGroup.add(s);
+
+    // Move the ride's existing on/off control panel to the frontage, same facing. The panel is a
+    // child of the (translation-only) ride group, so local = world − groupPosition.
+    const ctrl = group && group.userData.controller;
+    if (ctrl && ctrl.panel) {
+      const gp = group.position;
+      ctrl.panel.position.set(panel[0] - gp.x, -gp.y, panel[2] - gp.z);
+      ctrl.panel.rotation.set(0, faceYaw(panel[0]), 0);
+    }
+    return s;
+  });
+  window.__lp.rideSigns = rideSigns;
 
   // Day/night controller — slider in HUD drives this.
   dayNight = new DayNightCycle({
@@ -199,6 +249,10 @@ function animate() {
 
   const coaster = environmentGroup.getObjectByName('coaster');
   if (coaster && coaster.userData.tick) coaster.userData.tick(delta, time);
+
+  for (const sign of rideSigns) {
+    if (sign.userData.tick) sign.userData.tick(time, delta);
+  }
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
