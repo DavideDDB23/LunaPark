@@ -256,6 +256,55 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   const radiusFinal = Math.max(size.x, size.y) / 2;
 
+  // ── Night bulb kit ───────────────────────────────────────────────────────────────────────────
+  // Emissive rim + spoke bulbs that SPIN with the wheel — the classic "wheel outlined in lights".
+  // They live on a unit-scale rig in group space (so bulb sizes are world-accurate, decoupled from
+  // the GLB's internal scale) that we rotate at the wheel's angular speed. This complements the
+  // coloured ridePointLights above (which add real glow on the structure + ground).
+  model.updateMatrixWorld(true);
+  const hubW = wheelNode.getWorldPosition(new THREE.Vector3());
+  const axisW = new THREE.Vector3(0, 0, 1)
+    .applyQuaternion(wheelNode.getWorldQuaternion(new THREE.Quaternion())).normalize();
+  let rimR = 0;
+  for (const gm of gondolaMounts) rimR += hubW.distanceTo(gm.mount.getWorldPosition(new THREE.Vector3()));
+  rimR /= gondolaMounts.length;
+
+  const bulbHub = new THREE.Group();
+  bulbHub.name = 'ferris_bulbHub';
+  bulbHub.position.copy(group.worldToLocal(hubW.clone()));
+  bulbHub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axisW);
+  group.add(bulbHub);
+  const bulbSpin = new THREE.Group();
+  bulbHub.add(bulbSpin);
+
+  const ferrisRimBulbs = [];
+  const ferrisSpokeBulbs = [];
+  const SPOKE_COLORS = [0xff4d6d, 0x4dd2ff, 0xffe27a, 0x8aff7a, 0xc77dff];
+  const mkBulb = (color, geo) => new THREE.Mesh(geo,
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0, roughness: 0.3 }));
+  const rimGeo = new THREE.SphereGeometry(0.28, 10, 8);
+  for (const rr of [rimR + 0.6, rimR - 0.6]) {
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const b = mkBulb(0xfff1c0, rimGeo);
+      b.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0.1);
+      bulbSpin.add(b); ferrisRimBulbs.push(b);
+    }
+  }
+  const spokeGeo = new THREE.SphereGeometry(0.22, 8, 8);
+  for (let s = 0; s < gondolaMounts.length; s++) {
+    const a = (s / gondolaMounts.length) * Math.PI * 2;
+    for (let k = 1; k <= 6; k++) {
+      const r = rimR * (k / 7);
+      const b = mkBulb(SPOKE_COLORS[s % SPOKE_COLORS.length], spokeGeo);
+      b.position.set(Math.cos(a) * r, Math.sin(a) * r, 0.05);
+      bulbSpin.add(b); ferrisSpokeBulbs.push(b);
+    }
+  }
+  const ferrisBeaconMat = new THREE.MeshStandardMaterial({ color: 0xffe27a, emissive: 0xffe27a, emissiveIntensity: 0, roughness: 0.25 });
+  const ferrisBeacon = new THREE.Mesh(new THREE.SphereGeometry(1.0, 18, 14), ferrisBeaconMat);
+  bulbSpin.add(ferrisBeacon);
+
   // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
   const controlPanel = new ControlPanel({ initialRunning: true });
   controlPanel.group.position.set(radiusFinal * 0.36, 0, radiusFinal * 0.61);
@@ -277,6 +326,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     set phase(v) { controlPanel.phase = v; },
     angle: 0,
     maxSpeed: MAX_SPEED,
+    nightMix: 0,
     toggle() { controlPanel.toggle(); },
     start() { controlPanel.running = true; },
     stop() { controlPanel.running = false; },
@@ -320,6 +370,20 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     } else {
       ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
+
+    // ── Spinning bulb rig — wheel outlined in lights, chasing rim + pulsing spokes ──
+    bulbSpin.rotation.z = controller.angle;
+    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
+    const nf = controller.nightMix;
+    for (let i = 0; i < ferrisRimBulbs.length; i++) {
+      const chase = 0.5 + 0.5 * Math.sin(time * 5.0 - i * 0.4);
+      ferrisRimBulbs[i].material.emissiveIntensity = nf * (0.5 + chase * 2.6);
+    }
+    for (let i = 0; i < ferrisSpokeBulbs.length; i++) {
+      const pulse = 0.5 + 0.5 * Math.sin(time * 3.0 + i * 0.5);
+      ferrisSpokeBulbs[i].material.emissiveIntensity = nf * (0.7 + pulse * 1.8);
+    }
+    ferrisBeaconMat.emissiveIntensity = nf * (1.6 + Math.sin(time * 4) * 0.6);
   };
 
   group.userData.controller = controller;

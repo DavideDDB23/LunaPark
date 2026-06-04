@@ -465,11 +465,42 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     canopy.add(wire);
   }
 
+  // Festoon swags — drooping strings of coloured bulbs looping between each hem point.
+  const festoonBulbs = [];
+  const festoonColors = [0xff4d6d, 0x4dd2ff, 0xffe27a, 0x8aff7a, 0xc77dff];
+  const festoonBulbGeo = new THREE.SphereGeometry(0.12, 8, 8);
+  const festoonWireMat = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7, metalness: 0.3 });
+  for (let i = 0; i < CANOPY_GORES; i++) {
+    const a1 = (i / CANOPY_GORES) * Math.PI * 2;
+    const a2 = ((i + 1) / CANOPY_GORES) * Math.PI * 2;
+    const hemA = new THREE.Vector3(Math.cos(a1) * (canopyR + 0.12), canopyBaseY - 0.08, Math.sin(a1) * (canopyR + 0.12));
+    const hemB = new THREE.Vector3(Math.cos(a2) * (canopyR + 0.12), canopyBaseY - 0.08, Math.sin(a2) * (canopyR + 0.12));
+    const segs = 6, sag = 1.35;
+    const pts = [];
+    for (let k = 0; k <= segs; k++) {
+      const t = k / segs;
+      const p = new THREE.Vector3().lerpVectors(hemA, hemB, t);
+      p.y -= Math.sin(Math.PI * t) * sag; // parabolic droop
+      pts.push(p);
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, segs * 2, 0.022, 5, false), festoonWireMat);
+    canopy.add(wire);
+    for (let k = 1; k < segs; k++) {
+      const b = new THREE.Mesh(festoonBulbGeo, neon(festoonColors[(i + k) % festoonColors.length]));
+      b.position.copy(pts[k]);
+      canopy.add(b);
+      festoonBulbs.push(b);
+    }
+  }
+
   // 8. ── Seats & Passengers ──────────────────────────────────────────────────
   const seats = [];
   const seatRadius = discRadius - 1.1;
   const currentHumanHeight = getPassengerWorldHeight();
   const riderHeight = currentHumanHeight * 0.88;
+  const seatLeds = []; // glowing seat-edge strips, animated + recolourable at night
+  const seatShellMat = new THREE.MeshStandardMaterial({ color: 0x20242c, roughness: 0.42, metalness: 0.35 });
 
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
@@ -485,35 +516,87 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const seatSurfaceY = 0.80;
     const baseHeight = 0.65;
 
-    // Bucket-style cushion (slightly rounded via bevel box proxy)
-    const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.18, 0.66), seatMat);
-    cushion.position.set(0, 0.72, 0); cushion.castShadow = true; cushion.receiveShadow = true;
+    // ── Sculpted bucket seat (fibreglass shell + padding + restraint) ──
+    // Wrap-around fibreglass shell: a half-open cylinder hugging the back & sides, open at +Z (front).
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.74, 0.62, 1.55, 24, 1, true, Math.PI * 0.75, Math.PI * 1.5),
+      seatShellMat
+    );
+    shell.position.set(0, seatSurfaceY + 0.46, -0.06);
+    shell.castShadow = true; shell.receiveShadow = true;
+    seatGroup.add(shell);
+
+    // Padded seat pan + contoured back pad + headrest (the ride's jewel-tone colour)
+    const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.22, 0.72), seatMat);
+    cushion.position.set(0, 0.74, 0.04); cushion.castShadow = true; cushion.receiveShadow = true;
     seatGroup.add(cushion);
+    const backPad = new THREE.Mesh(new THREE.BoxGeometry(0.96, 1.02, 0.16), seatMat);
+    backPad.position.set(0, seatSurfaceY + 0.55, -0.34); backPad.castShadow = true;
+    seatGroup.add(backPad);
+    const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.36, 0.22), seatMat);
+    headrest.position.set(0, seatSurfaceY + 1.2, -0.32); headrest.castShadow = true;
+    seatGroup.add(headrest);
+    const headTrim = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.26), chromeMat);
+    headTrim.position.set(0, seatSurfaceY + 1.39, -0.32);
+    seatGroup.add(headTrim);
 
-    // Tall contoured backrest with a chrome top trim
-    const seatBack = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.95, 0.16), seatMat);
-    seatBack.position.set(0, seatSurfaceY + 0.5, -0.32); seatBack.castShadow = true;
-    seatGroup.add(seatBack);
-    const backTrim = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.1, 0.2), chromeMat);
-    backTrim.position.set(0, seatSurfaceY + 0.98, -0.32);
-    seatGroup.add(backTrim);
-
-    // Dark frame pod
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.3, baseHeight, 0.7), seatFrameMat);
+    // Dark frame pod beneath the seat
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.32, baseHeight, 0.82), seatFrameMat);
     frame.position.set(0, baseHeight / 2, 0); frame.castShadow = true;
     seatGroup.add(frame);
+    // Gold base trim band
+    const frameTrim = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.1, 0.86), goldMat);
+    frameTrim.position.set(0, baseHeight - 0.04, 0);
+    seatGroup.add(frameTrim);
 
-    // Chrome side pods + a curved grab bar in front
-    const armrestGeo = new THREE.BoxGeometry(0.1, 0.5, 0.6);
+    // ── Padded lap restraint with grab handles ──
+    // Sits across the rider's lap (toward the disc centre = +Z), below eye level, so in the FPV it
+    // frames the foreground like a real ride bar without blocking the view of the spinning centre.
+    const restraint = new THREE.Group();
+    seatGroup.add(restraint);
+    const padMat = new THREE.MeshStandardMaterial({ color: 0x16181d, roughness: 0.55, metalness: 0.25 });
+    // mounting posts rising from the seat sides to the bar
+    const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.62, 10);
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(postGeo, chromeMat);
+      post.position.set(side * 0.5, seatSurfaceY + 0.2, 0.32);
+      post.rotation.x = 0.36; post.castShadow = true;
+      restraint.add(post);
+    }
+    // chrome grab bar + padded centre sleeve
+    const grabBar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 1.08, 12), chromeMat);
+    grabBar.rotation.z = Math.PI / 2; grabBar.position.set(0, seatSurfaceY + 0.44, 0.46); grabBar.castShadow = true;
+    restraint.add(grabBar);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.54, 12), padMat);
+    grip.rotation.z = Math.PI / 2; grip.position.set(0, seatSurfaceY + 0.44, 0.46);
+    restraint.add(grip);
+    // hand knobs where the rider holds on + a glowing themed centre badge
+    for (const side of [-1, 1]) {
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.082, 12, 10), padMat);
+      knob.position.set(side * 0.31, seatSurfaceY + 0.44, 0.46);
+      restraint.add(knob);
+    }
+    const badgeMat = neon(seatColor); badgeMat.emissiveIntensity = 0.2;
+    const badge = new THREE.Mesh(new THREE.CircleGeometry(0.1, 20), badgeMat);
+    badge.position.set(0, seatSurfaceY + 0.44, 0.515);
+    restraint.add(badge);
+    seatLeds.push(badge);
+
+    // Chrome side accent pods
+    const armrestGeo = new THREE.BoxGeometry(0.1, 0.42, 0.62);
     for (const side of [-1, 1]) {
       const armrest = new THREE.Mesh(armrestGeo, chromeMat);
-      armrest.position.set(side * 0.64, seatSurfaceY + 0.22, -0.02); armrest.castShadow = true;
+      armrest.position.set(side * 0.6, seatSurfaceY + 0.2, 0.04); armrest.castShadow = true;
       seatGroup.add(armrest);
     }
-    const grab = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 8, 16, Math.PI), chromeMat);
-    grab.rotation.x = Math.PI / 2; grab.rotation.z = Math.PI;
-    grab.position.set(0, seatSurfaceY + 0.28, 0.34);
-    seatGroup.add(grab);
+
+    // Glowing LED accents (themed colour, recoloured by the colour-picker, animated at night)
+    const ledMat = neon(seatColor); ledMat.emissiveIntensity = 0.2;
+    const ledFront = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.06, 0.06), ledMat);
+    ledFront.position.set(0, 0.63, 0.4); seatGroup.add(ledFront); seatLeds.push(ledFront);
+    const ledArc = new THREE.Mesh(new THREE.TorusGeometry(0.74, 0.04, 8, 28, Math.PI * 1.5), ledMat);
+    ledArc.rotation.set(0, 0, Math.PI * 0.75);
+    ledArc.position.set(0, seatSurfaceY + 0.46, 0.18); seatGroup.add(ledArc); seatLeds.push(ledArc);
 
     // Add Passenger (seating logic unchanged — it is calibrated to the cushion height)
     let rider = null;
@@ -539,6 +622,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
       rider.restX = rider.pivot.position.x;
       rider.restY = rider.pivot.position.y;
       rider.restZ = rider.pivot.position.z;
+      rider.height = riderHeight; // needed by the FPV camera math in main.js (else head Y = NaN)
       seatGroup.add(rider.pivot);
     }
 
@@ -730,6 +814,16 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
       const breathe = 0.5 + 0.5 * Math.sin(time * 1.4 + i * 0.4);
       basePanels[i].material.emissiveIntensity = 0.12 + nf * (0.5 + breathe * 1.3);
     }
+    // Festoon swag bulbs — colourful rotating chase
+    for (let i = 0; i < festoonBulbs.length; i++) {
+      const chase = 0.5 + 0.5 * Math.sin(time * 6.0 - i * 0.5);
+      festoonBulbs[i].material.emissiveIntensity = 0.15 + nf * (0.5 + chase * 2.6);
+    }
+    // Seat-edge LEDs — gentle synchronized pulse
+    for (let i = 0; i < seatLeds.length; i++) {
+      const pulse = 0.5 + 0.5 * Math.sin(time * 3.0 + i * 0.8);
+      seatLeds[i].material.emissiveIntensity = 0.2 + nf * (0.9 + pulse * 1.7);
+    }
     // Arm strips
     for (const s of armStrips) s.material.emissiveIntensity = 0.2 + nf * 1.6;
     // Canopy fabric glows softly at night; warm under-light fades in
@@ -741,23 +835,11 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     gem.rotation.y += delta * 1.1;
   };
 
-  // 11. ── Raycast Click-to-Toggle on the Control Panel ────────────────────────
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-    dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
-    });
-  }
+  // Click-to-toggle is handled centrally by the InteractionManager (main.js registers this ride's
+  // controlPanel and fires controller.toggle() on 'interact-click'). The old per-ride raycast
+  // listener was removed — having both fired toggle() twice per click, cancelling out (the panel
+  // appeared dead). The `camera`/`renderer` args are kept for signature compatibility.
+  void camera; void renderer;
 
   group.userData.controller = controller;
   return group;
