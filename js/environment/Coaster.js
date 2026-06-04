@@ -30,14 +30,28 @@ import { ControlPanel } from './ControlPanel.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
 
 const MODEL_URL = 'assets/models/animated_roller_coaster.glb';
-const TARGET_LONG = 82;      // world units — longest horizontal extent after auto-fit. Sized so the
-                             // SE footprint fits inside the fence and clears the river/south plaza.
+const TARGET_LONG = 94;      // world units — longest horizontal extent after auto-fit. Enlarged so
+                             // the ride reads in proportion to the (fixed-size) riders; the elevated
+                             // track is allowed to pass OVER the central path, only the footprint of
+                             // the supports must stay inside the fence.
+const RIDE_LIFT = 0.0;       // the support structure must rest on the ground (no float), so no lift.
+const Y_STRETCH = 2.1;       // vertical exaggeration of the track. Taller loops raise the inverted
+                             // low sections so upside-down riders clear the ground WITHOUT lifting the
+                             // grounded supports (footprint/horizontal scale unchanged → still fits).
 const NUM_TRAINS = 2;        // trains running simultaneously on the circuit
 const CARS_PER_TRAIN = 4;    // carriages per train (each carriage animated independently)
 const NUM_CARS = NUM_TRAINS * CARS_PER_TRAIN; // 8 total
-const CAR_GAP = 1.15;        // gap between carriages, in car-lengths (1 = touching)
+const CAR_GAP = 1.0;         // centre-to-centre spacing in car-lengths (1 = nose-to-tail touching)
 const TRAIN_SPACING = 1.0 / NUM_TRAINS; // 0.5 — second train half a circuit ahead
 const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at park scale
+
+// Passenger seating, in DOLLY-LOCAL space (the dolly is unit-scaled; +Z = travel direction,
+// +Y = up). Riders are seated exactly like the Tagada: upright, facing forward, hip-centred.
+const SEAT_HALF_SEP = 0.5;   // lateral half-separation between the two seats (local X)
+const SEAT_SURFACE_Y = 0.75; // seat-cushion height relative to the rail centre (local Y); the
+                             // cart's seat sits ABOVE the rail, so hips land here, not below
+const SEAT_FWD_Z = -0.05;    // fore/aft offset of the hips from the rail centre (local Z)
+const SEAT_FACING_Y = 0;     // rider yaw — riders face the seat's open side (like the Tagada)
 const G_EFF = 9.8;           // gravity for the energy model (world-units/s²)
 const CURVE_SAMPLES = 80;    // control points kept for the CatmullRom
 const NUM_FRAMES = 4000;     // resolution of the rotation-minimizing frame field
@@ -109,7 +123,7 @@ function extractCenterline(model) {
 }
 
 export async function buildCoaster({ position = [45, 0, 45], camera, renderer, anisotropy = 8 } = {}) {
-  const templates = await loadVisitorTemplates(6);
+  const templates = await loadVisitorTemplates(8);
   const gltf = await loadGLB(MODEL_URL); // loadGLB strips the imported animation — we never use it
   const model = gltf.scene;
 
@@ -227,8 +241,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   let bbox = new THREE.Box3().setFromObject(rideScaled);
   let size = bbox.getSize(new THREE.Vector3());
   const scale = TARGET_LONG / (Math.max(size.x, size.z) || 1);
-  // Scale Y by scale * 1.35 to stretch height vertically by 1.35x
-  rideScaled.scale.set(scale, scale * 1.35, scale);
+  // Stretch height vertically by Y_STRETCH (taller loops → inverted riders clear the ground).
+  rideScaled.scale.set(scale, scale * Y_STRETCH, scale);
   group.updateMatrixWorld(true);
 
   // Re-measure and position Y so the lowest point of the static structure rests exactly on the ground
@@ -238,6 +252,10 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   rideScaled.position.x += position[0] - center.x;
   rideScaled.position.y += position[1] - bbox.min.y;
   rideScaled.position.z += position[2] - center.z;
+  // Raise the track/structure (carts + riders ride on it via rideScaled.matrix) by RIDE_LIFT so the
+  // loop's low inverted section clears the ground. The control panel is parented to `group`, not
+  // `rideScaled`, so it stays on the ground.
+  rideScaled.position.y += RIDE_LIFT;
   group.updateMatrixWorld(true);
 
   // ── Seat the template cart on the curve, capture its on-rail local pose, remove all baked carts ──
@@ -279,9 +297,13 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const carLocalScale = templateCartNode.scale.clone();
 
   // Carriage footprint along the track → spacing in normalized arc-length.
+  // carLen is measured in WORLD units (the cart is unit-scaled under `group`), so the spacing
+  // must divide by the WORLD track length, not the model-space length — otherwise the gap is
+  // shrunk by the auto-fit scale (~0.29) and the carriages overlap nose-to-tail.
+  const trackLenWorld = trackLen * scale;
   const cartSize = new THREE.Box3().setFromObject(templateCartNode).getSize(new THREE.Vector3());
   const carLen = Math.max(cartSize.x, cartSize.z);
-  const spacingU = (carLen * CAR_GAP) / trackLen;
+  const spacingU = (carLen * CAR_GAP) / trackLenWorld;
 
   // Remove the other 5 baked cart nodes (we only drive our own clones).
   const leftoverCarts = [];
@@ -291,8 +313,6 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     }
   });
   leftoverCarts.forEach((o) => o.parent && o.parent.remove(o));
-
-  const trackLenWorld = trackLen * scale;
 
   // ── Build 2 trains × 4 carriages — every carriage on its own dolly, offset independently.
   const cars = [{ dolly: dolly0, offset: 0 }]; // train 0, carriage 0
@@ -314,57 +334,43 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   }
 
   // ── Seat passengers in the carriages ──────────────────────────────────────────────────────
+  // Seating mirrors the Tagada exactly: riders are parented to the UNIT-SCALE dolly (whose frame
+  // is +Z = travel direction, +Y = up), sit upright, face forward, and are dropped by the hip-bone
+  // offset so the hips land precisely on the seat point. The dolly rolls/inverts with the track,
+  // so the riders bank and go upside-down through the loop rigidly attached to their carriage.
   const riders = [];
-  const riderHeight = 3.28 * 0.88; // ~2.88 world units, same size as other riders in the park
-  const riderLocalH = riderHeight; // Since dolly is parented to group (scale 1), no scale counteraction is needed
+  const riderHeight = getPassengerWorldHeight() * 0.88; // same rider size as the Tagada / Carousel
 
   cars.forEach((car, carIdx) => {
-    const cart = car.dolly.children[0];
-    if (!cart) return;
-
-    cart.updateMatrix();
-
     [0, 1].forEach((seatIdx) => {
       const template = templates[(carIdx * 2 + seatIdx) % templates.length];
       if (!template) return;
 
-      const rider = makeRider(template, riderLocalH, {
+      const rider = makeRider(template, riderHeight, {
         pool: ['rest'],
-        facingY: Math.PI, // face forward (along track +Z)
+        facingY: SEAT_FACING_Y, // face the +Z direction of travel
         phase: carIdx * 1.7 + seatIdx * 0.9,
       });
 
-      // Drop the figure so its hips sit at seat height (centre the hip bone on the seat point).
+      // Hip-bone centring (identical method to the Tagada): drop the figure so the hip bone lands
+      // exactly on the seat surface, centred laterally on its own seat.
       rider.fig.updateMatrixWorld(true);
-      const hip = rider.fig.getObjectByName('Hips');
-      let hy = riderLocalH * 0.45; // fallback: lower by ~hip height
-      if (hip) {
-        const hp = hip.getWorldPosition(new THREE.Vector3());
+      const hipBone = rider.fig.getObjectByName('Hips');
+      const sx = seatIdx === 0 ? -SEAT_HALF_SEP : SEAT_HALF_SEP;
+      if (hipBone) {
+        const hp = hipBone.getWorldPosition(new THREE.Vector3());
         rider.fig.worldToLocal(hp);
-        hy = hp.y * rider.scale;
+        hp.multiplyScalar(rider.scale);
+        rider.pivot.position.set(sx - hp.x, SEAT_SURFACE_Y - hp.y, SEAT_FWD_Z - hp.z);
+      } else {
+        rider.pivot.position.set(sx, SEAT_SURFACE_Y - riderHeight * 0.28, SEAT_FWD_Z);
       }
 
-      // Seat coordinates in carriage local space
-      const seatPos = new THREE.Vector3(seatIdx === 0 ? -0.42 : 0.42, -0.35, 1.45 - hy / 3.8);
-      
-      // Parent rider.pivot directly to cart so it inherits the carriage's complete orientation
-      cart.add(rider.pivot);
-      
-      // Scale down by 1/cartScale to preserve normal visitor height
-      rider.pivot.scale.set(1 / cart.scale.x, 1 / cart.scale.y, 1 / cart.scale.z);
-      
-      // Align rider coordinates with cart local coordinates
-      const mappingMtx = new THREE.Matrix4().set(
-        1,  0,  0,  0,
-        0,  0, -1,  0,
-        0,  1,  0,  0,
-        0,  0,  0,  1
-      );
-      rider.pivot.quaternion.setFromRotationMatrix(mappingMtx);
-      
-      // Position at the seat coordinates in cart local space
-      rider.pivot.position.copy(seatPos);
+      rider.restX = rider.pivot.position.x;
+      rider.restY = rider.pivot.position.y;
+      rider.restZ = rider.pivot.position.z;
 
+      car.dolly.add(rider.pivot); // child of the unit-scale dolly — no cart-scale counteraction
       riders.push(rider);
     });
   });
