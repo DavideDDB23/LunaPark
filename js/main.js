@@ -18,6 +18,9 @@ import { buildTagada } from "./environment/Tagada.js";
 import { buildCoaster } from "./environment/Coaster.js";
 import { buildRideSign } from "./environment/RideSign.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
+import { CameraManager } from './camera/CameraManager.js';
+import { eventBus } from './utils/EventBus.js';
+import { InteractionManager } from './utils/InteractionManager.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -68,6 +71,112 @@ if (windInput && windValEl) {
 
 let dayNight = null;
 let rideSigns = [];
+let cameraManager = null;
+const fpvTmpVec = new THREE.Vector3();
+
+cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
+  const rides = [];
+  const tmpVec = new THREE.Vector3();
+  const fw = environmentGroup.getObjectByName('ferrisWheel');
+  if (fw) rides.push({
+    group: fw,
+    getFpvTarget: () => {
+      const c = fw.userData.controller;
+      let best = null, bestY = -Infinity;
+      for (const gm of c.gondolaMounts) {
+        gm.gondolaMesh.getWorldPosition(tmpVec);
+        if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
+      }
+      return best?.gondolaMesh || null;
+    },
+    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getRiders: () => {
+      const c = fw.userData.controller;
+      let best = null, bestY = -Infinity;
+      for (const gm of c.gondolaMounts) {
+        gm.gondolaMesh.getWorldPosition(tmpVec);
+        if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
+      }
+      return best ? best.passengers : [];
+    },
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      fpvTmpVec.set(0, 1.8, 1.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      fpvTmpVec.set(0, 1.8, 10.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    }
+  });
+  const cr = environmentGroup.getObjectByName('carousel');
+  if (cr) rides.push({
+    group: cr,
+    getFpvTarget: () => cr.userData.controller.horses[0]?.container || null,
+    getFpvOffset: () => new THREE.Vector3(0, 2.5, 0),
+    getRiders: () => {
+      const r = cr.userData.controller.horses[0]?.rider;
+      return r ? [r] : [];
+    },
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      const horse = cr.userData.controller.horses[0];
+      if (!horse) return;
+      const h = horse.rider ? horse.rider.height : 3.28;
+      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
+      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
+      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
+      fpvTmpVec.set(px - 0.15, py + h * 0.82, pz);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      const horse = cr.userData.controller.horses[0];
+      if (!horse) return;
+      const h = horse.rider ? horse.rider.height : 3.28;
+      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
+      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
+      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
+      fpvTmpVec.set(px - 10.0, py + h * 0.82, pz + 2.5);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    }
+  });
+  const tg = environmentGroup.getObjectByName('tagada');
+  if (tg) rides.push({
+    group: tg,
+    getFpvTarget: () => tg.userData.controller.discMeshGroup.getObjectByName('seat_group_0') || null,
+    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getRiders: () => {
+      const r = tg.userData.controller.seats[0]?.rider;
+      return r ? [r] : [];
+    },
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      const seat = tg.userData.controller.seats[0];
+      if (!seat) return;
+      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
+      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
+      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
+      const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
+      fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      const seat = tg.userData.controller.seats[0];
+      if (!seat) return;
+      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
+      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
+      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
+      const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
+      fpvTmpVec.set(px, py + h * 0.82, pz + 10.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    }
+  });
+  return rides;
+});
+let autoAdvance = true;
 
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
@@ -191,7 +300,100 @@ async function init() {
   // Initial time = noon.
   dayNight.setHour(12);
 
+  // --- Interaction Manager & Event Wiring ---
+  const interactionManager = new InteractionManager(camera, renderer, scene);
+
+  // Register lampposts
+  lamps.children.forEach(lamp => {
+    interactionManager.registerClickable(lamp);
+  });
+
+  // Register ride control panels
+  interactionManager.registerClickable(ferrisWheel.userData.controller.panel);
+  interactionManager.registerClickable(carousel.userData.controller.panel);
+  interactionManager.registerClickable(tagada.userData.controller.panel);
+
+  // Register rides for speed-scrolling
+  interactionManager.registerRide(ferrisWheel);
+  interactionManager.registerRide(carousel);
+  interactionManager.registerRide(tagada);
+
+  // EventBus: click interactions
+  eventBus.on('interact-click', ({ object }) => {
+    // Check if lamppost clicked
+    let curr = object;
+    while (curr && !curr.userData.lampId) {
+      curr = curr.parent;
+    }
+    if (curr && curr.userData.lampId) {
+      curr.userData.isManual = true;
+      curr.userData.targetOn = !curr.userData.targetOn;
+      return;
+    }
+
+    // Check if control panel clicked
+    curr = object;
+    while (curr && curr.name !== 'controlPanel') {
+      curr = curr.parent;
+    }
+    if (curr) {
+      if (ferrisWheel.userData.controller.panel === curr) ferrisWheel.userData.controller.toggle();
+      if (carousel.userData.controller.panel === curr) carousel.userData.controller.toggle();
+      if (tagada.userData.controller.panel === curr) tagada.userData.controller.toggle();
+    }
+  });
+
+  // EventBus: speed adjustments
+  eventBus.on('speed-scroll', ({ rideId, delta }) => {
+    let controller = null;
+    if (rideId === 'ferrisWheel') controller = ferrisWheel.userData.controller;
+    if (rideId === 'carousel') controller = carousel.userData.controller;
+    if (rideId === 'tagada') controller = tagada.userData.controller;
+
+    if (controller) {
+      controller.speedMultiplier = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
+    }
+  });
+
+  // HUD Interactive Elements
+  const colorInput = document.getElementById('lightColor');
+  if (colorInput) {
+    colorInput.addEventListener('input', () => {
+      eventBus.emit('color-change', colorInput.value);
+    });
+  }
+
+  const autoCheckbox = document.getElementById('autoTime');
+  if (autoCheckbox) {
+    autoCheckbox.addEventListener('change', () => {
+      autoAdvance = autoCheckbox.checked;
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON')) {
+        return;
+      }
+      autoAdvance = !autoAdvance;
+      if (autoCheckbox) autoCheckbox.checked = autoAdvance;
+    }
+  });
+
+  const helpBtn = document.getElementById('helpBtn');
+  const helpPanel = document.getElementById('helpPanel');
+  if (helpBtn && helpPanel) {
+    helpBtn.addEventListener('click', () => {
+      helpPanel.style.display = helpPanel.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+
   console.log("hiding loader"); loaderEl.classList.add("hidden");
+
+  // Emit initial light color after all async objects are loaded and listening
+  if (colorInput) {
+    eventBus.emit('color-change', colorInput.value);
+  }
 }
 
 function setupTimeOfDayUI() {
@@ -224,7 +426,25 @@ function animate() {
   const delta = clock.getDelta();
   const time = clock.getElapsedTime();
   const wind = getWindSpeed();
-  controls.update(delta);
+  if (!cameraManager || cameraManager.state !== 'flying') {
+    controls.update(delta);
+  }
+
+  if (autoAdvance && dayNight) {
+    const hoursPerSec = 0.4;
+    let nextHour = dayNight.t * 24 + hoursPerSec * delta;
+    if (nextHour >= 24) nextHour -= 24;
+    dayNight.setHour(nextHour);
+
+    const timeInput = document.getElementById('timeOfDay');
+    const timeVal = document.getElementById('timeVal');
+    if (timeInput) timeInput.value = nextHour;
+    if (timeVal) {
+      const h = Math.floor(nextHour);
+      const m = Math.floor((nextHour - h) * 60);
+      timeVal.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
 
   const river = environmentGroup.getObjectByName('river');
   if (river && river.userData.update) river.userData.update(delta, time);
@@ -254,6 +474,11 @@ function animate() {
     if (sign.userData.tick) sign.userData.tick(time, delta);
   }
 
+  if (cameraManager) cameraManager.tick(delta);
+  const lamps = environmentGroup.getObjectByName('lampposts');
+  if (lamps && lamps.userData.tick) {
+    lamps.userData.tick(delta, time);
+  }
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
@@ -265,4 +490,4 @@ init()
     loaderEl.textContent = 'Failed to load scene — see console.';
   });
 
-window.__lp = { THREE, scene, camera, renderer, controls };
+window.__lp = { THREE, scene, camera, renderer, controls, cameraManager };

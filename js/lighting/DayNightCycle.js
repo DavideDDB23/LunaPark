@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { eventBus } from '../utils/EventBus.js';
 
 // Drives the visual time-of-day. The sky stays as the HDR (we don't move it because
 // the equirect is baked), but we modulate:
@@ -113,15 +114,8 @@ export class DayNightCycle {
 
     // ── Lamppost lights — on at night ─────────────────────────────
     const nightFactor = THREE.MathUtils.smoothstep(1.0 - sunHeight, 0.78, 1.05);
-    const lamps = this.getLamps?.() || [];
-    for (const lampRoot of lamps) {
-      const pl = lampRoot.userData.pointLight;
-      if (pl) {
-        pl.intensity = nightFactor * 14;
-        pl.color.setHex(0xffddaa);
-      }
-      lampRoot.userData.on = nightFactor > 0.05;
-    }
+    const isNight = nightFactor > 0.05;
+    eventBus.emit('time-phase-change', { isNight, nightFactor });
 
     // ── Stage spotlight ───────────────────────────────────────────
     const spot = this.getStageSpotLight?.();

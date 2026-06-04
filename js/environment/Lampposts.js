@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
+import { eventBus } from '../utils/EventBus.js';
 
 const LAMP_URL = 'assets/models/low_poly_garden_lamp__stylized_outdoor_light.glb';
 export const LAMPPOST_LAYER = 1;
@@ -25,7 +26,7 @@ const POSITIONS = [
 function enableShadows(root) {
   root.traverse((o) => {
     if (o.isMesh) {
-      o.castShadow = true;
+      o.castShadow = false; // Disable to prevent blocking its own light
       o.receiveShadow = true;
       o.layers.enable(LAMPPOST_LAYER);
     }
@@ -55,23 +56,89 @@ export async function buildLampposts() {
     lampRoot.position.set(x, groundOffset, z);
     lampRoot.userData.lampId = id;
     lampRoot.userData.on = false;
+    lampRoot.userData.isManual = false;
+    lampRoot.userData.targetOn = false;
+    lampRoot.userData.nightFactor = 0.0;
 
     const lampMesh = source.clone(true);
     lampMesh.scale.setScalar(scale);
     enableShadows(lampMesh);
     lampMesh.traverse((o) => {
-      if (o.isMesh) o.userData.lampRef = lampRoot;
+      if (o.isMesh) {
+        o.userData.lampRef = lampRoot;
+        if (o.material) {
+          o.material = o.material.clone(); // unique material for individual emissive/color control
+        }
+      }
     });
     lampRoot.add(lampMesh);
 
-    const pointLight = new THREE.PointLight(0xffdd88, 0, 15, 2);
+    // High-performance PointLight shining in all directions
+    const pointLight = new THREE.PointLight(0xfffaf0, 0, 70, 1.2);
     pointLight.position.set(0, lampHeadY, 0);
     pointLight.name = `${id}_light`;
+    pointLight.castShadow = false; // Disable shadows to avoid self-blocking and save WebGL shadow map slots
+    pointLight.userData.lockColor = true;
     lampRoot.add(pointLight);
 
     lampRoot.userData.pointLight = pointLight;
     group.add(lampRoot);
   }
+
+  // Listen for time phase changes to drive automated lighting
+  eventBus.on('time-phase-change', (data) => {
+    const isNight = data.isNight;
+    const nightFactor = data.nightFactor;
+    
+    for (const lampRoot of group.children) {
+      // Reset manual override on sunrise/sunset transition boundaries
+      if (lampRoot.userData.targetOn !== isNight) {
+        lampRoot.userData.isManual = false;
+      }
+      lampRoot.userData.targetOn = isNight;
+      lampRoot.userData.nightFactor = nightFactor;
+    }
+  });
+
+  // Smooth transition (0.8s) -> Rate = 120.0 / 0.8 = 150.0 units per second
+  group.userData.tick = (delta, time) => {
+    for (const lampRoot of group.children) {
+      const pl = lampRoot.userData.pointLight;
+      if (!pl) continue;
+
+      let targetIntensity = 0;
+      if (lampRoot.userData.targetOn) {
+        if (lampRoot.userData.isManual) {
+          targetIntensity = 120.0;
+        } else {
+          const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
+          targetIntensity = nf * 120.0;
+        }
+      }
+
+      const rate = 150.0 * delta;
+      const diff = targetIntensity - pl.intensity;
+      if (Math.abs(diff) > 0.01) {
+        pl.intensity += Math.sign(diff) * Math.min(rate, Math.abs(diff));
+      } else {
+        pl.intensity = targetIntensity;
+      }
+
+      // Update emissive intensity of physical lamp mesh to match actual PointLight intensity
+      const normalizedIntensity = pl.intensity / 120.0;
+      lampRoot.traverse((o) => {
+        if (o.isMesh && o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const mat of mats) {
+            if (mat.emissive) {
+              mat.emissiveIntensity = normalizedIntensity * 8.0;
+              mat.emissive.setHex(0xfffaf0);
+            }
+          }
+        }
+      });
+    }
+  };
 
   return group;
 }
