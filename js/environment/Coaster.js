@@ -376,6 +376,22 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     });
   });
 
+  // ── Interior carriage lights ──────────────────────────────────────────────────────────────────
+  // A warm glowing footwell panel inside each car so every carriage reads as lit from within at night.
+  // Added to the unit-scale dolly (so it's world-sized) at the cars' interior; `toneMapped = false`
+  // keeps it bright. Animated with the night mix in the tick.
+  const cartGlows = [];
+  const cartGlowGeo = new THREE.BoxGeometry(1.0, 0.05, 0.72);
+  for (const car of cars) {
+    const m = new THREE.MeshStandardMaterial({
+      color: 0x140f06, emissive: 0xffd9a0, emissiveIntensity: 0.0, roughness: 0.5, toneMapped: false,
+    });
+    const glow = new THREE.Mesh(cartGlowGeo, m);
+    glow.position.set(0, 0.4, 0.08); // dolly-local: the footwell, between/under the two riders
+    car.dolly.add(glow);
+    cartGlows.push(glow);
+  }
+
   // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
   // Smooth start/stop acceleration (rampUp: 1.0s, rampDown: 1.5s)
   const controlPanel = new ControlPanel({ initialRunning: true, rampUp: 1.0, rampDown: 1.5 });
@@ -404,39 +420,56 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   footPts.push(panelWorld.x, panelWorld.z);
   group.userData.footprint = { pts: footPts, pad: 7.0 };
 
-  // ── Night light kit ───────────────────────────────────────────────────────────────────────────
-  // The RAIL ITSELF lights up at night — we make the actual rail-tube mesh emissive (a single glowing
-  // ribbon tracing the whole circuit), NOT separate strips beside it (which read as extra paths). The
-  // rail shares its material with the support pylons, so we clone it first to keep the pylons dark. A
-  // few real coloured PointLights wash the structure. Rail colour is recoloured live by the picker.
-  const ridePointLights = [];
+  // ── Night light: the RAIL ITSELF lights up ─────────────────────────────────────────────────────
+  // The two real rails live in ONE mesh together with the support pylons (support_tall010_build_gen_1_0).
+  // Geometry is untouched — we just split that mesh into two material groups by each triangle's distance
+  // to the track centre-line: triangles ON the track (the two rails + ties) get an emissive material;
+  // the pylons keep the original dark material. So the real rails glow as continuous neon lines while the
+  // supports stay dark. `toneMapped = false` keeps the glow bright through ACES. Recoloured by the picker.
   const railGlowMats = [];
-  const _lp = new THREE.Vector3();
-  const railMesh = model.getObjectByName(RAIL_MESH_NAME);
-  if (railMesh) {
-    const mats = Array.isArray(railMesh.material) ? railMesh.material : [railMesh.material];
-    const cloned = mats.map((m) => {
-      const c = m.clone();
-      c.emissive = new THREE.Color(0x3dd2ff);
-      c.emissiveIntensity = 0.0; // dark by day, ramps up at night in the tick
-      railGlowMats.push(c);
-      return c;
-    });
-    railMesh.material = Array.isArray(railMesh.material) ? cloned : cloned[0];
-  }
+  const trackMesh = model.getObjectByName('support_tall010_build_gen_1_0');
+  if (trackMesh) {
+    trackMesh.updateMatrixWorld(true);
+    const curveW = [];
+    for (let i = 0; i <= 800; i++) curveW.push(curve.getPointAt(i / 800).applyMatrix4(model.matrixWorld));
+    // nearest centre-line sample → [squared 3D distance, that sample's Y]
+    const nearest = (p) => { let m = Infinity, cy = 0; for (const c of curveW) { const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z; const d = dx*dx + dy*dy + dz*dz; if (d < m) { m = d; cy = c.y; } } return [m, cy]; };
 
-  // Real coloured glow lights at a few points around the circuit (recoloured by the colour-picker).
-  for (const u of [0.0, 0.2, 0.4, 0.6, 0.8]) {
-    _lp.copy(curve.getPointAt(u)).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
-    const pl = new THREE.PointLight(0x3dd2ff, 0, 48, 1.6);
-    pl.position.copy(_lp);
-    group.add(pl);
-    ridePointLights.push(pl);
+    const geo = trackMesh.geometry;
+    const pos = geo.attributes.position;
+    let idx = geo.index ? geo.index.array : null;
+    if (!idx) { idx = new Uint32Array(pos.count); for (let i = 0; i < pos.count; i++) idx[i] = i; }
+    const mw = trackMesh.matrixWorld;
+    const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), cen = new THREE.Vector3();
+    // A triangle is part of the rails/ties only if it is BOTH close to the track line AND at the track's
+    // height there. Pylons drop well below the line they hang from, so the Y test removes them — even the
+    // short pylons in low sections and the pylon tops that touch the rail.
+    const THRESH2 = 1.5 * 1.5;
+    const rail = [], sup = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+      vA.fromBufferAttribute(pos, a).applyMatrix4(mw);
+      vB.fromBufferAttribute(pos, b).applyMatrix4(mw);
+      vC.fromBufferAttribute(pos, c).applyMatrix4(mw);
+      cen.copy(vA).add(vB).add(vC).multiplyScalar(1 / 3);
+      const [d2, cy] = nearest(cen);
+      if (d2 < THRESH2 && cen.y > cy - 0.9) { rail.push(a, b, c); } else { sup.push(a, b, c); }
+    }
+    const newIdx = new Uint32Array(rail.length + sup.length);
+    newIdx.set(rail, 0); newIdx.set(sup, rail.length);
+    geo.setIndex(new THREE.BufferAttribute(newIdx, 1));
+    geo.clearGroups();
+    geo.addGroup(0, rail.length, 0);          // group 0 → emissive rail material
+    geo.addGroup(rail.length, sup.length, 1); // group 1 → original support material
+    const orig = Array.isArray(trackMesh.material) ? trackMesh.material[0] : trackMesh.material;
+    const railMat = orig.clone();
+    railMat.emissive = new THREE.Color(0x3dd2ff);
+    railMat.emissiveIntensity = 0.0;
+    railMat.toneMapped = false;
+    railGlowMats.push(railMat);
+    trackMesh.material = [railMat, orig];
   }
-  eventBus.on('color-change', (hex) => {
-    for (const m of railGlowMats) m.emissive.set(hex);
-    for (const pl of ridePointLights) pl.color.set(hex);
-  });
+  eventBus.on('color-change', (hex) => { for (const m of railGlowMats) m.emissive.set(hex); });
 
   // ── Controller / station state-machine ──
   const controller = {
@@ -559,18 +592,19 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       }
     }
 
-    // 5. ── Night light show: the rail LED strips glow + gently breathe; real lights wash the structure ──
+    // 5. ── Night light show: the rail itself glows + gently breathes ──
     const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
     const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
     controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * dt));
     const nf = controller.nightMix;
     const breathe = 0.5 + 0.5 * Math.sin(timeVal * 1.6);
+    // With toneMapped = false, push the thin real rail bright so it reads clearly; breathe 1.5→2.0.
     for (let i = 0; i < railGlowMats.length; i++) {
-      railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 1.1);
+      railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 0.5);
     }
-    for (let i = 0; i < ridePointLights.length; i++) {
-      const pulse = 0.5 + 0.5 * Math.sin(timeVal * 4.0 + i * 1.5);
-      ridePointLights[i].intensity = nf * (0.6 + pulse * 0.6) * 30.0;
+    // Interior carriage lights — warm glow inside each car.
+    for (let i = 0; i < cartGlows.length; i++) {
+      cartGlows[i].material.emissiveIntensity = nf * (0.9 + 0.2 * Math.sin(timeVal * 2.0 + i));
     }
   };
 
