@@ -376,20 +376,55 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     });
   });
 
-  // ── Interior carriage lights ──────────────────────────────────────────────────────────────────
-  // A warm glowing footwell panel inside each car so every carriage reads as lit from within at night.
-  // Added to the unit-scale dolly (so it's world-sized) at the cars' interior; `toneMapped = false`
-  // keeps it bright. Animated with the night mix in the tick.
-  const cartGlows = [];
-  const cartGlowGeo = new THREE.BoxGeometry(1.0, 0.05, 0.72);
+  // ── Sophisticated carriage lighting ───────────────────────────────────────────────────────────
+  // The glow ADHERES to the carriage model itself: we make the cart's own materials emissive (via their
+  // texture as emissiveMap) so the real body lights up — no floating ring. Plus warm headlights / red
+  // tail-lights on the model's front & back, a warm interior lamp that lights the riders, and a soft
+  // coloured UNDER-LIGHT that pools a glow on the ground beneath each car. Body glow + under-light
+  // recolour with the rails (picker); all ramp up at night. Cart body is dark/normal by day.
+  const cartGlows = [];        // emissive accent dots (head/tail lights)
+  const cartBodyMats = [];     // the carriage's OWN materials, made emissive (recoloured with rails)
+  const cartLights = [];       // warm interior lamps (light the riders)
+  const cartUnderLights = [];  // coloured under-glow pooled on the ground (recoloured with rails)
+  const emiss = (col) => new THREE.MeshStandardMaterial({ color: 0x080808, emissive: col, emissiveIntensity: 0, roughness: 0.3, metalness: 0.2, toneMapped: false });
+  const CX = 0.17, CZ = 0.36;                 // cart footprint centre (dolly-local)
+  const dotGeo = new THREE.SphereGeometry(0.14, 12, 10);
+  const bodyMatMap = new Map();               // share one emissive clone per original cart material
   for (const car of cars) {
-    const m = new THREE.MeshStandardMaterial({
-      color: 0x140f06, emissive: 0xffd9a0, emissiveIntensity: 0.0, roughness: 0.5, toneMapped: false,
+    const d = car.dolly;
+    const cartNode = d.children[0];           // the cart body (added before riders / lights)
+    // Make the carriage body emissive — the glow sits ON the real model.
+    cartNode.traverse((o) => {
+      if (!o.isMesh || o.isSkinnedMesh) return;
+      const orig = Array.isArray(o.material) ? o.material[0] : o.material;
+      if (!orig) return;
+      if (!bodyMatMap.has(orig)) {
+        const c = orig.clone();
+        if (c.map) c.emissiveMap = c.map;     // glow follows the body's own paint/detail
+        c.emissive = new THREE.Color(0xffffff); // white × emissiveMap ⇒ the body glows in its OWN colours
+        c.emissiveIntensity = 0.0;            // dark by day, ramps up at night
+        bodyMatMap.set(orig, c);
+        cartBodyMats.push(c);
+      }
+      o.material = bodyMatMap.get(orig);
     });
-    const glow = new THREE.Mesh(cartGlowGeo, m);
-    glow.position.set(0, 0.4, 0.08); // dolly-local: the footwell, between/under the two riders
-    car.dolly.add(glow);
-    cartGlows.push(glow);
+
+    // warm interior lamp (riders)
+    const light = new THREE.PointLight(0xffd9a0, 0.0, 6.5, 2.0);
+    light.position.set(CX, 1.15, CZ);
+    d.add(light); cartLights.push(light);
+
+    // soft coloured under-light → pools a glow on the ground below each car
+    const under = new THREE.PointLight(0x3dd2ff, 0.0, 9.0, 2.0);
+    under.position.set(CX, -0.3, CZ);
+    d.add(under); cartUnderLights.push(under);
+
+    // headlights (front, warm white) + tail-lights (back, red), sitting on the model
+    const hlMat = emiss(0xfff2d0), tlMat = emiss(0xff2630);
+    for (const sx of [-0.55, 0.55]) {
+      const hl = new THREE.Mesh(dotGeo, hlMat); hl.position.set(CX + sx, 0.72, CZ + 1.5); d.add(hl); cartGlows.push(hl);
+      const tl = new THREE.Mesh(dotGeo, tlMat); tl.position.set(CX + sx, 0.72, CZ - 1.4); d.add(tl); cartGlows.push(tl);
+    }
   }
 
   // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
@@ -469,7 +504,10 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     railGlowMats.push(railMat);
     trackMesh.material = [railMat, orig];
   }
-  eventBus.on('color-change', (hex) => { for (const m of railGlowMats) m.emissive.set(hex); });
+  eventBus.on('color-change', (hex) => {
+    for (const m of railGlowMats) m.emissive.set(hex);
+    for (const l of cartUnderLights) l.color.set(hex); // the ground-pool under-glow follows the rail colour
+  });
 
   // ── Controller / station state-machine ──
   const controller = {
@@ -602,9 +640,18 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     for (let i = 0; i < railGlowMats.length; i++) {
       railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 0.5);
     }
-    // Interior carriage lights — warm glow inside each car.
+    // Carriage lighting: body glows on the model, head/tail accents, warm interior, ground under-glow.
+    for (let i = 0; i < cartBodyMats.length; i++) {
+      cartBodyMats[i].emissiveIntensity = nf * 1.7;
+    }
     for (let i = 0; i < cartGlows.length; i++) {
-      cartGlows[i].material.emissiveIntensity = nf * (0.9 + 0.2 * Math.sin(timeVal * 2.0 + i));
+      cartGlows[i].material.emissiveIntensity = nf * (1.4 + 0.2 * Math.sin(timeVal * 2.0 + i));
+    }
+    for (let i = 0; i < cartLights.length; i++) {
+      cartLights[i].intensity = nf * 6.0;
+    }
+    for (let i = 0; i < cartUnderLights.length; i++) {
+      cartUnderLights[i].intensity = nf * 5.5;
     }
   };
 
