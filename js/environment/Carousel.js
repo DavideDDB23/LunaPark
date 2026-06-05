@@ -206,6 +206,46 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     ridePointLights.forEach(pl => pl.color.set(hex));
   });
 
+  // ── Extra night lighting: warm festoon swags + canopy-seam bulbs + column bulbs + platform neon ──
+  // (the classic "carousel ablaze with lights" look — warm/gold to suit its royal theme, on the
+  //  rotatingAssembly so they turn with the ride). Animated to a smoothed night mix in the tick.
+  const warmBulbMat = () => new THREE.MeshStandardMaterial({ color: 0xfff1c0, emissive: 0xfff1c0, emissiveIntensity: 0, roughness: 0.3 });
+  const cFestoon = [], cSeam = [], cColumn = [];
+  const smallBulbGeo = new THREE.SphereGeometry(0.13, 8, 8);
+  const festoonWireMat = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7, metalness: 0.3 });
+  const rimR = 13.22, rimY = 0.3 + 0.3 + 5.5 + 1.0, apexY = 8.85 + 1.75; // rim y = 7.1, apex y = 10.6
+  // Festoon swags drooping between the 16 rim points.
+  for (let i = 0; i < 16; i++) {
+    const a1 = (i / 16) * Math.PI * 2, a2 = ((i + 1) / 16) * Math.PI * 2;
+    const A = new THREE.Vector3(Math.cos(a1) * rimR, rimY, Math.sin(a1) * rimR);
+    const B = new THREE.Vector3(Math.cos(a2) * rimR, rimY, Math.sin(a2) * rimR);
+    const segs = 5, sag = 0.9, pts = [];
+    for (let k = 0; k <= segs; k++) { const t = k / segs; const p = new THREE.Vector3().lerpVectors(A, B, t); p.y -= Math.sin(Math.PI * t) * sag; pts.push(p); }
+    const wire = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), segs * 2, 0.02, 5, false), festoonWireMat);
+    rotatingAssembly.add(wire);
+    for (let k = 1; k < segs; k++) { const b = new THREE.Mesh(smallBulbGeo, warmBulbMat()); b.position.copy(pts[k]); rotatingAssembly.add(b); cFestoon.push(b); }
+  }
+  // Bulbs running up each of the 16 canopy gore seams (apex → rim).
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const rim = new THREE.Vector3(Math.cos(a) * 13.0, rimY + 0.05, Math.sin(a) * 13.0);
+    const apex = new THREE.Vector3(0, apexY, 0);
+    for (const tt of [0.3, 0.55, 0.8]) { const b = new THREE.Mesh(smallBulbGeo, warmBulbMat()); b.position.copy(apex.clone().lerp(rim, tt)); rotatingAssembly.add(b); cSeam.push(b); }
+  }
+  // Two vertical bulb strips up the mirror column.
+  for (const sideA of [0, Math.PI]) {
+    for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(smallBulbGeo, warmBulbMat()); b.position.set(Math.cos(sideA) * 2.06, 0.9 + k * 1.0, Math.sin(sideA) * 2.06); rotatingAssembly.add(b); cColumn.push(b); }
+  }
+  // Glowing gold neon band at the platform edge.
+  const cNeonMat = new THREE.MeshStandardMaterial({ color: 0xffd76a, emissive: 0xffd76a, emissiveIntensity: 0, roughness: 0.3 });
+  const platNeon = new THREE.Mesh(new THREE.TorusGeometry(12.1, 0.08, 10, 80), cNeonMat);
+  platNeon.rotation.x = Math.PI / 2; platNeon.position.y = 0.42;
+  rotatingAssembly.add(platNeon);
+  // Warm real light filling the canopy underside at night (pure ambiance, not recoloured).
+  const carouselCanopyLight = new THREE.PointLight(0xffd9a0, 0, 30, 2.0);
+  carouselCanopyLight.position.set(0, 6.4, 0);
+  rotatingAssembly.add(carouselCanopyLight);
+
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
   const MODEL_ROTATION_OFFSET = Math.PI * 0.5;
 
@@ -321,6 +361,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     horses,
     panel: controlPanel.group,
     speedMultiplier: 1.0,
+    nightMix: 0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     angle: 0,
@@ -381,6 +422,24 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       bulbs.forEach((b) => { b.material.emissiveIntensity = 0.0; });
       ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
+
+    // Smoothed festoon / seam / column / neon light show (nicer fades than the hard on/off above)
+    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
+    const nf = controller.nightMix;
+    for (let i = 0; i < cFestoon.length; i++) {
+      const ch = 0.5 + 0.5 * Math.sin(time * 5.0 - i * 0.5);
+      cFestoon[i].material.emissiveIntensity = nf * (0.5 + ch * 2.4);
+    }
+    for (let i = 0; i < cSeam.length; i++) {
+      const ch = 0.5 + 0.5 * Math.sin(time * 4.0 - i * 0.3);
+      cSeam[i].material.emissiveIntensity = nf * (0.4 + ch * 2.0);
+    }
+    for (let i = 0; i < cColumn.length; i++) {
+      const p = 0.5 + 0.5 * Math.sin(time * 3.0 + i * 0.7);
+      cColumn[i].material.emissiveIntensity = nf * (0.6 + p * 1.5);
+    }
+    cNeonMat.emissiveIntensity = nf * (1.2 + 0.6 * Math.sin(time * 2.2));
+    carouselCanopyLight.intensity = nf * 2.2;
 
     // 4. Panel feedback update (handled by ControlPanel.tick)
     if (ease === 0) {

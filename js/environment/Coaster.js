@@ -27,6 +27,7 @@
 import * as THREE from 'three';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from './ControlPanel.js';
+import { eventBus } from '../utils/EventBus.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
 
 const MODEL_URL = 'assets/models/animated_roller_coaster.glb';
@@ -403,6 +404,40 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   footPts.push(panelWorld.x, panelWorld.z);
   group.userData.footprint = { pts: footPts, pad: 7.0 };
 
+  // ── Night light kit ───────────────────────────────────────────────────────────────────────────
+  // The RAIL ITSELF lights up at night — we make the actual rail-tube mesh emissive (a single glowing
+  // ribbon tracing the whole circuit), NOT separate strips beside it (which read as extra paths). The
+  // rail shares its material with the support pylons, so we clone it first to keep the pylons dark. A
+  // few real coloured PointLights wash the structure. Rail colour is recoloured live by the picker.
+  const ridePointLights = [];
+  const railGlowMats = [];
+  const _lp = new THREE.Vector3();
+  const railMesh = model.getObjectByName(RAIL_MESH_NAME);
+  if (railMesh) {
+    const mats = Array.isArray(railMesh.material) ? railMesh.material : [railMesh.material];
+    const cloned = mats.map((m) => {
+      const c = m.clone();
+      c.emissive = new THREE.Color(0x3dd2ff);
+      c.emissiveIntensity = 0.0; // dark by day, ramps up at night in the tick
+      railGlowMats.push(c);
+      return c;
+    });
+    railMesh.material = Array.isArray(railMesh.material) ? cloned : cloned[0];
+  }
+
+  // Real coloured glow lights at a few points around the circuit (recoloured by the colour-picker).
+  for (const u of [0.0, 0.2, 0.4, 0.6, 0.8]) {
+    _lp.copy(curve.getPointAt(u)).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+    const pl = new THREE.PointLight(0x3dd2ff, 0, 48, 1.6);
+    pl.position.copy(_lp);
+    group.add(pl);
+    ridePointLights.push(pl);
+  }
+  eventBus.on('color-change', (hex) => {
+    for (const m of railGlowMats) m.emissive.set(hex);
+    for (const pl of ridePointLights) pl.color.set(hex);
+  });
+
   // ── Controller / station state-machine ──
   const controller = {
     cars,
@@ -410,6 +445,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     u: uCar,
     riders,
     panel: controlPanel.group,
+    nightMix: 0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     speedScale: 1.0,
@@ -521,6 +557,20 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
           B.Head.bone.rotation.x += 0.08 * Math.sin(timeVal * 6.0 + r.phase);
         }
       }
+    }
+
+    // 5. ── Night light show: the rail LED strips glow + gently breathe; real lights wash the structure ──
+    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
+    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * dt));
+    const nf = controller.nightMix;
+    const breathe = 0.5 + 0.5 * Math.sin(timeVal * 1.6);
+    for (let i = 0; i < railGlowMats.length; i++) {
+      railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 1.1);
+    }
+    for (let i = 0; i < ridePointLights.length; i++) {
+      const pulse = 0.5 + 0.5 * Math.sin(timeVal * 4.0 + i * 1.5);
+      ridePointLights[i].intensity = nf * (0.6 + pulse * 0.6) * 30.0;
     }
   };
 

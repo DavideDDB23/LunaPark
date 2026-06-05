@@ -500,7 +500,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const currentHumanHeight = getPassengerWorldHeight();
   const riderHeight = currentHumanHeight * 0.88;
   const seatLeds = []; // glowing seat-edge strips, animated + recolourable at night
-  const seatShellMat = new THREE.MeshStandardMaterial({ color: 0x20242c, roughness: 0.42, metalness: 0.35 });
 
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
@@ -516,87 +515,80 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const seatSurfaceY = 0.80;
     const baseHeight = 0.65;
 
-    // ── Sculpted bucket seat (fibreglass shell + padding + restraint) ──
-    // Wrap-around fibreglass shell: a half-open cylinder hugging the back & sides, open at +Z (front).
-    const shell = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.74, 0.62, 1.55, 24, 1, true, Math.PI * 0.75, Math.PI * 1.5),
-      seatShellMat
-    );
-    shell.position.set(0, seatSurfaceY + 0.46, -0.06);
-    shell.castShadow = true; shell.receiveShadow = true;
-    seatGroup.add(shell);
-
-    // Padded seat pan + contoured back pad + headrest (the ride's jewel-tone colour)
-    const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.22, 0.72), seatMat);
-    cushion.position.set(0, 0.74, 0.04); cushion.castShadow = true; cushion.receiveShadow = true;
+    // ── Open padded bench seat ──
+    // A real Tagada seat: a padded pan + contoured back + low hip bolsters + a grab rail. Deliberately
+    // OPEN (no enclosing shell) so the riders' waving arms and dangling legs never clip through it.
+    // Seat pan with a rounded front nose.
+    const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.24, 0.98), seatMat);
+    cushion.position.set(0, 0.74, 0.06); cushion.castShadow = true; cushion.receiveShadow = true;
     seatGroup.add(cushion);
-    const backPad = new THREE.Mesh(new THREE.BoxGeometry(0.96, 1.02, 0.16), seatMat);
-    backPad.position.set(0, seatSurfaceY + 0.55, -0.34); backPad.castShadow = true;
-    seatGroup.add(backPad);
-    const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.36, 0.22), seatMat);
-    headrest.position.set(0, seatSurfaceY + 1.2, -0.32); headrest.castShadow = true;
-    seatGroup.add(headrest);
-    const headTrim = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.26), chromeMat);
-    headTrim.position.set(0, seatSurfaceY + 1.39, -0.32);
-    seatGroup.add(headTrim);
+    const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 1.34, 16), seatMat);
+    nose.rotation.z = Math.PI / 2; nose.position.set(0, 0.74, 0.55); nose.castShadow = true;
+    seatGroup.add(nose);
 
-    // Dark frame pod beneath the seat
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.32, baseHeight, 0.82), seatFrameMat);
-    frame.position.set(0, baseHeight / 2, 0); frame.castShadow = true;
+    // Contoured padded backrest (to shoulder height, open sides) + chrome top rail + slim headrest.
+    const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.34, 1.0, 0.18), seatMat);
+    backrest.position.set(0, seatSurfaceY + 0.5, -0.44); backrest.rotation.x = -0.08; backrest.castShadow = true;
+    seatGroup.add(backrest);
+    const backRail = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 12), chromeMat);
+    backRail.rotation.z = Math.PI / 2; backRail.position.set(0, seatSurfaceY + 1.02, -0.46); backRail.castShadow = true;
+    seatGroup.add(backRail);
+    const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.16), seatMat);
+    headrest.position.set(0, seatSurfaceY + 1.2, -0.46); headrest.castShadow = true;
+    seatGroup.add(headrest);
+
+    // Low hip bolsters (top out below the arms, so raised arms clear them) with chrome caps.
+    for (const side of [-1, 1]) {
+      const bolster = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.36, 0.92), seatMat);
+      bolster.position.set(side * 0.66, 0.92, 0.06); bolster.castShadow = true;
+      seatGroup.add(bolster);
+      const bolsterCap = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.92, 12), chromeMat);
+      bolsterCap.rotation.x = Math.PI / 2; bolsterCap.position.set(side * 0.66, 1.1, 0.06);
+      seatGroup.add(bolsterCap);
+    }
+
+    // Dark frame pod beneath + gold trim band.
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.4, baseHeight, 0.92), seatFrameMat);
+    frame.position.set(0, baseHeight / 2, 0.02); frame.castShadow = true;
     seatGroup.add(frame);
-    // Gold base trim band
-    const frameTrim = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.1, 0.86), goldMat);
-    frameTrim.position.set(0, baseHeight - 0.04, 0);
+    const frameTrim = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.1, 0.96), goldMat);
+    frameTrim.position.set(0, baseHeight - 0.04, 0.02);
     seatGroup.add(frameTrim);
 
-    // ── Padded lap restraint with grab handles ──
-    // Sits across the rider's lap (toward the disc centre = +Z), below eye level, so in the FPV it
-    // frames the foreground like a real ride bar without blocking the view of the spinning centre.
+    // ── Padded grab bar with hand grips + glowing themed badge ──
+    // Sits at lap height toward the disc centre (+Z): above the knees, below eye level — it frames the
+    // FPV foreground like a real ride bar without catching the legs or blocking the view.
     const restraint = new THREE.Group();
     seatGroup.add(restraint);
     const padMat = new THREE.MeshStandardMaterial({ color: 0x16181d, roughness: 0.55, metalness: 0.25 });
-    // mounting posts rising from the seat sides to the bar
-    const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.62, 10);
+    const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.66, 10);
     for (const side of [-1, 1]) {
       const post = new THREE.Mesh(postGeo, chromeMat);
-      post.position.set(side * 0.5, seatSurfaceY + 0.2, 0.32);
-      post.rotation.x = 0.36; post.castShadow = true;
+      post.position.set(side * 0.56, seatSurfaceY + 0.18, 0.4); post.rotation.x = 0.4; post.castShadow = true;
       restraint.add(post);
     }
-    // chrome grab bar + padded centre sleeve
-    const grabBar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 1.08, 12), chromeMat);
-    grabBar.rotation.z = Math.PI / 2; grabBar.position.set(0, seatSurfaceY + 0.44, 0.46); grabBar.castShadow = true;
+    const grabBar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 1.18, 12), chromeMat);
+    grabBar.rotation.z = Math.PI / 2; grabBar.position.set(0, seatSurfaceY + 0.46, 0.56); grabBar.castShadow = true;
     restraint.add(grabBar);
-    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.54, 12), padMat);
-    grip.rotation.z = Math.PI / 2; grip.position.set(0, seatSurfaceY + 0.44, 0.46);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.58, 12), padMat);
+    grip.rotation.z = Math.PI / 2; grip.position.set(0, seatSurfaceY + 0.46, 0.56);
     restraint.add(grip);
-    // hand knobs where the rider holds on + a glowing themed centre badge
     for (const side of [-1, 1]) {
       const knob = new THREE.Mesh(new THREE.SphereGeometry(0.082, 12, 10), padMat);
-      knob.position.set(side * 0.31, seatSurfaceY + 0.44, 0.46);
+      knob.position.set(side * 0.33, seatSurfaceY + 0.46, 0.56);
       restraint.add(knob);
     }
     const badgeMat = neon(seatColor); badgeMat.emissiveIntensity = 0.2;
     const badge = new THREE.Mesh(new THREE.CircleGeometry(0.1, 20), badgeMat);
-    badge.position.set(0, seatSurfaceY + 0.44, 0.515);
-    restraint.add(badge);
-    seatLeds.push(badge);
+    badge.position.set(0, seatSurfaceY + 0.46, 0.615);
+    restraint.add(badge); seatLeds.push(badge);
 
-    // Chrome side accent pods
-    const armrestGeo = new THREE.BoxGeometry(0.1, 0.42, 0.62);
-    for (const side of [-1, 1]) {
-      const armrest = new THREE.Mesh(armrestGeo, chromeMat);
-      armrest.position.set(side * 0.6, seatSurfaceY + 0.2, 0.04); armrest.castShadow = true;
-      seatGroup.add(armrest);
-    }
-
-    // Glowing LED accents (themed colour, recoloured by the colour-picker, animated at night)
+    // Glowing LED accents — backrest top edge + seat-base front lip (themed, recoloured, animated).
     const ledMat = neon(seatColor); ledMat.emissiveIntensity = 0.2;
-    const ledFront = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.06, 0.06), ledMat);
-    ledFront.position.set(0, 0.63, 0.4); seatGroup.add(ledFront); seatLeds.push(ledFront);
-    const ledArc = new THREE.Mesh(new THREE.TorusGeometry(0.74, 0.04, 8, 28, Math.PI * 1.5), ledMat);
-    ledArc.rotation.set(0, 0, Math.PI * 0.75);
-    ledArc.position.set(0, seatSurfaceY + 0.46, 0.18); seatGroup.add(ledArc); seatLeds.push(ledArc);
+    const ledBack = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.05, 0.05), ledMat);
+    ledBack.position.set(0, seatSurfaceY + 0.98, -0.35); seatGroup.add(ledBack); seatLeds.push(ledBack);
+    const ledFront = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.05, 0.05), ledMat);
+    ledFront.position.set(0, 0.62, 0.56); seatGroup.add(ledFront); seatLeds.push(ledFront);
 
     // Add Passenger (seating logic unchanged — it is calibrated to the cushion height)
     let rider = null;
