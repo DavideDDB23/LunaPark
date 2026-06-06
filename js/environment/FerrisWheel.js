@@ -135,6 +135,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   // Axle Center Light for massive ground/structure glow
   const hubLight = new THREE.PointLight(0xffdd88, 0, 90, 1.2);
   hubLight.position.set(0, 0, 0);
+  hubLight.layers.set(2);
   wheelSpin.add(hubLight);
   ridePointLights.push(hubLight);
 
@@ -143,6 +144,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     const angle = (i / 4) * Math.PI * 2;
     const pl = new THREE.PointLight(0xffdd88, 0, 40, 1.5);
     pl.position.set(20 * Math.cos(angle), 20 * Math.sin(angle), 0);
+    pl.layers.set(2);
     wheelSpin.add(pl);
     ridePointLights.push(pl);
   }
@@ -383,8 +385,24 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
       const pulse = 0.5 + 0.5 * Math.sin(time * 3.0 + i * 0.5);
       ferrisSpokeBulbs[i].material.emissiveIntensity = nf * (0.7 + pulse * 1.8);
     }
-    ferrisBeaconMat.emissiveIntensity = nf * (1.6 + Math.sin(time * 4) * 0.6);
   };
+
+  group.traverse((o) => {
+    if (o.isMesh) {
+      let isPanel = false;
+      let curr = o;
+      while (curr) {
+        if (curr === controlPanel.group) {
+          isPanel = true;
+          break;
+        }
+        curr = curr.parent;
+      }
+      if (!isPanel) {
+        o.layers.enable(2);
+      }
+    }
+  });
 
   group.userData.controller = controller;
   return group;

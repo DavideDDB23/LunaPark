@@ -471,11 +471,13 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     // warm interior lamp (riders)
     const light = new THREE.PointLight(0xffd9a0, 0.0, 6.5, 2.0);
     light.position.set(CX, 1.15, CZ);
+    light.layers.set(2);
     d.add(light); cartLights.push(light);
 
     // soft coloured under-light → pools a glow on the ground below each car
     const under = new THREE.PointLight(0x3dd2ff, 0.0, 9.0, 2.0);
     under.position.set(CX, -0.3, CZ);
+    under.layers.set(2);
     d.add(under); cartUnderLights.push(under);
 
     // headlights (front, warm white) + tail-lights (back, red), sitting on the model
@@ -749,6 +751,23 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
     });
   }
+
+  group.traverse((o) => {
+    if (o.isMesh) {
+      let isPanel = false;
+      let curr = o;
+      while (curr) {
+        if (curr === controlPanel.group) {
+          isPanel = true;
+          break;
+        }
+        curr = curr.parent;
+      }
+      if (!isPanel) {
+        o.layers.enable(2);
+      }
+    }
+  });
 
   group.userData.controller = controller;
   return group;

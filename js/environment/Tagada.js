@@ -450,6 +450,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   // Warm light under the canopy that switches on at night to glow the deck + riders.
   const canopyLight = new THREE.PointLight(0xffd9a0, 0.0, 26, 2.0);
   canopyLight.position.set(0, canopyBaseY - 0.6, 0);
+  canopyLight.layers.set(2);
   canopy.add(canopyLight);
 
   // String lights draped from the finial down to each hem bulb
@@ -650,6 +651,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   // Central Disc Light
   const centerLight = new THREE.PointLight(0xff00ff, 0, 45, 1.2);
   centerLight.position.set(0, 1.5, 0);
+  centerLight.layers.set(2);
   discMeshGroup.add(centerLight);
   ridePointLights.push(centerLight);
 
@@ -658,6 +660,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const angle = (i / 4) * Math.PI * 2;
     const pl = new THREE.PointLight(0xff00ff, 0, 35, 1.5);
     pl.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
+    pl.layers.set(2);
     discMeshGroup.add(pl);
     ridePointLights.push(pl);
   }
@@ -832,6 +835,23 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   // listener was removed — having both fired toggle() twice per click, cancelling out (the panel
   // appeared dead). The `camera`/`renderer` args are kept for signature compatibility.
   void camera; void renderer;
+
+  group.traverse((o) => {
+    if (o.isMesh) {
+      let isPanel = false;
+      let curr = o;
+      while (curr) {
+        if (curr === controlPanel.group) {
+          isPanel = true;
+          break;
+        }
+        curr = curr.parent;
+      }
+      if (!isPanel) {
+        o.layers.enable(2);
+      }
+    }
+  });
 
   group.userData.controller = controller;
   return group;

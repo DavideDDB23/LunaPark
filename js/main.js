@@ -303,15 +303,20 @@ async function init() {
   // --- Interaction Manager & Event Wiring ---
   const interactionManager = new InteractionManager(camera, renderer, scene);
 
-  // Register lampposts
+  // Register lampposts (only the lamp roots, not the instanced meshes)
   lamps.children.forEach(lamp => {
-    interactionManager.registerClickable(lamp);
+    if (lamp.name.startsWith('lamp_')) {
+      interactionManager.registerClickable(lamp);
+    }
   });
 
   // Register ride control panels
   interactionManager.registerClickable(ferrisWheel.userData.controller.panel);
   interactionManager.registerClickable(carousel.userData.controller.panel);
   interactionManager.registerClickable(tagada.userData.controller.panel);
+
+  // Share interactive objects with CameraManager for optimized raycasting
+  cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
 
   // Register rides for speed-scrolling
   interactionManager.registerRide(ferrisWheel);

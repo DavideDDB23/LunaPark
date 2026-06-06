@@ -188,6 +188,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   // Central Pillar Light
   const centerLight = new THREE.PointLight(0xffdd88, 0, 45, 1.2);
   centerLight.position.set(0, 3.5, 0);
+  centerLight.layers.set(2);
   rotatingAssembly.add(centerLight);
   ridePointLights.push(centerLight);
 
@@ -196,6 +197,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     const angle = (i / 4) * Math.PI * 2;
     const pl = new THREE.PointLight(0xffdd88, 0, 35, 1.5);
     pl.position.set(13.22 * Math.cos(angle), 7.1, 13.22 * Math.sin(angle));
+    pl.layers.set(2);
     rotatingAssembly.add(pl);
     ridePointLights.push(pl);
   }
@@ -244,6 +246,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   // Warm real light filling the canopy underside at night (pure ambiance, not recoloured).
   const carouselCanopyLight = new THREE.PointLight(0xffd9a0, 0, 30, 2.0);
   carouselCanopyLight.position.set(0, 6.4, 0);
+  carouselCanopyLight.layers.set(2);
   rotatingAssembly.add(carouselCanopyLight);
 
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
@@ -447,6 +450,23 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     }
   };
 
+
+  group.traverse((o) => {
+    if (o.isMesh) {
+      let isPanel = false;
+      let curr = o;
+      while (curr) {
+        if (curr === controlPanel.group) {
+          isPanel = true;
+          break;
+        }
+        curr = curr.parent;
+      }
+      if (!isPanel) {
+        o.layers.enable(2);
+      }
+    }
+  });
 
   group.userData.controller = controller;
   return group;

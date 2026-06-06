@@ -558,6 +558,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
   spot.castShadow = false;
   spot.shadow.mapSize.set(1024, 1024);
   spot.name = 'stage_spotlight';
+  spot.layers.set(3);
   group.add(spot);
   group.add(spot.target);
 
@@ -588,6 +589,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const uplight = new THREE.SpotLight(0xffb74d, 0, 30, Math.PI / 3, 0.6, 1);
     uplight.position.set(sx * 9.0, 0.65, Z + 8.5);
     uplight.target.position.set(sx * 3.0, 3.0, Z - 9.5);
+    uplight.layers.set(3);
     group.add(uplight);
     group.add(uplight.target);
     uplights.push(uplight);
@@ -639,6 +641,12 @@ export function buildStage({ anisotropy = 8 } = {}) {
       }
     }
   };
+
+  group.traverse((o) => {
+    if (o.isMesh) {
+      o.layers.enable(3);
+    }
+  });
 
   group.userData.spotLight = spot;
   return group;

@@ -14,12 +14,13 @@ const FPV_OFFSET = new THREE.Vector3(0, 1.5, 0);
 const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export class CameraManager {
-  constructor(camera, scene, controls, renderer, getRides) {
+  constructor(camera, scene, controls, renderer, getRides, interactiveObjects = []) {
     this.camera = camera;
     this.scene = scene;
     this.controls = controls;
     this.renderer = renderer;
     this.getRides = getRides;
+    this.interactiveObjects = interactiveObjects;
     this.state = 'orbit';
     this._flyFrom = new THREE.Vector3();
     this._flyTo = new THREE.Vector3();
@@ -40,6 +41,8 @@ export class CameraManager {
     this._tmpForward = new THREE.Vector3();
     this._clickStart = { x: 0, y: 0 };
     this._hasMoved = false;
+    this._lastHoverTime = 0;
+    this._hoverThrottleMs = 50;
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
@@ -179,6 +182,10 @@ export class CameraManager {
   }
 
   get isFPV() { return this.state === 'fpv'; }
+
+  setInteractiveObjects(objects) {
+    this.interactiveObjects = objects;
+  }
 
   tick(delta) {
     if (this.state === 'flying') this._tickFlight(delta);
@@ -327,21 +334,21 @@ export class CameraManager {
     );
     this._ray.setFromCamera(this._ndc, this.camera);
 
-    // Overriding click-to-fly when clicking a control panel
-    const intersects = this._ray.intersectObjects(this.scene.children, true);
-    let hitControlPanel = false;
+    // Overriding click-to-fly when clicking interactive objects (control panel, lamppost)
+    const intersects = this._ray.intersectObjects(this.interactiveObjects, true);
+    let hitInteractive = false;
     for (const hit of intersects) {
       let obj = hit.object;
       while (obj) {
-        if (obj.name === 'controlPanel') {
-          hitControlPanel = true;
+        if (obj.name === 'controlPanel' || obj.userData.lampId) {
+          hitInteractive = true;
           break;
         }
         obj = obj.parent;
       }
-      if (hitControlPanel) break;
+      if (hitInteractive) break;
     }
-    if (hitControlPanel) return;
+    if (hitInteractive) return;
 
     const hit = new THREE.Vector3();
     if (this._ray.ray.intersectPlane(this._groundPlane, hit)) {
@@ -353,28 +360,32 @@ export class CameraManager {
 
   _onPointerHover(ev) {
     if (this.state !== 'orbit') return;
+    const now = Date.now();
+    if (now - this._lastHoverTime < this._hoverThrottleMs) return;
+    this._lastHoverTime = now;
+
     const rect = this.renderer.domElement.getBoundingClientRect();
     this._ndc.set(
       ((ev.clientX - rect.left) / rect.width) * 2 - 1,
       -((ev.clientY - rect.top) / rect.height) * 2 + 1
     );
     this._ray.setFromCamera(this._ndc, this.camera);
-    const intersects = this._ray.intersectObjects(this.scene.children, true);
+    const intersects = this._ray.intersectObjects(this.interactiveObjects, true);
     
-    let hitControlPanel = false;
+    let hitInteractive = false;
     for (const hit of intersects) {
       let obj = hit.object;
       while (obj) {
-        if (obj.name === 'controlPanel') {
-          hitControlPanel = true;
+        if (obj.name === 'controlPanel' || obj.userData.lampId) {
+          hitInteractive = true;
           break;
         }
         obj = obj.parent;
       }
-      if (hitControlPanel) break;
+      if (hitInteractive) break;
     }
 
-    if (hitControlPanel) {
+    if (hitInteractive) {
       this.renderer.domElement.style.cursor = 'pointer';
     } else {
       if (this.renderer.domElement.style.cursor === 'pointer') {
