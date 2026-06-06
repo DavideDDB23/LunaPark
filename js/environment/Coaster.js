@@ -42,7 +42,7 @@ const Y_STRETCH = 2.1;       // vertical exaggeration of the track. Taller loops
 const NUM_TRAINS = 2;        // trains running simultaneously on the circuit
 const CARS_PER_TRAIN = 4;    // carriages per train (each carriage animated independently)
 const NUM_CARS = NUM_TRAINS * CARS_PER_TRAIN; // 8 total
-const CAR_GAP = 1.02;        // gap between carriages, in car-lengths (1 = touching)
+const CAR_GAP = 1.0;         // centre-to-centre spacing in car-lengths (1 = nose-to-tail touching)
 const TRAIN_SPACING = 1.0 / NUM_TRAINS; // 0.5 — second train half a circuit ahead
 const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at park scale
 
@@ -216,6 +216,17 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     return out.setFromRotationMatrix(_mtx);
   }
 
+  // Orientation for a carriage spanning two coupling points (front & back, in CURVE space), so the
+  // cars of a train articulate and stay attached at their shared couplings. Like frameQuat, but the
+  // "tangent" is the chord direction between the couplings; up is the frame up at the car midpoint.
+  function chordQuat(pFront, pBack, muUp, out) {
+    _tan.subVectors(pFront, pBack).normalize();
+    getUpVectorAt(muUp, _up);
+    _tan.negate();
+    _mtx.lookAt(_origin, _tan, _up);
+    return out.setFromRotationMatrix(_mtx);
+  }
+
   // Top of the track (energy model) with headroom so V_COAST_MIN actually applies on crests.
   const samples = curve.getSpacedPoints(800);
   let yTop = -Infinity;
@@ -302,9 +313,56 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   // must divide by the WORLD track length, not the model-space length — otherwise the gap is
   // shrunk by the auto-fit scale (~0.29) and the carriages overlap nose-to-tail.
   const trackLenWorld = trackLen * scale;
-  const cartSize = new THREE.Box3().setFromObject(templateCartNode).getSize(new THREE.Vector3());
-  const carLen = Math.max(cartSize.x, cartSize.z);
-  const spacingU = (carLen * CAR_GAP) / trackLenWorld;
+  // Carriage length ALONG TRAVEL = the cart's extent on the dolly's local Z (the tangent/travel axis),
+  // measured in dolly-local (world-scale) space. Using the true nose-to-tail length — NOT the widest
+  // horizontal extent (which is the car's WIDTH and is much larger) — makes the inter-car spacing match
+  // the car, so the 4 cars of a train sit attached nose-to-tail instead of leaving a big gap.
+  dolly0.updateMatrixWorld(true);
+  const _dInv = new THREE.Matrix4().copy(dolly0.matrixWorld).invert();
+  const _cartBox = new THREE.Box3();
+  const _cv = new THREE.Vector3();
+  templateCartNode.updateMatrixWorld(true);
+  templateCartNode.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox;
+    for (const xx of [bb.min.x, bb.max.x]) for (const yy of [bb.min.y, bb.max.y]) for (const zz of [bb.min.z, bb.max.z]) {
+      _cv.set(xx, yy, zz).applyMatrix4(o.matrixWorld).applyMatrix4(_dInv);
+      _cartBox.expandByPoint(_cv);
+    }
+  });
+  const carLen = _cartBox.max.z - _cartBox.min.z; // nose-to-tail length along the travel (dolly Z) axis
+  const carSpacing = carLen * CAR_GAP;            // world distance between consecutive couplings
+
+  // ── World-arc-length table ───────────────────────────────────────────────────────────────────
+  // The track is stretched vertically (Y_STRETCH), so equal steps in the curve's NORMALISED arc-length
+  // are NOT equal WORLD distances — on loops the gap between cars balloons. We build a table of
+  // cumulative world distance (group space) along the track and space couplings by real world length,
+  // so the 4 cars of a train stay attached everywhere (straights and loops alike).
+  const ARC_SAMPLES = 2400;
+  const worldArc = new Float32Array(ARC_SAMPLES + 1);
+  const _wpA = new THREE.Vector3(), _wpB = new THREE.Vector3();
+  _wpA.copy(curve.getPointAt(0)).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+  worldArc[0] = 0;
+  for (let i = 1; i <= ARC_SAMPLES; i++) {
+    _wpB.copy(curve.getPointAt(i / ARC_SAMPLES)).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+    worldArc[i] = worldArc[i - 1] + _wpB.distanceTo(_wpA);
+    _wpA.copy(_wpB);
+  }
+  const totalWorldArc = worldArc[ARC_SAMPLES];
+  const uToWorldArc = (u) => {
+    let uu = u % 1; if (uu < 0) uu += 1;
+    const f = uu * ARC_SAMPLES, i = Math.floor(f);
+    return worldArc[i] + (worldArc[i + 1] - worldArc[i]) * (f - i);
+  };
+  const worldArcToU = (s) => {
+    let ss = s % totalWorldArc; if (ss < 0) ss += totalWorldArc;
+    let lo = 0, hi = ARC_SAMPLES;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (worldArc[mid] < ss) lo = mid + 1; else hi = mid; }
+    const i = Math.max(1, lo);
+    const seg = worldArc[i] - worldArc[i - 1];
+    return (i - 1 + (seg > 1e-6 ? (ss - worldArc[i - 1]) / seg : 0)) / ARC_SAMPLES;
+  };
 
   // Remove the other 5 baked cart nodes (we only drive our own clones).
   const leftoverCarts = [];
@@ -315,12 +373,13 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   });
   leftoverCarts.forEach((o) => o.parent && o.parent.remove(o));
 
-  // ── Build 2 trains × 4 carriages — every carriage on its own dolly, offset independently.
-  const cars = [{ dolly: dolly0, offset: 0 }]; // train 0, carriage 0
+  // ── Build 2 trains × 4 carriages — each carriage on its own dolly, spaced by WORLD arc-length so the
+  //    cars of a train stay coupled. arcOffset = world distance behind the lead reference (controller.u).
+  const cars = [{ dolly: dolly0, arcOffset: 0 }]; // train 0, carriage 0 (the lead)
   for (let i = 1; i < NUM_CARS; i++) {
     const t = Math.floor(i / CARS_PER_TRAIN);
     const c = i % CARS_PER_TRAIN;
-    const offset = -t * TRAIN_SPACING + c * spacingU;
+    const arcOffset = t * (totalWorldArc * TRAIN_SPACING) + c * carSpacing;
 
     const dolly = new THREE.Group();
     dolly.name = `coaster_t${t}_c${c}`;
@@ -331,7 +390,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     clone.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     dolly.add(clone);
     group.add(dolly); // Add directly to group to avoid scale inheritance
-    cars.push({ dolly, offset });
+    cars.push({ dolly, arcOffset });
   }
 
   // ── Seat passengers in the carriages ──────────────────────────────────────────────────────
@@ -531,6 +590,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   };
 
   const _pt = new THREE.Vector3();
+  const _ptF = new THREE.Vector3();
+  const _ptB = new THREE.Vector3();
   const _q = new THREE.Quaternion();
 
   group.userData.tick = (delta, _time) => {
@@ -578,20 +639,25 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       }
     }
 
-    // 3. Place every carriage independently on the rail.
+    // 3. Place every carriage as a SEGMENT spanning its two coupling points, spaced by uniform WORLD
+    //    distance (carSpacing) so cars in a train stay coupled even where Y_STRETCH balloons the loops.
+    //    Adjacent cars share a coupling, so they meet and articulate through curves instead of gapping.
+    const sLead = uToWorldArc(controller.u);
     for (const c of cars) {
-      let u = (controller.u - c.offset) % 1;
-      if (u < 0) u += 1;
-      
-      // Get position on curve in model space
-      _pt.copy(curve.getPointAt(u));
-      // Transform from model space -> rideScaled space -> group space
-      _pt.applyMatrix4(model.matrix);
-      _pt.applyMatrix4(rideScaled.matrix);
+      const frontArc = sLead - c.arcOffset;     // front coupling, world arc-length
+      const backArc = frontArc - carSpacing;    // back coupling (one car behind)
+      const uf = worldArcToU(frontArc);
+      const ub = worldArcToU(backArc);
+
+      // Position = midpoint of the two couplings, transformed model → rideScaled → group space.
+      _ptF.copy(curve.getPointAt(uf));
+      _ptB.copy(curve.getPointAt(ub));
+      _pt.copy(_ptF).add(_ptB).multiplyScalar(0.5).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
       c.dolly.position.copy(_pt);
-      
-      // Get orientation, apply rideScaled rotation
-      frameQuat(u, _q);
+
+      // Orientation = along the chord between the couplings (consecutive cars meet at shared couplings).
+      const muUp = worldArcToU(frontArc - carSpacing * 0.5);
+      chordQuat(_ptF, _ptB, muUp, _q);
       c.dolly.quaternion.copy(rideScaled.quaternion).multiply(_q);
     }
 
