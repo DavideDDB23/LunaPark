@@ -32,19 +32,144 @@
       pointer-events: none;
       user-select: none;
     }
+    /* ===== Loading screen ===== */
     #loader {
       position: absolute;
       inset: 0;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #111;
-      transition: opacity 0.6s ease;
+      background:
+        radial-gradient(125% 95% at 50% 16%, #241a3d 0%, #150f26 38%, #0a0713 68%, #050409 100%);
+      transition: opacity 0.8s ease, visibility 0.8s ease;
       z-index: 10;
+      overflow: hidden;
     }
     #loader.hidden {
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
+    }
+    #loader::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(125% 100% at 50% 48%, transparent 52%, rgba(0,0,0,0.6) 100%);
+    }
+
+    /* drifting bokeh fair-lights */
+    #loader .bokeh { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    #loader .bokeh i {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(7px);
+      opacity: 0;
+      animation: bokeh-float linear infinite, bokeh-twinkle ease-in-out infinite;
+    }
+    @keyframes bokeh-float {
+      from { transform: translateY(28px); }
+      to   { transform: translateY(-46px); }
+    }
+    @keyframes bokeh-twinkle {
+      0%, 100% { opacity: 0.04; }
+      50%      { opacity: 0.5; }
+    }
+
+    #loader .stage {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ferris wheel */
+    #loader .wheel-wrap {
+      width: 196px;
+      height: 206px;
+      filter: drop-shadow(0 0 20px rgba(255,180,90,0.28));
+    }
+    #loader .spin {
+      transform-box: view-box;
+      transform-origin: 110px 110px;
+      animation: ferris-spin 9s linear infinite;
+    }
+    @keyframes ferris-spin { to { transform: rotate(360deg); } }
+    #loader .cabin {
+      transform-box: view-box;
+      transform-origin: 110px 110px;
+      animation: ferris-orbit 9s linear infinite;
+    }
+    @keyframes ferris-orbit {
+      from { transform: rotate(var(--a0)) translateY(-82px) rotate(calc(-1 * var(--a0))); }
+      to   { transform: rotate(calc(var(--a0) + 360deg)) translateY(-82px) rotate(calc(-1 * var(--a0) - 360deg)); }
+    }
+    #loader .rim-light { animation: bulb 1.8s ease-in-out infinite; transform-origin: center; }
+    @keyframes bulb { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    /* title + meta */
+    #loader .title {
+      margin-top: 30px;
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: 0.42em;
+      text-indent: 0.42em;
+      background: linear-gradient(180deg, #ffffff 0%, #ffd9a8 52%, #ff9ec4 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      text-shadow: 0 0 26px rgba(255,180,120,0.25);
+    }
+    #loader .subtitle {
+      margin-top: 11px;
+      font-size: 11px;
+      letter-spacing: 0.5em;
+      text-indent: 0.5em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.42);
+    }
+    #loader .bar {
+      position: relative;
+      margin-top: 34px;
+      width: 240px;
+      height: 4px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.10);
+      overflow: hidden;
+    }
+    #loader .bar-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #ffb347, #ff7eb3, #ffd194);
+      box-shadow: 0 0 12px rgba(255,150,120,0.6);
+      transition: width 0.25s ease;
+    }
+    #loader .bar-fill::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 1.6s ease-in-out infinite;
+    }
+    @keyframes shimmer { to { transform: translateX(280px); } }
+    #loader .status {
+      margin-top: 15px;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.55);
+      font-variant-numeric: tabular-nums;
+    }
+    #loader .status b { color: rgba(255,225,190,0.9); font-weight: 600; }
+
+    @media (prefers-reduced-motion: reduce) {
+      #loader .spin, #loader .cabin, #loader .rim-light,
+      #loader .bar-fill::after, #loader .bokeh i { animation: none !important; }
     }
   </style>
   <script type="importmap">
@@ -85,7 +210,145 @@
       Click Lamp: Toggle Light On/Off
     </div>
   </div>
-  <div id="loader">Loading scene…</div>
+  <div id="loader">
+    <div class="bokeh" aria-hidden="true"></div>
+    <div class="stage">
+      <svg class="wheel-wrap" viewBox="0 0 220 232" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Loading">
+        <!-- support frame (static) -->
+        <g stroke-linecap="round">
+          <line x1="110" y1="110" x2="80" y2="214" stroke="#6b5b8a" stroke-width="3" />
+          <line x1="110" y1="110" x2="140" y2="214" stroke="#6b5b8a" stroke-width="3" />
+          <line x1="62" y1="214" x2="158" y2="214" stroke="#4a3f63" stroke-width="4" />
+        </g>
+        <circle cx="110" cy="214" r="4" fill="#6b5b8a" />
+
+        <!-- spinning wheel -->
+        <g class="spin">
+          <circle cx="110" cy="110" r="82" stroke="rgba(255,210,150,0.9)" stroke-width="2.5" />
+          <circle cx="110" cy="110" r="74" stroke="rgba(255,160,120,0.22)" stroke-width="1" />
+          <g stroke="rgba(255,200,150,0.35)" stroke-width="1.5">
+            <line x1="110" y1="110" x2="110" y2="28" />
+            <line x1="110" y1="110" x2="167.98" y2="52.02" />
+            <line x1="110" y1="110" x2="192" y2="110" />
+            <line x1="110" y1="110" x2="167.98" y2="167.98" />
+            <line x1="110" y1="110" x2="110" y2="192" />
+            <line x1="110" y1="110" x2="52.02" y2="167.98" />
+            <line x1="110" y1="110" x2="28" y2="110" />
+            <line x1="110" y1="110" x2="52.02" y2="52.02" />
+          </g>
+          <g fill="#ffd9a0">
+            <circle class="rim-light" cx="110" cy="28" r="3" style="animation-delay:0s" />
+            <circle class="rim-light" cx="167.98" cy="52.02" r="3" style="animation-delay:0.22s" />
+            <circle class="rim-light" cx="192" cy="110" r="3" style="animation-delay:0.45s" />
+            <circle class="rim-light" cx="167.98" cy="167.98" r="3" style="animation-delay:0.68s" />
+            <circle class="rim-light" cx="110" cy="192" r="3" style="animation-delay:0.9s" />
+            <circle class="rim-light" cx="52.02" cy="167.98" r="3" style="animation-delay:1.12s" />
+            <circle class="rim-light" cx="28" cy="110" r="3" style="animation-delay:1.35s" />
+            <circle class="rim-light" cx="52.02" cy="52.02" r="3" style="animation-delay:1.58s" />
+          </g>
+          <circle cx="110" cy="110" r="9" fill="#ffd9a0" />
+          <circle cx="110" cy="110" r="4" fill="#7a6a4a" />
+        </g>
+
+        <!-- gondolas (orbit, stay upright) -->
+        <g class="cabin" style="--a0:0deg">
+          <line x1="110" y1="110" x2="110" y2="116" stroke="rgba(255,210,150,0.7)" stroke-width="1.5" />
+          <rect x="102" y="116" width="16" height="12" rx="3" fill="#2a2140" stroke="rgba(255,200,140,0.85)" stroke-width="1.5" />
+          <circle cx="110" cy="113" r="2" fill="#ffd9a0" />
+        </g>
+        <g class="cabin" style="--a0:60deg">
+          <line x1="110" y1="110" x2="110" y2="116" stroke="rgba(255,210,150,0.7)" stroke-width="1.5" />
+          <rect x="102" y="116" width="16" height="12" rx="3" fill="#2a2140" stroke="rgba(255,200,140,0.85)" stroke-width="1.5" />
+          <circle cx="110" cy="113" r="2" fill="#ffd9a0" />
+        </g>
+        <g class="cabin" style="--a0:120deg">
+          <line x1="110" y1="110" x2="110" y2="116" stroke="rgba(255,210,150,0.7)" stroke-width="1.5" />
+          <rect x="102" y="116" width="16" height="12" rx="3" fill="#2a2140" stroke="rgba(255,200,140,0.85)" stroke-width="1.5" />
+          <circle cx="110" cy="113" r="2" fill="#ffd9a0" />
+        </g>
+        <g class="cabin" style="--a0:180deg">
+          <line x1="110" y1="110" x2="110" y2="116" stroke="rgba(255,210,150,0.7)" stroke-width="1.5" />
+          <rect x="102" y="116" width="16" height="12" rx="3" fill="#2a2140" stroke="rgba(255,200,140,0.85)" stroke-width="1.5" />
+          <circle cx="110" cy="113" r="2" fill="#ffd9a0" />
+        </g>
+        <g class="cabin" style="--a0:240deg">
+          <line x1="110" y1="110" x2="110" y2="116" stroke="rgba(255,210,150,0.7)" stroke-width="1.5" />
+          <rect x="102" y="116" width="16" height="12" rx="3" fill="#2a2140" stroke="rgba(255,200,140,0.85)" stroke-width="1.5" />
+          <circle cx="110" cy="113" r="2" fill="#ffd9a0" />
+        </g>
+        <g class="cabin" style="--a0:300deg">
+          <line x1="110" y1="110" x2="110" y2="116" stroke="rgba(255,210,150,0.7)" stroke-width="1.5" />
+          <rect x="102" y="116" width="16" height="12" rx="3" fill="#2a2140" stroke="rgba(255,200,140,0.85)" stroke-width="1.5" />
+          <circle cx="110" cy="113" r="2" fill="#ffd9a0" />
+        </g>
+      </svg>
+
+      <div class="title">LUNA PARK</div>
+      <div class="subtitle">3D Amusement Park</div>
+      <div class="bar"><div class="bar-fill" id="loaderBar"></div></div>
+      <div class="status"><b id="loaderPct">0</b>% · <span id="loaderMsg">warming up the lights</span></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var loader = document.getElementById('loader');
+      var bar = document.getElementById('loaderBar');
+      var pct = document.getElementById('loaderPct');
+      var msg = document.getElementById('loaderMsg');
+
+      // drifting bokeh fair-lights
+      var colors = ['#ffcf8a', '#ff8fc4', '#8fd3ff', '#ffe6a3', '#c79bff'];
+      var bokeh = loader.querySelector('.bokeh');
+      for (var i = 0; i < 14; i++) {
+        var s = 6 + Math.random() * 26;
+        var d = document.createElement('i');
+        d.style.left = (Math.random() * 100) + '%';
+        d.style.top = (Math.random() * 100) + '%';
+        d.style.width = d.style.height = s + 'px';
+        d.style.background = colors[i % colors.length];
+        d.style.animationDuration = (5 + Math.random() * 6) + 's, ' + (2 + Math.random() * 3) + 's';
+        d.style.animationDelay = (-Math.random() * 6) + 's, ' + (-Math.random() * 4) + 's';
+        bokeh.appendChild(d);
+      }
+
+      // eased faux progress that finishes when the scene signals ready
+      var msgs = ['warming up the lights', 'raising the ferris wheel', 'painting the sky',
+                  'tuning the carousel', 'almost there'];
+      var p = 0, cap = 92, done = false, mi = 0, lastMsg = 0;
+      function set(v) { bar.style.width = v.toFixed(1) + '%'; pct.textContent = Math.round(v); }
+      function tick(t) {
+        if (done) return;
+        p += (cap - p) * 0.018;
+        set(p);
+        if (t - lastMsg > 1500 && mi < msgs.length - 1) { msg.textContent = msgs[++mi]; lastMsg = t; }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(function (t) { lastMsg = t; requestAnimationFrame(tick); });
+
+      function finish() {
+        if (done) return;
+        done = true;
+        loader.classList.remove('hidden'); // cancel the premature fade so 100% is visible
+        msg.textContent = 'ready';
+        var start = performance.now(), from = p;
+        (function fin() {
+          var k = Math.min(1, (performance.now() - start) / 420);
+          set(from + (100 - from) * k);
+          if (k < 1) { requestAnimationFrame(fin); return; }
+          bar.style.width = '100%';
+          pct.textContent = '100';
+          setTimeout(function () { loader.classList.add('hidden'); }, 450); // hold full bar, then fade
+        })();
+      }
+
+      // main.js adds .hidden when the scene is ready; intercept it to finish the bar first.
+      new MutationObserver(function () {
+        if (!done && loader.classList.contains('hidden')) finish();
+      }).observe(loader, { attributes: true, attributeFilter: ['class'] });
+    })();
+  </script>
+
   <script type="module" src="js/main.js?1779276054"></script>
 </body>
 </html>
