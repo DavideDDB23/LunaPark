@@ -126,6 +126,7 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] During the day: off
 - [x] During the night: blinking/pulsing with a sine wave, each light slightly out of phase with the others so they don't all blink at the same time
 - [x] Colour controlled by the HTML colour picker
+- [ ] Apply the colour-picker colour to **Tagada** and **Carousel** decoration lights as well (currently only Ferris Wheel and Roller Coaster update)
 
 ---
 
@@ -140,6 +141,7 @@ The night scene is too dark between attractions — needs ambient fill and moonl
 - [ ] **Path spotlights**: add 2–4 spotlights at key path intersections
 - [ ] **Lamppost radius**: increase 70 → ~90 for better coverage overlap
 - [ ] **Water night tint**: brighten river shader night color so it's visible after dark
+- [ ] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist.
 
 ---
 
@@ -151,7 +153,7 @@ A small HUD panel overlaid on the scene with:
  - [x] Ride light colour picker
  - [x] "?" help button that opens a list of all keyboard/mouse controls
  - [x] Auto day/night toggle button
- - [ ] Improve GUI (top-left): reorganize layout, clarify labels, group controls
+ - [ ] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency)
 
 ---
 
