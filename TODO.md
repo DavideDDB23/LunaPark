@@ -46,12 +46,12 @@ No imported animations — all motion is JavaScript math.
 - [x] Placed in the **northeast** area (around +40, 0, −40)
 - [x] Fix legs in `passengers.js` (use `applyChairSeatedLegs` and apply some rotation)
 
-### 3. Roller Coaster
-- [ ] A looping curved track built from a smooth mathematical curve (CatmullRom spline)
-- [ ] The track forms a closed loop with climbs and valleys
-- [ ] A cart rides along the track, always facing the direction of travel and tilting with the curves (Frenet frame orientation)
-- [ ] Cart goes faster in valleys and slower on climbs (physics-inspired variable speed)
-- [ ] Placed in the **southeast** area (around +40, 0, +40)
+### 3. Roller Coaster ✅
+- [x] A looping curved track built from a smooth mathematical curve (CatmullRom spline)
+- [x] The track forms a closed loop with climbs and valleys
+- [x] A cart rides along the track, always facing the direction of travel and tilting with the curves (parallel-transport frame, better than Frenet)
+- [x] Cart goes faster in valleys and slower on climbs (physics-inspired variable speed)
+- [x] Placed in the **southeast** area (around +52, 0, +54)
 
 ### 4. Tagada (Mechanical Arm Ride) ✅
 - [x] A heavy mechanical arm that oscillates back and forth on two axes simultaneously, creating a compound unpredictable motion
@@ -126,6 +126,20 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] During the day: off
 - [x] During the night: blinking/pulsing with a sine wave, each light slightly out of phase with the others so they don't all blink at the same time
 - [x] Colour controlled by the HTML colour picker
+
+---
+
+## 🔴 NIGHT LIGHTING
+
+The night scene is too dark between attractions — needs ambient fill and moonlight.
+
+- [ ] **Moonlight**: add blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity ~0.05–0.1
+- [ ] **Night hemisphere fill**: raise hemisphere intensity 0.22 → ~0.35 at night
+- [ ] **Exposure**: raise night tone-mapping 0.36 → ~0.45–0.50
+- [ ] **Background/environment intensity**: raise at night for sky/reflections
+- [ ] **Path spotlights**: add 2–4 spotlights at key path intersections
+- [ ] **Lamppost radius**: increase 70 → ~90 for better coverage overlap
+- [ ] **Water night tint**: brighten river shader night color so it's visible after dark
 
 ---
 
