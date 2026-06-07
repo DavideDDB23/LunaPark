@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Luna Park — 3D Amusement Park</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     html, body {
       margin: 0;
@@ -22,15 +25,345 @@
     }
     #hud {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      padding: 6px 10px;
-      background: rgba(0, 0, 0, 0.45);
-      border-radius: 6px;
-      font-size: 12px;
-      line-height: 1.4;
+      top: 20px;
+      left: 20px;
+      width: 300px;
+      padding: 20px;
+      background: rgba(12, 15, 22, 0.72);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 10px;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #fff;
       pointer-events: none;
       user-select: none;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    #hud * {
+      pointer-events: auto;
+    }
+    @media (max-width: 480px) {
+      #hud {
+        width: auto;
+        right: 20px;
+      }
+    }
+    .hud-title {
+      font-weight: 700;
+      margin: 0;
+      font-size: 12px;
+      color: #ffa01c;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background-color: #ffa01c;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #ffa01c;
+      animation: pulse 2s infinite;
+      display: inline-block;
+    }
+    @keyframes pulse {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(255, 160, 28, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 5px rgba(255, 160, 28, 0);
+      }
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(255, 160, 28, 0);
+      }
+    }
+    .hud-controls-grid {
+      display: grid;
+      grid-template-columns: 75px 1fr 50px;
+      align-items: center;
+      gap: 12px 14px;
+    }
+    .hud-controls-grid label {
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.85);
+    }
+    
+    /* Custom Range Slider Styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+      margin: 0;
+      cursor: pointer;
+    }
+    input[type="range"]:focus {
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(to right, #ffa01c var(--value-percent, 0%), rgba(255, 255, 255, 0.1) var(--value-percent, 0%));
+      border-radius: 2px;
+      border: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      height: 12px;
+      width: 12px;
+      border-radius: 50%;
+      background: #ffa01c;
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -4px;
+      border: none;
+      box-shadow: 0 0 6px rgba(255, 160, 28, 0.8);
+      transition: transform 0.15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+    
+    /* Firefox Support */
+    input[type="range"]::-moz-range-track {
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(to right, #ffa01c var(--value-percent, 0%), rgba(255, 255, 255, 0.1) var(--value-percent, 0%));
+      border-radius: 2px;
+      border: none;
+    }
+    input[type="range"]::-moz-range-thumb {
+      height: 12px;
+      width: 12px;
+      border: none;
+      border-radius: 50%;
+      background: #ffa01c;
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(255, 160, 28, 0.8);
+      transition: transform 0.15s;
+    }
+    input[type="range"]::-moz-range-thumb:hover {
+      transform: scale(1.25);
+    }
+
+    .control-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #ffd9a8;
+      text-align: right;
+      font-weight: bold;
+    }
+
+    /* Custom Toggle Switch Styling */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 20px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .toggle-slider::before {
+      content: "";
+      position: absolute;
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      top: 3px;
+      background-color: #fff;
+      border-radius: 50%;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+    .toggle-switch:hover .toggle-slider {
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #ffa01c;
+      border-color: rgba(255, 160, 28, 0.4);
+      box-shadow: 0 0 8px rgba(255, 160, 28, 0.3);
+    }
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(18px);
+      background-color: #fff;
+    }
+    
+    .state-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      text-align: right;
+      font-weight: bold;
+    }
+
+    /* Custom Color Picker Pill Styling */
+    .color-picker-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      width: 48px;
+      height: 20px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      overflow: hidden;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .color-picker-wrapper:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+      transform: scale(1.05);
+    }
+    .color-picker-wrapper input[type="color"] {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+      padding: 0;
+      margin: 0;
+      border: none;
+    }
+    .color-pill-preview {
+      display: block;
+      width: 100%;
+      height: 100%;
+      transition: background-color 0.2s;
+    }
+    .color-hex-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.55);
+      text-align: right;
+    }
+
+    /* Accordion / Help section styling */
+    .hud-footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 12px;
+      margin-top: 4px;
+    }
+    .accordion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.7);
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+      outline: none;
+    }
+    .accordion-header:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #ffa01c;
+    }
+    .accordion-icon {
+      font-size: 10px;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-origin: center;
+    }
+    #hud:has(#helpPanel[style*="display: block"]) .accordion-icon {
+      transform: rotate(180deg);
+    }
+    #helpPanel {
+      display: flex !important; /* Force display flex to override inline style */
+      flex-direction: column;
+      gap: 12px;
+      padding-right: 4px;
+      
+      /* Closed state by default */
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+      overflow: hidden;
+      pointer-events: none;
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                  opacity 0.2s ease, 
+                  margin-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    /* Open state when inline style contains "display: block" */
+    #helpPanel[style*="display: block"] {
+      max-height: 200px;
+      opacity: 1;
+      margin-top: 10px;
+      pointer-events: auto;
+      overflow-y: auto;
+    }
+    #helpPanel::-webkit-scrollbar {
+      width: 4px;
+    }
+    #helpPanel::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #helpPanel::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+    #helpPanel::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 160, 28, 0.5);
+    }
+    .help-section {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.65);
+      line-height: 1.4;
+    }
+    .help-section strong {
+      color: #ffa01c;
+      display: block;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .help-section ul {
+      margin: 0;
+      padding-left: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    kbd {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #fff;
     }
     /* ===== Loading screen ===== */
     #loader {
@@ -185,29 +518,68 @@
 <body>
   <canvas id="c"></canvas>
   <div id="hud">
-    Luna Park — Phase 1<br />
-    Drag: orbit · Scroll: zoom · Right-drag: pan<br />
-    Click: fly to point · 1-6: presets · C: FPV ride · ESC: exit<br />
-    <label style="pointer-events: auto;">
-      Wind: <input id="wind" type="range" min="0" max="3" step="0.05" value="1" style="vertical-align: middle;" />
-      <span id="windVal">1.00</span>
-    </label><br />
-    <label style="pointer-events: auto;">
-      Time: <input id="timeOfDay" type="range" min="0" max="24" step="0.1" value="12" style="vertical-align: middle; width: 180px;" />
-      <span id="timeVal">12:00</span>
-    </label><br />
-    <label style="pointer-events: auto;">
-      Auto: <input id="autoTime" type="checkbox" checked style="vertical-align: middle;" />
-    </label>
-    <label style="pointer-events: auto; margin-left: 10px;">
-      Lights Color: <input id="lightColor" type="color" value="#ffdd88" style="vertical-align: middle; border: none; height: 20px; width: 40px; background: none; cursor: pointer;" />
-    </label>
-    <button id="helpBtn" style="pointer-events: auto; margin-left: 10px; background: #333; border: 1px solid #555; color: #fff; cursor: pointer; border-radius: 4px; padding: 2px 6px;">?</button>
-    <div id="helpPanel" style="display: none; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 6px;">
-      <strong>Controls:</strong><br />
-      Space: Play/Pause Time Cycle<br />
-      Scroll on Ride: Alter Speed (0.2x - 3.0x)<br />
-      Click Lamp: Toggle Light On/Off
+    <div class="hud-title">
+      <span class="pulse-dot"></span>
+      Luna Park — Interactive Controls
+    </div>
+
+    <div class="hud-controls-grid">
+      <!-- Wind Row -->
+      <label for="wind">Wind:</label>
+      <input id="wind" type="range" min="0" max="3" step="0.05" value="1" />
+      <span id="windVal" class="control-value">1.00</span>
+
+      <!-- Time Row -->
+      <label for="timeOfDay">Time:</label>
+      <input id="timeOfDay" type="range" min="0" max="24" step="0.1" value="12" />
+      <span id="timeVal" class="control-value">12:00</span>
+
+      <!-- Auto Time Row -->
+      <label for="autoTime">Auto Time:</label>
+      <label class="toggle-switch">
+        <input id="autoTime" type="checkbox" checked />
+        <span class="toggle-slider"></span>
+      </label>
+      <span id="autoStateVal" class="state-val">ON</span>
+
+      <!-- Lights Row -->
+      <label for="lightColor">Lights:</label>
+      <div class="color-picker-wrapper">
+        <input id="lightColor" type="color" value="#ffdd88" />
+        <span class="color-pill-preview" id="colorPillPreview"></span>
+      </div>
+      <span id="colorHexVal" class="color-hex-val">#FFDD88</span>
+    </div>
+
+    <div class="hud-footer">
+      <div class="accordion-item">
+        <button id="helpBtn" class="accordion-header">
+          <span>Help & Keybindings</span>
+          <span class="accordion-icon">▾</span>
+        </button>
+        <div id="helpPanel" style="display: none;">
+          <div class="help-section">
+            <strong>Mouse Navigation</strong>
+            <ul>
+              <li>Drag: Orbit View</li>
+              <li>Scroll: Zoom (outside rides)</li>
+              <li>Right-Drag: Pan View</li>
+              <li>Left Click on Object: Fly to Object</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <strong>Shortcuts & Interactions</strong>
+            <ul>
+              <li><kbd>1</kbd> - <kbd>6</kbd>: Ride Cam Presets</li>
+              <li><kbd>C</kbd>: First-Person FPV Ride</li>
+              <li><kbd>Space</kbd>: Pause/Resume Time</li>
+              <li><kbd>Scroll on Ride</kbd>: Adjust Speed (0.2x - 3.0x)</li>
+              <li>Click Lamppost: Toggle Light On/Off</li>
+              <li><kbd>ESC</kbd>: Exit Active View</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div id="loader">
@@ -346,6 +718,42 @@
       new MutationObserver(function () {
         if (!done && loader.classList.contains('hidden')) finish();
       }).observe(loader, { attributes: true, attributeFilter: ['class'] });
+    })();
+  </script>
+
+  <script>
+    (function() {
+      const windInput = document.getElementById('wind');
+      const timeInput = document.getElementById('timeOfDay');
+      const autoTime = document.getElementById('autoTime');
+      const autoStateVal = document.getElementById('autoStateVal');
+      const lightColor = document.getElementById('lightColor');
+      const colorHexVal = document.getElementById('colorHexVal');
+      const colorPillPreview = document.getElementById('colorPillPreview');
+      
+      function updateSlider(input, min, max) {
+        if (!input) return;
+        const val = parseFloat(input.value);
+        const pct = ((val - min) / (max - min)) * 100;
+        input.style.setProperty('--value-percent', `${pct}%`);
+      }
+
+      // RequestAnimationFrame loop for real-time UI synchronization
+      // (covers programmatic changes from the main JS cycle)
+      function syncUI() {
+        if (windInput) updateSlider(windInput, 0, 3);
+        if (timeInput) updateSlider(timeInput, 0, 24);
+        if (autoTime && autoStateVal) {
+          autoStateVal.textContent = autoTime.checked ? 'ON' : 'OFF';
+        }
+        if (lightColor && colorHexVal && colorPillPreview) {
+          const val = lightColor.value;
+          colorHexVal.textContent = val.toUpperCase();
+          colorPillPreview.style.backgroundColor = val;
+        }
+        requestAnimationFrame(syncUI);
+      }
+      requestAnimationFrame(syncUI);
     })();
   </script>
 

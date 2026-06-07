@@ -73,7 +73,7 @@ export async function buildLampposts() {
     // Pick a representative geometry for this bucket (the first mesh that uses it).
     const repMesh = sourceMeshes.find(m => meshToBucket.get(m.material) === bucketIdx);
     const instanced = new THREE.InstancedMesh(repMesh.geometry, mat, count);
-    instanced.castShadow = false;
+    instanced.castShadow = true;
     instanced.receiveShadow = true;
     instanced.layers.enable(LAMPPOST_LAYER);
     instanced.name = `lamppost_instances_${bucketIdx}`;
@@ -134,15 +134,21 @@ export async function buildLampposts() {
   }
 
   // Listen for time phase changes to drive automated lighting
+  let lastGlobalIsNight = null;
   eventBus.on('time-phase-change', (data) => {
     const isNight = data.isNight;
     const nightFactor = data.nightFactor;
 
+    const phaseTransitioned = (lastGlobalIsNight !== null && lastGlobalIsNight !== isNight);
+    lastGlobalIsNight = isNight;
+
     for (const lampRoot of group.children) {
-      if (lampRoot.userData.targetOn !== isNight) {
+      if (phaseTransitioned) {
         lampRoot.userData.isManual = false;
       }
-      lampRoot.userData.targetOn = isNight;
+      if (!lampRoot.userData.isManual) {
+        lampRoot.userData.targetOn = isNight;
+      }
       lampRoot.userData.nightFactor = nightFactor;
     }
   });
