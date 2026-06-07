@@ -436,7 +436,7 @@ function animate() {
   }
 
   if (autoAdvance && dayNight) {
-    const hoursPerSec = 0.4;
+    const hoursPerSec = 0.1;
     let nextHour = dayNight.t * 24 + hoursPerSec * delta;
     if (nextHour >= 24) nextHour -= 24;
     dayNight.setHour(nextHour);
