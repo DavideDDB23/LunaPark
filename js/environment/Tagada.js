@@ -11,7 +11,7 @@ const PITCH_FREQ = 2.6;           // Pitch speed (rad/s)
 const ROLL_AMP = 0.22;            // Roll oscillation amplitude
 const ROLL_FREQ = 1.9;            // Roll speed (rad/s)
 const ARM_YAW_SPEED = 0.4;        // Radiant speed for the arm's horizontal rotation
-const ARM_PIVOT_Y = 1.2;
+const ARM_PIVOT_Y = 0.4;
 const BOARDING_DROP = 6.0;         // How much the arm telescopes down when stopped
 const MIN_ARM_LENGTH = 2.5;        // Prevents the arm from collapsing fully
 
@@ -164,6 +164,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const rimBulbs = [];
   const basePanels = [];
   const armStrips = [];
+  const pistonRods = [];
+  const targetsInf = [];
+  const targetsSup = [];
 
   // 1. ── Foundation + faceted illuminated base ───────────────────────────────
   const foundation = new THREE.Mesh(new THREE.CylinderGeometry(12.4, 12.8, 0.4, 48), baseConcreteMat);
@@ -192,26 +195,27 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     basePanels.push(panel);
   }
 
-  // Motor housing + chrome cap
-  const motorBase = new THREE.Mesh(new THREE.CylinderGeometry(3.0, 3.3, 1.0, 32), baseHousingMat);
-  motorBase.position.y = 1.6; motorBase.castShadow = true; motorBase.receiveShadow = true;
+  // Motor mounting housing + chrome cap (low profile at the base)
+  const motorBase = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 0.1, 32), baseHousingMat);
+  motorBase.position.y = 0.45; motorBase.castShadow = true; motorBase.receiveShadow = true;
   group.add(motorBase);
-  const motorCap = new THREE.Mesh(new THREE.CylinderGeometry(3.25, 3.25, 0.16, 32), chromeMat);
-  motorCap.position.y = 2.12; motorCap.castShadow = true;
+  const motorCap = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.04, 32), chromeMat);
+  motorCap.position.y = 0.51; motorCap.castShadow = true;
   group.add(motorCap);
 
-  // Marquee crown — a ring of chase bulbs on top of the base housing
+  // Marquee crown — a ring of chase bulbs on top of the outer base skirt
   const crownBulbGeo = new THREE.SphereGeometry(0.13, 12, 10);
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;
     const m = neon(0xfff1c0);
     const bulb = new THREE.Mesh(crownBulbGeo, m);
-    bulb.position.set(Math.cos(a) * 3.25, 2.24, Math.sin(a) * 3.25);
+    // Position on top of the base skirt (skirt top is at y = 1.55)
+    bulb.position.set(Math.cos(a) * 10.8, 1.55, Math.sin(a) * 10.8);
     group.add(bulb);
     rimBulbs.push(bulb);
   }
 
-  const pivotCollar = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.4, 24), goldMat);
+  const pivotCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 0.1, 24), goldMat);
   pivotCollar.position.y = ARM_PIVOT_Y; pivotCollar.castShadow = true;
   group.add(pivotCollar);
 
@@ -228,23 +232,50 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const armPivot = new THREE.Group();
   armPivot.name = 'tagada_arm_pivot';
   armPivot.position.set(0, ARM_PIVOT_Y, 0);
-  armPivot.rotation.order = 'YXZ';
   group.add(armPivot);
 
-  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 2.2, 24), darkChromeMat);
-  hinge.rotation.z = Math.PI / 2;
-  armPivot.add(hinge);
+  // Mechanical yoke base — a torus ring so the arm passes cleanly through the centre
+  const yokeBase = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.28, 12, 32), metalPedestalMat);
+  yokeBase.rotation.x = Math.PI / 2;
+  yokeBase.position.y = -0.4;
+  armPivot.add(yokeBase);
+
+  // Mechanical fork arms (yoke stanchions) - rotate horizontally but do NOT tilt
+  const bracketGeo = new THREE.BoxGeometry(0.35, 0.7, 0.9);
   for (const sx of [-1, 1]) {
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.92, 0.12, 24), goldMat);
-    cap.rotation.z = Math.PI / 2; cap.position.x = sx * 1.1;
+    const bracket = new THREE.Mesh(bracketGeo, metalPedestalMat);
+    bracket.position.set(sx * 1.05, -0.05, 0);
+    armPivot.add(bracket);
+
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.08, 16), chromeMat);
+    cap.rotation.z = Math.PI / 2;
+    cap.position.set(sx * 1.24, -0.05, 0);
     armPivot.add(cap);
   }
+
+  // The tilting group (pitch/roll) inside the yaw pivot
+  const armTilt = new THREE.Group();
+  armTilt.name = 'tagada_arm_tilt';
+  armTilt.rotation.order = 'XYZ';
+  armPivot.add(armTilt);
+
+  // Hinge pin (tilts with the arm)
+  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 2.0, 24), darkChromeMat);
+  hinge.rotation.z = Math.PI / 2;
+  hinge.position.set(0, -0.05, 0);
+  armTilt.add(hinge);
 
   // 3. ── Arm ─────────────────────────────────────────────────────────────────
   const armLength = 9.0;
   const armGroup = new THREE.Group();
   armGroup.name = 'tagada_arm_group';
-  armPivot.add(armGroup);
+  armTilt.add(armGroup);
+
+  // Rubber bellows boot — hides the arm-to-housing junction
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.85, metalness: 0.1 });
+  const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.0, 1.2, 20), bootMat);
+  boot.position.y = -0.6;
+  armGroup.add(boot);
 
   const mainArm = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.62, armLength, 24), armMat);
   mainArm.position.y = armLength / 2; mainArm.castShadow = true; mainArm.receiveShadow = true;
@@ -265,12 +296,29 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     armStrips.push(strip);
   }
 
-  // Hydraulic piston cylinders (kept for the telescoping look)
+  // Hydraulic piston cylinders (outer sleeves, child of fixed base 'group')
+  const pistonCylH = armLength * 0.55;
   const pistonCylinders = [];
+  const PISTON_X_OFFSET = 0.78;
+  const PISTON_Z_OFFSET = -0.32;
   for (const side of [-1, 1]) {
-    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, armLength * 0.7, 16), chromeMat);
-    cyl.position.set(side * 0.78, armLength * 0.4, -0.32); cyl.castShadow = true;
-    armGroup.add(cyl);
+    // Target_Inferiore (child of fixed base 'group')
+    const targetInf = new THREE.Object3D();
+    targetInf.name = `target_inf_${side}`;
+    targetInf.position.set(side * PISTON_X_OFFSET, ARM_PIVOT_Y, PISTON_Z_OFFSET);
+    group.add(targetInf);
+    targetsInf.push(targetInf);
+
+    // Cylinder (child of fixed base 'group')
+    // We rotate and translate geometry so the pivot (base) is at (0,0,0) and it points along local -Z
+    const cylGeo = new THREE.CylinderGeometry(0.18, 0.18, pistonCylH, 16);
+    cylGeo.rotateX(Math.PI / 2);
+    cylGeo.translate(0, 0, -pistonCylH / 2);
+    const cyl = new THREE.Mesh(cylGeo, chromeMat);
+    cyl.name = `piston_cyl_${side}`;
+    cyl.position.set(side * PISTON_X_OFFSET, ARM_PIVOT_Y, PISTON_Z_OFFSET);
+    cyl.castShadow = true;
+    group.add(cyl);
     pistonCylinders.push(cyl);
   }
 
@@ -283,6 +331,29 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const connector = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.5, 24), darkChromeMat);
   connector.position.y = -0.25;
   discPivot.add(connector);
+
+  // Piston rods (inner shafts, child of platform 'discPivot')
+  const rodLen = armLength * 0.5;
+  for (const side of [-1, 1]) {
+    // Target_Superiore (child of platform 'discPivot')
+    const targetSup = new THREE.Object3D();
+    targetSup.name = `target_sup_${side}`;
+    targetSup.position.set(side * PISTON_X_OFFSET, 0, PISTON_Z_OFFSET);
+    discPivot.add(targetSup);
+    targetsSup.push(targetSup);
+
+    // Rod (child of platform 'discPivot')
+    // We rotate and translate geometry so the pivot (top) is at (0,0,0) and it points along local -Z
+    const rodGeo = new THREE.CylinderGeometry(0.1, 0.1, rodLen, 16);
+    rodGeo.rotateX(Math.PI / 2);
+    rodGeo.translate(0, 0, -rodLen / 2);
+    const rod = new THREE.Mesh(rodGeo, chromeMat);
+    rod.name = `piston_rod_${side}`;
+    rod.position.set(side * PISTON_X_OFFSET, 0, PISTON_Z_OFFSET);
+    rod.castShadow = true;
+    discPivot.add(rod);
+    pistonRods.push(rod);
+  }
 
   // 5. ── Spinning disc mesh group ────────────────────────────────────────────
   const discMeshGroup = new THREE.Group();
@@ -334,15 +405,27 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     ledRings.push(led);
   }
 
-  // Central chrome hub with a glowing gem
+  // Central chrome hub with a ring of glowing decorative gems wrapping around the mast
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.5, 0.7, 32), chromeMat);
   hub.position.y = 0.35; hub.castShadow = true;
   discMeshGroup.add(hub);
+
   const gemMat = neon(0x6cf0ff); gemMat.metalness = 0.3; gemMat.roughness = 0.1;
-  const gem = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 0), gemMat);
-  gem.position.y = 0.95;
-  discMeshGroup.add(gem);
-  ledRings.push(gem); // pulse with the LED rings
+  const gemGroup = new THREE.Group();
+  gemGroup.name = 'tagada_gems_ring';
+  discMeshGroup.add(gemGroup);
+
+  const gemCount = 8;
+  const gemRadius = 0.72;
+  for (let i = 0; i < gemCount; i++) {
+    const a = (i / gemCount) * Math.PI * 2;
+    const g = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), gemMat);
+    g.position.set(gemRadius * Math.cos(a), 0.8, gemRadius * Math.sin(a));
+    g.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    gemGroup.add(g);
+    ledRings.push(g); // pulse with the LED rings
+  }
+  const gem = gemGroup;
 
   // 6. ── Perimeter handrail ──────────────────────────────────────────────────
   const railHeight = 1.1;
@@ -376,8 +459,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   discPivot.add(canopy);
 
   const MAST_TOP = 5.0;
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, MAST_TOP, 24), chromeMat);
-  mast.position.y = MAST_TOP / 2 + 0.4; mast.castShadow = true;
+  const mastHeight = 8.1;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.42, mastHeight, 24), chromeMat);
+  mast.position.y = mastHeight / 2 + 0.4; mast.castShadow = true;
   canopy.add(mast);
   // gold spiral collars on the mast
   for (let i = 0; i < 5; i++) {
@@ -714,16 +798,49 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     discMeshGroup.rotation.y = controller.spinAngle;
 
     armPivot.rotation.y = controller.armYawAngle;
-    armPivot.rotation.x = (BASE_PITCH + PITCH_AMP * Math.sin(controller.pitchAngle)) * ease;
-    armPivot.rotation.z = ROLL_AMP * Math.sin(controller.rollAngle) * ease;
+    const runningPitch = BASE_PITCH + PITCH_AMP * Math.sin(controller.pitchAngle);
+    const boardingPitch = 0.88; // Tilted down for boarding
+    armTilt.rotation.x = THREE.MathUtils.lerp(boardingPitch, runningPitch, ease);
+    armTilt.rotation.z = ROLL_AMP * Math.sin(controller.rollAngle) * ease;
 
-    const targetArmLength = Math.max(MIN_ARM_LENGTH, armLength - BOARDING_DROP * idleEase);
-    const armScale = targetArmLength / armLength;
-    mainArm.scale.set(1, armScale, 1);
-    mainArm.position.y = targetArmLength / 2;
-    discPivot.position.y = targetArmLength;
-    pistonCylinders.forEach((cyl) => { cyl.scale.set(1, armScale, 1); cyl.position.y = (armLength * 0.4) * armScale; });
-    armStrips.forEach((s) => { s.scale.set(1, armScale, 1); s.position.y = (armLength * 0.5) * armScale; });
+    // Update world matrices of the hierarchy so getWorldPosition is accurate
+    group.updateMatrixWorld(true);
+
+    const posSupWorld = new THREE.Vector3();
+    const posInfWorld = new THREE.Vector3();
+    const parentQuat = new THREE.Quaternion();
+
+    for (let i = 0; i < pistonCylinders.length; i++) {
+      const cyl = pistonCylinders[i];
+      const rod = pistonRods[i];
+
+      // Get world positions of attachment points
+      targetsSup[i].getWorldPosition(posSupWorld);
+      targetsInf[i].getWorldPosition(posInfWorld);
+
+      // Distance between attachment points
+      const span = posSupWorld.distanceTo(posInfWorld);
+
+      // Cylinder: child of fixed base 'group' (no parent rotation), looks at Target_Superiore
+      cyl.up.set(0, 1, 0);
+      cyl.lookAt(posSupWorld);
+
+      // Rod: child of 'discPivot' (which tilts/rotates), looks at Target_Inferiore.
+      // We align the rod's local up vector with the world up vector (0, 1, 0)
+      discPivot.getWorldQuaternion(parentQuat);
+      const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(parentQuat.invert());
+      rod.up.copy(localUp);
+      rod.lookAt(posInfWorld);
+
+      // Scale along Z axis (pointing axis)
+      // Cylinder: we want its length to be 60% of span
+      const cylScaleZ = (span * 0.6) / pistonCylH;
+      cyl.scale.set(1, 1, cylScaleZ);
+
+      // Rod: we want its length to be 55% of span
+      const rodScaleZ = (span * 0.55) / rodLen;
+      rod.scale.set(1, 1, rodScaleZ);
+    }
 
     discPivot.rotation.x = Math.sin(controller.bumpAngle) * BUMP_AMP * ease;
     discPivot.rotation.z = Math.cos(controller.bumpAngle * 0.9) * (BUMP_AMP * 0.5) * ease;
@@ -827,7 +944,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     // Finial star — always sparkles, spins gently
     starMat.emissiveIntensity = 0.5 + nf * 2.2 + Math.sin(time * 5) * 0.2;
     finialStar.rotation.y += delta * 0.7;
-    gem.rotation.y += delta * 1.1;
+    gem.rotation.y += delta * 1.1 * ease;
   };
 
   // Click-to-toggle is handled centrally by the InteractionManager (main.js registers this ride's
