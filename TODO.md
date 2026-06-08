@@ -105,7 +105,7 @@ A heads-up display showing the current time of day. Already partially designed �
  - [ ] Day / Dusk / Night phase label
  - [x] Manual time slider (drag to change time of day)
  - [x] Auto-advance toggle button
- - [ ] Slow down auto-advance speed (reduce rate of time progression)
+ - [x] Slow down auto-advance speed (reduce rate of time progression)
 
 ---
 
@@ -142,6 +142,7 @@ The night scene is too dark between attractions — needs ambient fill and moonl
 - [ ] **Lamppost radius**: increase 70 → ~90 for better coverage overlap
 - [ ] **Water night tint**: brighten river shader night color so it's visible after dark
 - [ ] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist.
+- [ ] **Prova**: aggiungere layer 0 alle luci delle giostre (`.enable(0)` o `.set(0+2)`) così illuminano anche ground/vegetazione, e controllare impatto sulle performance (FPS/draw call)
 
 ---
 
