@@ -59,8 +59,8 @@ const GAIT = {
   stance: 0.62,      // fraction of the cycle each foot spends on the ground
   stride: 1.22,      // stride length, × leg length
   stepH: 0.115,      // swing apex height, × leg length
-  hipStand: 0.99,    // hip-joint height standing, × leg length
-  hipWalk: 0.935,    // mean hip-joint height walking (soft knees), × leg length
+  hipStand: 0.92,    // hip-joint height standing — relaxed chibi knees, × leg length
+  hipWalk: 0.89,     // mean hip-joint height walking — deep chibi knee bend, × leg length
   bob: 0.030,        // pelvis vertical bob, × leg length
   sway: 0.038,       // pelvis lateral weight shift, × leg length
   pelvYaw: 0.10, pelvRoll: 0.05,
@@ -69,8 +69,20 @@ const GAIT = {
   elbow: 0.10, elbowSwing: 0.16,
   footOut: 0.07,     // out-toeing (rad)
   stepWidth: 0.88,   // foot lateral spacing, × hip-joint half-span
-  heelPitch: 0.28,   // dorsiflexion at heel strike (rad)
-  toePitch: 0.60,    // plantarflexion at toe-off (rad)
+  heelPitch: 0.25,   // dorsiflexion at heel strike (rad)
+  toeGait: 0.32,     // base stance plantarflexion — the rig walks on the balls
+                     // of its feet (matches the artist's own Walk clip), which
+                     // is what makes the shoes show below the trouser cuffs
+  toePitch: 0.62,    // plantarflexion at toe-off (rad)
+};
+
+// Flat-on-ground foot orientations in armature space. The skin BIND pose
+// points the feet straight down (ballet-style) — these are the rig's own
+// flat-foot quaternions (same symmetric pair Passengers.js uses to put seated
+// feet flat on the floor).
+const FOOT_FLAT = {
+  L: new THREE.Quaternion(0, 0.702952, 0.711237, 0).normalize(),
+  R: new THREE.Quaternion(0, -0.702952, -0.711237, 0).normalize(),
 };
 
 const _m4b = new THREE.Matrix4(), _bm = new THREE.Matrix4();
@@ -161,13 +173,51 @@ function makeGaitRig(fig) {
       L1: hip0.distanceTo(knee0), L2: knee0.distanceTo(ankle0),
       hipOff: up.position.clone(),                 // constant, in Body space
       offUp, offLo,
-      flat: qFt0,        // bind = standing flat on the ground → flat reference
+      flat: FOOT_FLAT[side],
+      bindAnkle: ankle0, bindFootQuat: qFt0,
       sideSign: side === 'L' ? 1 : -1,             // armature +X = character's left
     };
-    rig.ankleH += ankle0.y / 2;                    // true flat-foot ankle height
   }
   rig.legLen = (rig.legs.L.L1 + rig.legs.L.L2 + rig.legs.R.L1 + rig.legs.R.L2) / 2;
   rig.hipSpan = Math.abs(rig.legs.L.hipOff.x - rig.legs.R.hipOff.x) / 2;
+
+  // Walking ankle height + real foot length: take the foot-weighted vertices
+  // of the bind mesh, rotate them from the bind orientation (toes pointing
+  // down) to the flat-foot orientation around the ankle, and measure how far
+  // the sole drops below the ankle (→ ankleH) and how far the toe reaches
+  // forward (→ footLen). Per-model: shoes differ between outfits.
+  const dq = new THREE.Quaternion(), vtx = new THREE.Vector3();
+  let hSum = 0, lenSum = 0, sides = 0;
+  for (const side of ['L', 'R']) {
+    const leg = rig.legs[side];
+    const bi = skel.bones.indexOf(leg.ft);
+    dq.copy(leg.flat).multiply(_qInv.copy(leg.bindFootQuat).invert());
+    let minY = Infinity, maxZ = -Infinity, found = false;
+    fig.traverse((o) => {
+      if (!o.isSkinnedMesh || o.skeleton !== skel) return;
+      const posA = o.geometry.getAttribute('position');
+      const idxA = o.geometry.getAttribute('skinIndex');
+      const wtA = o.geometry.getAttribute('skinWeight');
+      if (!posA || !idxA || !wtA) return;
+      for (let i = 0; i < posA.count; i++) {
+        let wsum = 0;
+        for (let k = 0; k < 4; k++) if (idxA.getComponent(i, k) === bi) wsum += wtA.getComponent(i, k);
+        if (wsum < 0.4) continue;
+        vtx.fromBufferAttribute(posA, i).sub(leg.bindAnkle).applyQuaternion(dq);
+        if (vtx.y < minY) minY = vtx.y;
+        if (vtx.z > maxZ) maxZ = vtx.z;
+        found = true;
+      }
+    });
+    if (found) { hSum += -minY; lenSum += maxZ; sides++; }
+  }
+  if (sides) {
+    rig.ankleH = Math.max(0.01, hSum / sides);
+    rig.footLen = Math.max(0.05 * rig.legLen, lenSum / sides);
+  } else {
+    rig.ankleH = 0.07 * rig.legLen;
+    rig.footLen = 0.30 * rig.legLen;
+  }
 
   // Upper-body bones: default local pose + axes mapping the armature X/Y/Z
   // into each bone's local frame, so swings compose about body axes.
@@ -190,20 +240,24 @@ function makeGaitRig(fig) {
 // strike). Returns fore-aft z, lift above flat-ankle height, and foot pitch
 // (+ = toes up), all in armature units. Stance feet move backwards at exactly
 // −stride per cycle, cancelling body motion → planted feet.
-function footCurve(q, stride, legLen, out) {
-  const ST = GAIT.stance, footLen = legLen * 0.30;
+function footCurve(q, stride, legLen, footLen, out) {
+  const ST = GAIT.stance, BASE = -GAIT.toeGait;
   let z, lift = 0, pitch = 0;
   if (q < ST) {
     z = stride * (ST / 2 - q);
-    if (q < 0.07) {                                 // heel-strike roll-down
-      pitch = GAIT.heelPitch * (1 - q / 0.07);
-      lift = Math.sin(pitch) * footLen * 0.30;      // pivot on the heel
-    } else if (q > 0.40) {                          // heel-off → toe-off
-      const r = smooth01((q - 0.40) / (ST - 0.40));
-      pitch = -GAIT.toePitch * r;
-      lift = Math.sin(-pitch) * footLen * 0.80;     // ankle pivots over the toe
-      z += (1 - Math.cos(pitch)) * footLen * 0.80;
+    if (q < 0.10) {                                 // heel-strike roll-down
+      pitch = lerp(GAIT.heelPitch, BASE, smooth01(q / 0.10));
+    } else if (q > 0.42) {                          // heel-off → toe-off
+      const r = smooth01((q - 0.42) / (ST - 0.42));
+      pitch = BASE - (GAIT.toePitch - GAIT.toeGait) * r;
+    } else {
+      pitch = BASE;                                 // ball-of-foot stance
     }
+    // Only plantarflexion beyond the gait base pivots the ankle up over the
+    // toe; heel-strike dorsiflexion pivots it up over the heel.
+    const extra = Math.max(0, -pitch - GAIT.toeGait);
+    lift = Math.sin(extra) * footLen * 0.80 + Math.sin(Math.max(0, pitch)) * footLen * 0.30;
+    z += (1 - Math.cos(extra)) * footLen * 0.80;
   } else {
     const u = (q - ST) / (1 - ST);
     // Hermite blend whose end slopes match the stance slide → no velocity pop
@@ -213,8 +267,9 @@ function footCurve(q, stride, legLen, out) {
     z = stride * ST * (f - 0.5);
     lift = Math.pow(Math.sin(Math.PI * u), 1.1) * GAIT.stepH * legLen;
     pitch = lerp(-GAIT.toePitch, GAIT.heelPitch, smooth01(u / 0.55));
-    if (pitch < 0) lift += Math.sin(-pitch) * footLen * 0.80 * (1 - u);
-    else lift += Math.sin(pitch) * footLen * 0.30 * u;
+    const extra = Math.max(0, -pitch - GAIT.toeGait);
+    lift += Math.sin(extra) * footLen * 0.80 * (1 - u)
+          + Math.sin(Math.max(0, pitch)) * footLen * 0.30 * u;
   }
   out.z = z; out.lift = lift; out.pitch = pitch;
 }
@@ -282,7 +337,7 @@ function applyGaitPose(w, time) {
   for (let i = 0; i < 2; i++) {
     const leg = i === 0 ? rig.legs.L : rig.legs.R;
     const q = (p + (i === 0 ? 0 : 0.5)) % 1;
-    footCurve(q, w.strideArm, L, _fc);
+    footCurve(q, w.strideArm, L, rig.footLen, _fc);
     const zT = _fc.z * mb + (i === 0 ? w.standZL : w.standZR) * (1 - mb);
     const yT = rig.ankleH + _fc.lift * mb;
     const xT = leg.sideSign * rig.hipSpan * GAIT.stepWidth * lerp(w.standW, 1, mb);
@@ -560,6 +615,20 @@ export async function buildVisitors({
 
   const grid = new NavGrid({ obstacles, coasterFootprint });
   const bridgeField = buildBridgeField(bridge);
+
+  // The bridge may only be entered head-on: wall off both sides of the raised
+  // deck so paths can't step onto (or off) it laterally from the banks.
+  if (bridgeField) {
+    for (let iz = 0; iz < N; iz++) {
+      const fz = (cellToWorld(iz) - bridgeField.Z0) / bridgeField.STEP;
+      if (fz < 0 || fz > bridgeField.nz - 1) continue;
+      if (bridgeField.H[Math.round(fz)] < 0.08) continue;   // ramp toe: open
+      for (let ix = 0; ix < N; ix++) {
+        const ax = Math.abs(cellToWorld(ix));
+        if (ax > BRIDGE_HALF_X && ax < BRIDGE_HALF_X + 3.5) grid.blocked[idx(ix, iz)] = 1;
+      }
+    }
+  }
 
   // Field-wide destination scatter + curated ride/path landmarks.
   const dests = [];

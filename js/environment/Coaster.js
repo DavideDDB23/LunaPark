@@ -401,6 +401,9 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const riders = [];
   const riderHeight = getPassengerWorldHeight() * 0.88; // same rider size as the Tagada / Carousel
 
+  const _dynP = new THREE.Vector3(), _dynV = new THREE.Vector3(), _dynA = new THREE.Vector3();
+  const _dynQI = new THREE.Quaternion();
+
   cars.forEach((car, carIdx) => {
     [0, 1].forEach((seatIdx) => {
       const template = templates[(carIdx * 2 + seatIdx) % templates.length];
@@ -673,7 +676,25 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       activePool = COASTER_BRAKE_POOL;
     }
 
-    for (const r of controller.riders) {
+    // Per-car kinematics: world acceleration measured from the dolly, smoothed
+    // and expressed in the car frame (+z = travel, x = lateral, y = vertical).
+    const dtc = Math.max(dt, 1e-3);
+    for (const car of cars) {
+      if (!car.dyn) car.dyn = { p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), q: new THREE.Quaternion(), init: false };
+      const D = car.dyn;
+      car.dolly.getWorldPosition(_dynP);
+      car.dolly.getWorldQuaternion(D.q);
+      if (!D.init) { D.p.copy(_dynP); D.init = true; }
+      _dynV.copy(_dynP).sub(D.p).divideScalar(dtc);
+      D.p.copy(_dynP);
+      _dynA.copy(_dynV).sub(D.v).divideScalar(dtc);
+      D.v.copy(_dynV);
+      _dynA.applyQuaternion(_dynQI.copy(D.q).invert());
+      if (_dynA.length() > 80) _dynA.setLength(80);
+      D.a.lerp(_dynA, Math.min(1, dtc * 8));
+    }
+
+    controller.riders.forEach((r, idx) => {
       // If coaster state changed, set the new action pool and force immediate pose switch
       if (r.pool !== activePool) {
         r.pool = activePool;
@@ -684,19 +705,28 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       }
       updateRider(r, timeVal);
 
-      // Add dynamic sway to torso and head based on ride state (inertia simulation)
+      // Physics-based inertia: bodies respond to the REAL car acceleration —
+      // pressed back on launch, thrown forward on the brakes, leaning out of
+      // curves — plus a small speed-proportional rattle.
       const B = r.bones;
-      if (controller.state === 'LAUNCH' || controller.state === 'COASTING') {
-        const swayAmp = controller.state === 'LAUNCH' ? 0.12 : 0.06;
+      const car = cars[(idx / 2) | 0];
+      const a = car && car.dyn ? car.dyn.a : null;
+      if (a && ease > 0.0001) {
+        const lim = (v, l) => Math.max(-l, Math.min(l, v));
+        const pitch = lim(-a.z * 0.010, 0.22);          // accel → pressed back
+        const roll = lim(a.x * 0.008, 0.16);            // curve → lean out
+        const squash = lim(-a.y * 0.004, 0.10);         // drops → lift, valleys → squash
+        const rattle = 0.018 * Math.min(1, (controller.lastSpeed || 0) / 18);
         if (B.Torso) {
-          B.Torso.bone.rotation.x += swayAmp * Math.sin(timeVal * 5.0 + r.phase);
-          B.Torso.bone.rotation.z += 0.04 * Math.cos(timeVal * 3.0 + r.phase);
+          B.Torso.bone.rotation.x += pitch + squash + rattle * Math.sin(timeVal * 9.0 + r.phase);
+          B.Torso.bone.rotation.z += roll + rattle * 0.5 * Math.cos(timeVal * 7.3 + r.phase);
         }
         if (B.Head) {
-          B.Head.bone.rotation.x += 0.08 * Math.sin(timeVal * 6.0 + r.phase);
+          B.Head.bone.rotation.x += pitch * 0.6 + rattle * Math.sin(timeVal * 11.0 + r.phase + 1);
+          B.Head.bone.rotation.z += roll * 0.5;
         }
       }
-    }
+    });
 
     // 5. ── Night light show: the rail itself glows + gently breathes ──
     const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');

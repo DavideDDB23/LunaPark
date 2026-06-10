@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
-import { loadVisitorTemplates, makeRider, updateRider, ACTIONS_SEATED_GENERAL, getPassengerWorldHeight } from './Passengers.js';
+import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
 
@@ -291,7 +291,8 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       const tmpl = activeVisitors[i % activeVisitors.length];
       const currentHeight = getPassengerWorldHeight();
       const rider = makeRider(tmpl, currentHeight, {
-        pool: ACTIONS_SEATED_GENERAL,
+        // mostly both-hands-on-pole, with occasional waves/looks
+        pool: ['holdPole', 'holdPole', 'holdPole', 'holdPole', 'wave', 'lookL', 'lookR', 'cheer'],
         facingY: 0,
         phase: i * (Math.PI / 4),
         seatedStyle: 'horse'
@@ -404,6 +405,20 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       
       if (h.rider) {
         updateRider(h.rider, time + h.rider.phase);
+        // Inertia: the body lags the horse's bob — compress on the way up,
+        // lighten on the way down, with a slight fore/aft rock.
+        if (h.riderRestY === undefined) {
+          h.riderRestY = h.rider.pivot.position.y;
+          h.lastCY = h.container.position.y;
+          h.cvy = 0;
+        }
+        const dtc = Math.min(Math.max(delta, 1e-3), 0.05);
+        const cvyNow = (h.container.position.y - h.lastCY) / dtc;
+        h.lastCY = h.container.position.y;
+        h.cvy += (cvyNow - h.cvy) * Math.min(1, dtc * 10);
+        const lag = Math.max(-0.09, Math.min(0.09, h.cvy * 0.05));
+        h.rider.pivot.position.y = h.riderRestY - lag;
+        h.rider.pivot.rotation.z = lag * 0.8;
       }
     }
 

@@ -209,6 +209,99 @@ function qMul(a, b) {
   ];
 }
 
+/* ── Free-foot placement ─────────────────────────────────────────────────────
+ * The Quaternius rig keeps Foot.L/R as FREE bones — siblings of the leg chains
+ * under the root bone (a Blender IK setup). Rotating UpperLeg/LowerLeg does
+ * NOT move the feet, so every leg pose must also PLACE the foot bones at the
+ * end of the chains, or the feet stay wherever the GLTF default frame left
+ * them (visibly detached on seated/standing riders).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+// Flat-on-ground foot orientations in armature space (from the rig's own
+// SitDown pose — the bind pose points the feet ballet-style straight down).
+const FOOT_FLAT_Q = {
+  L: new THREE.Quaternion(0, 0.702952, 0.711237, 0).normalize(),
+  R: new THREE.Quaternion(0, -0.702952, -0.711237, 0).normalize(),
+};
+
+const _fkM = new THREE.Matrix4();
+const _fkS = new THREE.Vector3();
+const _fkHip = new THREE.Vector3(), _fkKnee = new THREE.Vector3(), _fkAnkle = new THREE.Vector3();
+const _fkQUp = new THREE.Quaternion(), _fkQLo = new THREE.Quaternion(), _fkQInv = new THREE.Quaternion();
+
+// Calibrate the leg chains from the skin bind pose (the GLTF default node
+// pose is an arbitrary animation frame — never use it for geometry).
+export function calibrateLegRig(fig) {
+  const raw = {};
+  fig.traverse((o) => { if (o.isBone && !(o.name in raw)) raw[o.name] = o; });
+  const find = (n) => raw[n] || raw[n.replace('.', '')] || raw[n.replace('.', '_')] || null;
+  const bones = {};
+  for (const n of ['UpperLeg.L', 'LowerLeg.L', 'Foot.L', 'UpperLeg.R', 'LowerLeg.R', 'Foot.R']) {
+    bones[n] = find(n);
+    if (!bones[n]) return null;
+  }
+  const body = bones['UpperLeg.L'].parent;          // pelvis bone ("Body"/"Body_1")
+  if (!body || !body.isBone) return null;
+  let skin = null;
+  fig.traverse((o) => { if (!skin && o.isSkinnedMesh) skin = o; });
+  if (!skin) return null;
+  const skel = skin.skeleton;
+  const bindWorld = (bone, outP, outQ) => {
+    const bi = skel.bones.indexOf(bone);
+    if (bi < 0) return false;
+    _fkM.copy(skel.boneInverses[bi]).invert();
+    _fkM.decompose(outP, outQ, _fkS);
+    return true;
+  };
+  const pB = new THREE.Vector3(), qB = new THREE.Quaternion();
+  if (!bindWorld(body, pB, qB)) return null;
+  const rig = { body, sides: {} };
+  for (const s of ['L', 'R']) {
+    const up = bones[`UpperLeg.${s}`], lo = bones[`LowerLeg.${s}`], ft = bones[`Foot.${s}`];
+    const pU = new THREE.Vector3(), qU = new THREE.Quaternion();
+    const pL = new THREE.Vector3(), qL = new THREE.Quaternion();
+    const pF = new THREE.Vector3(), qF = new THREE.Quaternion();
+    if (!bindWorld(up, pU, qU) || !bindWorld(lo, pL, qL) || !bindWorld(ft, pF, qF)) return null;
+    rig.sides[s] = {
+      up, lo, ft,
+      // knee→ankle offset in LowerLeg space — exact, from the bind pose
+      ankleOff: pF.clone().sub(pL).applyQuaternion(qL.clone().invert()),
+      bindUpWorld: qU.clone(),                     // straight legs (bind = standing)
+      bindLoLocal: qU.clone().invert().multiply(qL),
+      flat: FOOT_FLAT_Q[s],
+    };
+  }
+  return rig;
+}
+
+// Forward kinematics: put each free Foot bone at the end of its (already
+// posed) leg chain. Works in the root bone's frame (feet and pelvis share it).
+export function placeFeet(rig) {
+  if (!rig) return;
+  const body = rig.body;
+  for (const s of ['L', 'R']) {
+    const S = rig.sides[s];
+    _fkQUp.copy(body.quaternion).multiply(S.up.quaternion);
+    _fkQLo.copy(_fkQUp).multiply(S.lo.quaternion);
+    _fkHip.copy(S.up.position).applyQuaternion(body.quaternion).add(body.position);
+    _fkKnee.copy(S.lo.position).applyQuaternion(_fkQUp).add(_fkHip);
+    _fkAnkle.copy(S.ankleOff).applyQuaternion(_fkQLo).add(_fkKnee);
+    S.ft.position.copy(_fkAnkle);
+  }
+}
+
+// Straight standing legs + flat feet (the GLTF default pose is a mid-walk
+// frame with a bent knee — never use it as a standing pose).
+export function applyStandingLegs(rig) {
+  if (!rig) return;
+  for (const s of ['L', 'R']) {
+    const S = rig.sides[s];
+    S.up.quaternion.copy(_fkQInv.copy(rig.body.quaternion).invert()).multiply(S.bindUpWorld);
+    S.lo.quaternion.copy(S.bindLoLocal);
+    S.ft.quaternion.copy(S.flat);
+  }
+}
+
 const UPPER_BONES = ['UpperArmR', 'UpperArmL', 'LowerArmR', 'LowerArmL', 'Head', 'Torso'];
 
 const REST_UPPER = {
@@ -228,6 +321,10 @@ const POSE_DEFS = {
   photo:  { UpperArmR: [1.0, 0.4, 0.25], UpperArmL: [1.0, -0.4, -0.25],
             LowerArmR: [0.8, 0, 0], LowerArmL: [0.8, 0, 0], Head: [-0.12, 0, 0] },
   relax:  { UpperArmR: [0.15, 1.05, 0], Head: [0.06, -0.2, 0], Torso: [0.05, -0.05, 0] },
+  // Carousel: both hands forward on the vertical pole, elbows soft.
+  holdPole: { UpperArmR: [1.15, -0.28, 0.1], UpperArmL: [1.15, 0.28, -0.1],
+              LowerArmR: [0.5, 0, 0], LowerArmL: [0.5, 0, 0],
+              Torso: [0.07, 0, 0], Head: [0.02, 0, 0] },
   chatL:  { UpperArmR: [0.4, 0.8, 0], LowerArmR: [0.8, 0, 0], Head: [0.1, 0.5, 0], Torso: [0.1, 0.14, 0] },
   chatR:  { UpperArmL: [-0.4, -0.8, 0], LowerArmL: [0.8, 0, 0], Head: [0.1, -0.5, 0], Torso: [0.1, -0.14, 0] },
 
@@ -273,7 +370,8 @@ export function makeRider(template, height, { pool, facingY = 0, phase = 0, stan
   fig.rotation.y = facingY;
   pivot.add(fig);
   return {
-    pivot, fig, bones: collectBones(fig), pool, phase, standing, scale, seatedStyle,
+    pivot, fig, bones: collectBones(fig), legRig: calibrateLegRig(fig),
+    pool, phase, standing, scale, seatedStyle,
     height,
     from: pool.includes('rest') || pool.includes('standRest') ? (pool.includes('standRest') ? 'standRest' : 'rest') : pool[0],
     to: pick(pool), tStart: 0, transDur: 0.7,
@@ -294,11 +392,14 @@ export function updateRider(r, t) {
   const B = r.bones;
 
   if (r.standing) {
-    // Standing legs (straight)
-    pose(B, 'UpperLegL', 0, 0, 0);
-    pose(B, 'UpperLegR', 0, 0, 0);
-    pose(B, 'LowerLegL', 0, 0, 0);
-    pose(B, 'LowerLegR', 0, 0, 0);
+    if (r.legRig) {
+      applyStandingLegs(r.legRig);             // straight bind legs + flat feet
+    } else {
+      pose(B, 'UpperLegL', 0, 0, 0);
+      pose(B, 'UpperLegR', 0, 0, 0);
+      pose(B, 'LowerLegL', 0, 0, 0);
+      pose(B, 'LowerLegR', 0, 0, 0);
+    }
   } else {
     // Seated legs
     if (r.seatedStyle === 'horse') {
@@ -307,6 +408,7 @@ export function updateRider(r, t) {
       applyChairSeatedLegs(B, r.scale);
     }
   }
+  placeFeet(r.legRig);                         // free Foot bones follow the chain
 
   const A = POSES[r.from], C = POSES[r.to];
   for (const bn of UPPER_BONES) {

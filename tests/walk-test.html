@@ -60,7 +60,7 @@
   ground.receiveShadow = true;
   scene.add(ground);
 
-  const visitors = await buildVisitors({ count: 4, obstacles: [], coasterFootprint: null, bridge: null });
+  const visitors = await buildVisitors({ count: 8, obstacles: [], coasterFootprint: null, bridge: null });
   scene.add(visitors);
   const vis = visitors.userData.visitors[0];
   window.__vis = vis;
@@ -75,8 +75,9 @@
     // side-on tracking camera on visitor 0
     const p = vis.root.position, h = vis.heading;
     const sx = Math.cos(h), sz = -Math.sin(h);
-    camera.position.set(p.x + sx * 5.5, p.y + 1.3, p.z + sz * 5.5);
-    camera.lookAt(p.x, p.y + 1.1, p.z);
+    const cfg = window.__camCfg || { dist: 5.5, h: 1.3, lookY: 1.1 };
+    camera.position.set(p.x + sx * cfg.dist, p.y + cfg.h, p.z + sz * cfg.dist);
+    camera.lookAt(p.x, p.y + cfg.lookY, p.z);
     renderer.render(scene, camera);
   });
 </script>
