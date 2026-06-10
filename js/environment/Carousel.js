@@ -249,6 +249,15 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   carouselCanopyLight.layers.set(2);
   rotatingAssembly.add(carouselCanopyLight);
 
+  // The festoon/seam/column bulbs and the platform neon follow the picker too.
+  eventBus.on('color-change', (hex) => {
+    const tint = (m) => { m.color.set(hex); m.emissive.set(hex); };
+    cFestoon.forEach(b => tint(b.material));
+    cSeam.forEach(b => tint(b.material));
+    cColumn.forEach(b => tint(b.material));
+    tint(cNeonMat);
+  });
+
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
   const MODEL_ROTATION_OFFSET = Math.PI * 0.5;
 

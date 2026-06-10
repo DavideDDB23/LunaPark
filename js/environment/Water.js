@@ -183,9 +183,10 @@ const fragmentShader = /* glsl */ `
     }
     col = mix(col, foamCol, clamp(totalFoam, 0.0, 1.0));
 
-    // Night dim — push toward a deep moon-tinted blue so river doesn't glow at midnight.
-    vec3 nightTint = vec3(0.02, 0.06, 0.14);
-    col = mix(col, nightTint + col * 0.18, clamp(uNight, 0.0, 1.0));
+    // Night dim — moon-tinted blue, kept bright enough to read the waves
+    // under the new moonlight instead of fading to black.
+    vec3 nightTint = vec3(0.05, 0.11, 0.22);
+    col = mix(col, nightTint + col * 0.32, clamp(uNight, 0.0, 1.0));
 
     gl_FragColor = vec4(col, 0.85);
   }

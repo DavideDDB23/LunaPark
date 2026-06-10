@@ -46,6 +46,13 @@ export class DayNightCycle {
     this._sunDay  = new THREE.Color(0xfff0d8);
     this._tmpColor = new THREE.Color();
     this._sunDir = new THREE.Vector3();
+
+    // Moonlight — a cool directional fill opposite the sun, so the night
+    // scene reads as moonlit geometry instead of pure silhouettes.
+    this.moon = new THREE.DirectionalLight(0x4466aa, 0.0);
+    this.moon.name = 'moon';
+    this.scene.add(this.moon);
+    this.scene.add(this.moon.target);
   }
 
   setTime(t01) {
@@ -87,8 +94,14 @@ export class DayNightCycle {
     // Sun intensity ramps in at the horizon, peaks at zenith.
     this.sun.intensity = THREE.MathUtils.smoothstep(sunHeight, -0.02, 0.25) * 3.0 + sunHeight * 0.4;
 
+    // ── Moon directional light — opposite the sun, fades in at night ─
+    const moonHeight = Math.max(0, -sunY); // moon rises as the sun sets
+    this.moon.position.set(-sunX * distance, Math.max(0.05, moonHeight) * distance, -sunZ * distance);
+    this.moon.target.position.set(0, 0, 0);
+    this.moon.intensity = THREE.MathUtils.smoothstep(moonHeight, 0.0, 0.3) * 0.40;
+
     // ── Hemisphere fill ───────────────────────────────────────────
-    this.hemi.intensity = 0.22 + 0.63 * sunHeight;
+    this.hemi.intensity = 0.35 + 0.50 * sunHeight;
     const twilight = Math.pow(1.0 - Math.min(1.0, sunHeight * 2.0), 2.0) * (sunY > -0.05 ? 1 : 0);
     if (sunHeight > 0.1) {
       this.hemi.color.setHex(0x87ceeb);
@@ -97,19 +110,19 @@ export class DayNightCycle {
       this.hemi.color.setHex(0xff9970);
       this.hemi.groundColor.setHex(0x3a2a1f);
     } else {
-      this.hemi.color.setHex(0x1a2240);
-      this.hemi.groundColor.setHex(0x0a0a18);
+      this.hemi.color.setHex(0x2a3a64);
+      this.hemi.groundColor.setHex(0x12121f);
     }
 
     // ── Tone-mapping exposure and HDR background intensity ────────
     // Keep the HDR's beautiful look but dim it at night, keeping it legible.
-    const exposure = THREE.MathUtils.lerp(0.36, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.4));
+    const exposure = THREE.MathUtils.lerp(0.48, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.4));
     this.renderer.toneMappingExposure = exposure;
 
-    const bgIntensity = THREE.MathUtils.lerp(0.24, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.1, 0.35));
+    const bgIntensity = THREE.MathUtils.lerp(0.34, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.1, 0.35));
     this.scene.backgroundIntensity = bgIntensity;
     if ('environmentIntensity' in this.scene) {
-      this.scene.environmentIntensity = THREE.MathUtils.lerp(0.32, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.3));
+      this.scene.environmentIntensity = THREE.MathUtils.lerp(0.42, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.3));
     }
 
     // ── Lamppost lights — on at night ─────────────────────────────

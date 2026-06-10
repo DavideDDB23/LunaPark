@@ -178,11 +178,16 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     // Roughly a third of the gondolas are "chatting pairs": the two riders turn to each other
     // and gesture; the rest can either sit or stand up, facing outward to wave.
     const seatLocal = gNode.worldToLocal(cabinCenters[i].clone());
-    const chatting = Math.random() < 0.34;
+    // Deterministic per-gondola flavour so the variety is guaranteed around
+    // the wheel: chatting pairs / sightseers filming with their phones /
+    // lively wavers-and-cheerers, repeating every three gondolas.
+    const flavor = i % 3;
+    const chatting = flavor === 0;
+    const ACTIONS_PHOTO = ['photo', 'photo', 'photo', 'lookL', 'lookR', 'lookUp', 'rest'];
     const passengers = [];
     for (let p = 0; p < PASSENGERS_PER_GONDOLA && visitors.length > 0; p++) {
       const tmpl = visitors[Math.floor(Math.random() * visitors.length)];
-      
+
       let standing = false;
       let pool = [];
       let facingY = 0;
@@ -192,8 +197,13 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
         standing = false;
         pool = p === 0 ? ACTIONS_SEATED_CHAT_L : ACTIONS_SEATED_CHAT_R;
         facingY = p === 0 ? Math.PI / 2 - 0.2 : -Math.PI / 2 + 0.2;
+      } else if (flavor === 1) {
+        // sightseeing gondola: one rider films the park, the other looks around
+        standing = false;
+        pool = p === 0 ? ACTIONS_PHOTO : ACTIONS_SEATED_GENERAL;
+        facingY = (Math.random() - 0.5) * 0.2;
       } else {
-        standing = Math.random() < 0.35; // 35% chance to stand
+        standing = Math.random() < 0.5; // lively gondola: standing wavers welcome
         pool = standing ? ACTIONS_STANDING : ACTIONS_SEATED_GENERAL;
         if (standing) {
           zSign = Math.random() > 0.5 ? 1 : -1;

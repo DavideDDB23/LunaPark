@@ -813,10 +813,16 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   }
 
   eventBus.on('color-change', (hex) => {
-    bulbs.forEach(b => {
-      b.material.color.set(hex);
-      b.material.emissive.set(hex);
-    });
+    // every decorative light group follows the picker, not just the rim bulbs
+    const tint = (m) => { m.color.set(hex); m.emissive.set(hex); };
+    bulbs.forEach(b => tint(b.material));
+    canopyBulbs.forEach(b => tint(b.material));
+    rimBulbs.forEach(b => tint(b.material));
+    ledRings.forEach(b => tint(b.material));
+    basePanels.forEach(b => tint(b.material));
+    festoonBulbs.forEach(b => tint(b.material));
+    seatLeds.forEach(b => tint(b.material));
+    armStrips.forEach(b => tint(b.material));
     ridePointLights.forEach(pl => pl.color.set(hex));
   });
 

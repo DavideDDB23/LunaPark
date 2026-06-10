@@ -371,16 +371,29 @@ export function buildEntranceGate() {
   const signH = 2.9;
   const signY = baseH + pillarH + 1.9;
   const signOffsetZ = archDepth / 2 + 0.6;  // well in front of arch so it's not buried inside it
-  const signGeo = new THREE.PlaneGeometry(signW, signH);
+  // Segmented so the banner can ripple like cloth in the wind (animated in the tick).
+  const signGeo = new THREE.PlaneGeometry(signW, signH, 24, 6);
+  const signBoards = [];
 
   function makeSignAssembly(facingNorth) {
     const dir = facingNorth ? 1 : -1; // +Z = outside park (front), -Z = inside park (back)
     const zPos = Z + dir * signOffsetZ;
 
+    // The board hangs from its chains: a pivot at the top edge lets it swing,
+    // while per-vertex waves ripple the cloth (strongest at the free bottom edge).
+    const boardPivot = new THREE.Group();
+    boardPivot.position.set(0, signY + signH / 2, zPos);
+    group.add(boardPivot);
     const board = new THREE.Mesh(signGeo, signMat);
-    board.position.set(0, signY, zPos);
+    board.position.set(0, -signH / 2, 0);
     if (!facingNorth) board.rotation.y = Math.PI;
-    group.add(board);
+    boardPivot.add(board);
+    signBoards.push({
+      pivot: boardPivot,
+      geo: signGeo,
+      restPos: new Float32Array(signGeo.attributes.position.array),
+      phase: Math.random() * Math.PI * 2,
+    });
 
     // Gold frame around board
     const ft = 0.18, fd = 0.16;
@@ -551,6 +564,11 @@ export function buildEntranceGate() {
         d.geo.attributes.position.array.set(d.restPos);
         d.geo.attributes.position.needsUpdate = true;
       }
+      for (const sb of signBoards) {
+        sb.pivot.rotation.set(0, 0, 0);
+        sb.geo.attributes.position.array.set(sb.restPos);
+        sb.geo.attributes.position.needsUpdate = true;
+      }
       return;
     }
 
@@ -590,6 +608,26 @@ export function buildEntranceGate() {
       }
       d.geo.attributes.position.needsUpdate = true;
       d.geo.computeVertexNormals();
+    }
+
+    // 3. WELCOME SIGN — hangs from its chains: gentle swing + cloth ripple.
+    for (const sb of signBoards) {
+      const t = time * (0.8 + windSpeed * 0.4);
+      sb.pivot.rotation.x = Math.sin(t * 0.9 + sb.phase) * 0.022 * baseIntensity;
+      const arr = sb.geo.attributes.position.array;
+      const rest = sb.restPos;
+      const amp = 0.10 * baseIntensity;
+      for (let v = 0; v < arr.length; v += 3) {
+        const rx = rest[v], ry = rest[v + 1];
+        const hang = (signH / 2 - ry) / signH;      // 0 at the chained top, 1 at the free bottom
+        const wave = Math.sin(rx * 1.1 - t * 1.7 + sb.phase) * 0.6
+                   + Math.sin(rx * 2.4 + ry * 1.6 - t * 2.7) * 0.4;
+        arr[v] = rx;
+        arr[v + 1] = ry;
+        arr[v + 2] = wave * amp * hang;
+      }
+      sb.geo.attributes.position.needsUpdate = true;
+      sb.geo.computeVertexNormals();
     }
   };
 

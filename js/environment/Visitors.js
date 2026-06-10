@@ -307,6 +307,49 @@ function spinBone(u, ax, ay, az) {
   if (az) q.multiply(_qSpin.setFromAxisAngle(u.axZ, az));
 }
 
+/* ── Idle action library ─────────────────────────────────────────────────────
+ * Waiting visitors don't just stand still: each picks an action when they
+ * stop (phone, stretch, look around, point, clap). An action is a function of
+ * time returning per-bone [x, y, z] angle deltas about the armature axes
+ * (X = pitch forward, Y = yaw, Z = roll; arm forward/up = −X, same convention
+ * as the gait's arm swing). Deltas are blended in by w.idleW so actions ease
+ * in/out and vanish entirely while walking.
+ * ────────────────────────────────────────────────────────────────────────── */
+const IDLE_ACTIONS = {
+  phone: (t) => ({
+    UpperArmR: [-0.55, 0.25, 0], LowerArmR: [-1.55, 0, 0.15],
+    Head: [0.42 + 0.03 * Math.sin(t * 1.8), -0.15, 0],
+    Neck: [0.18, -0.08, 0], Torso: [0.07, 0, 0],
+  }),
+  stretch: (t) => {
+    const s = 0.55 + 0.45 * Math.sin(t * 0.8);   // reach up … release … reach up
+    return {
+      UpperArmL: [-2.6 * s, 0, -0.25 * s], UpperArmR: [-2.6 * s, 0, 0.25 * s],
+      LowerArmL: [-0.25 * s, 0, 0], LowerArmR: [-0.25 * s, 0, 0],
+      Torso: [-0.10 * s, 0, 0], Head: [-0.28 * s, 0, 0],
+    };
+  },
+  lookAround: (t) => {
+    const y = Math.sin(t * 0.7) * 0.85;
+    return { Head: [-0.05, y, 0], Neck: [0, y * 0.4, 0], Torso: [0, y * 0.22, 0] };
+  },
+  point: (t) => ({
+    UpperArmR: [-1.35, 0.3 + 0.05 * Math.sin(t * 2.2), 0], LowerArmR: [-0.15, 0, 0],
+    Head: [0, 0.35, 0], Torso: [0, 0.12, 0],
+  }),
+  clap: (t) => {
+    const c = Math.max(0, Math.sin(t * 9));      // hands meet on the beat
+    return {
+      UpperArmL: [-0.95, 0.35 - c * 0.22, 0], UpperArmR: [-0.95, -0.35 + c * 0.22, 0],
+      LowerArmL: [-1.15, 0.3 - c * 0.25, 0], LowerArmR: [-1.15, -0.3 + c * 0.25, 0],
+      Head: [0.05, 0, 0],
+    };
+  },
+};
+// One null entry = plain rest, so not every visitor performs at once.
+const IDLE_POOL = [null, IDLE_ACTIONS.phone, IDLE_ACTIONS.phone, IDLE_ACTIONS.lookAround,
+  IDLE_ACTIONS.lookAround, IDLE_ACTIONS.stretch, IDLE_ACTIONS.point, IDLE_ACTIONS.clap];
+
 // Pose every bone of a visitor for the current gait state (walk ⇄ idle blend).
 function applyGaitPose(w, time) {
   const rig = w.rig;
@@ -350,23 +393,30 @@ function applyGaitPose(w, time) {
   const lean = (GAIT.lean + GAIT.leanV * vNorm) * mb + 0.012 * breathe;
   const bounce = 0.014 * Math.cos(4 * Math.PI * p + 0.7) * mb;
   const U = rig.upper;
+
+  // Idle action overlay — only while standing, eased in by w.idleW.
+  const iw = (w.idleW || 0) * (1 - mb);
+  const idle = iw > 1e-3 && w.idleFn ? w.idleFn(time + seed * 7) : null;
+  const ID = (n, c) => (idle && idle[n] ? idle[n][c] * iw : 0);
+
   spinBone(U['Abdomen'], lean * 0.45 + bounce, counter * 0.45, -roll * 0.5);
-  spinBone(U['Torso'], lean * 0.55 + bounce * 0.6, counter * 0.55, -roll * 0.35);
-  const headLook = (1 - mb) * 0.45 * Math.sin(time * 0.4 + seed)
-                 + mb * 0.10 * Math.sin(time * 0.6 + seed * 2);
-  spinBone(U['Neck'], -lean * 0.4, -counter * 0.35 + headLook * 0.35, 0);
-  spinBone(U['Head'], 0.02 * Math.cos(4 * Math.PI * p + 1.2) * mb - lean * 0.3,
-           -counter * 0.5 + headLook, 0);
+  spinBone(U['Torso'], lean * 0.55 + bounce * 0.6 + ID('Torso', 0),
+           counter * 0.55 + ID('Torso', 1), -roll * 0.35 + ID('Torso', 2));
+  const headLook = ((1 - mb) * 0.45 * Math.sin(time * 0.4 + seed)
+                 + mb * 0.10 * Math.sin(time * 0.6 + seed * 2)) * (idle ? 1 - iw : 1);
+  spinBone(U['Neck'], -lean * 0.4 + ID('Neck', 0), -counter * 0.35 + headLook * 0.35 + ID('Neck', 1), 0);
+  spinBone(U['Head'], 0.02 * Math.cos(4 * Math.PI * p + 1.2) * mb - lean * 0.3 + ID('Head', 0),
+           -counter * 0.5 + headLook + ID('Head', 1), ID('Head', 2));
 
   const swing = Math.cos(TWO_PI * p + GAIT.armLag);
   const thL = GAIT.armSwing * (0.45 + 0.55 * vNorm) * swing * mb;
   const idleArm = (1 - mb) * 0.03 * breathe;
-  spinBone(U['UpperArm.L'], thL + idleArm, 0, 0);
-  spinBone(U['UpperArm.R'], -thL + idleArm, 0, 0);
+  spinBone(U['UpperArm.L'], thL + idleArm + ID('UpperArmL', 0), ID('UpperArmL', 1), ID('UpperArmL', 2));
+  spinBone(U['UpperArm.R'], -thL + idleArm + ID('UpperArmR', 0), ID('UpperArmR', 1), ID('UpperArmR', 2));
   const flexL = (GAIT.elbow + GAIT.elbowSwing * Math.max(0, -swing)) * mb;
   const flexR = (GAIT.elbow + GAIT.elbowSwing * Math.max(0, swing)) * mb;
-  spinBone(U['LowerArm.L'], -flexL - (1 - mb) * 0.05, 0, 0);
-  spinBone(U['LowerArm.R'], -flexR - (1 - mb) * 0.05, 0, 0);
+  spinBone(U['LowerArm.L'], -flexL - (1 - mb) * 0.05 + ID('LowerArmL', 0), ID('LowerArmL', 1), ID('LowerArmL', 2));
+  spinBone(U['LowerArm.R'], -flexR - (1 - mb) * 0.05 + ID('LowerArmR', 0), ID('LowerArmR', 1), ID('LowerArmR', 2));
 }
 
 // ── Navigation grid ────────────────────────────────────────────────────────
@@ -667,6 +717,7 @@ export async function buildVisitors({
       dest: new THREE.Vector3(),
       speed, phase: Math.random(), moveBlend: 0, lean: 0,
       seed: Math.random() * 10, needsPath: false,
+      idleFn: null, idleW: 0, idleT: -1, // varied idle action while waiting
       // per-visitor gait flavour
       strideArm: rig ? GAIT.stride * rig.legLen * rand(0.95, 1.08) * (0.85 + 0.15 * (speed / 1.5)) : 1,
       standZL: rig ? rand(-0.06, 0.12) * rig.legLen : 0,
@@ -783,6 +834,18 @@ export async function buildVisitors({
       const targetBlend = w.state === 'walking' ? 1 : 0;
       w.moveBlend += (targetBlend - w.moveBlend) * clamp(dt * 4.5, 0, 1);
       w.lean += (leanTarget - w.lean) * clamp(dt * 5, 0, 1);
+
+      // Idle action: pick a fresh one each time the visitor stops; ease in
+      // after a short beat of plain standing, ease out the moment they walk.
+      if (w.state === 'waiting') {
+        if (w.idleT < 0) { w.idleFn = IDLE_POOL[(Math.random() * IDLE_POOL.length) | 0]; w.idleT = 0; }
+        w.idleT += dt;
+      } else {
+        w.idleT = -1;
+      }
+      const idleTarget = w.idleT > 1.0 && w.idleFn ? 1 : 0;
+      w.idleW += (idleTarget - w.idleW) * clamp(dt * 2.2, 0, 1);
+
       applyGaitPose(w, time);
     }
 

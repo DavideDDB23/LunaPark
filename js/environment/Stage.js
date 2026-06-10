@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
+import {
+  loadVisitorTemplates, makeRider, pose,
+  applyStandingLegs, placeFeet,
+} from './Passengers.js';
 
 const WOOD_BASE = 'assets/textures/PaintedWood003_2K-JPG/';
 const STAGE_Z = -88;
@@ -538,6 +542,108 @@ export function buildStage({ anisotropy = 8 } = {}) {
 
   group.add(micGroup);
 
+  // ─── Performers — singer at the mic + guitarist, fully procedural ───
+  // Same Quaternius templates as the visitors; every bone is driven by
+  // beat-locked f(t) math (no clips, no AnimationMixer). The volumetric
+  // beams below pulse on the same beat.
+  const BPM = 100;
+  const performers = [];
+  const _perfBox = new THREE.Box3();
+  (async () => {
+    try {
+      const templates = await loadVisitorTemplates(2);
+      if (!templates.length) return;
+      const defs = [
+        { x: 0.0,  z: Z + 4.45, facing: 0.0, role: 'singer' },
+        { x: -3.4, z: Z + 1.8,  facing: 0.45, role: 'guitarist' },
+      ];
+      for (let i = 0; i < defs.length; i++) {
+        const d = defs[i];
+        const tmpl = templates[i % templates.length];
+        const r = makeRider(tmpl, 3.28, { pool: ['standRest'], facingY: 0, standing: true, phase: i * 1.7 });
+        r.role = d.role;
+
+        const root = new THREE.Group();
+        root.name = `performer_${d.role}`;
+        root.position.set(d.x, 0.61, d.z); // stage deck top (+ carpet)
+        root.rotation.y = d.facing;        // face the audience (+Z)
+        root.add(r.pivot);
+        group.add(root);
+        // join the stage-light layer so the spotlight/uplights hit them
+        root.traverse((o) => { if (o.isMesh) o.layers.enable(3); });
+
+        // Ground-calibrate: pose straight standing legs, refresh the skinned
+        // bounds, and lift the pivot so the soles rest exactly on the deck.
+        if (r.legRig) { applyStandingLegs(r.legRig); placeFeet(r.legRig); }
+        root.updateMatrixWorld(true);
+        r.fig.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.update(); });
+        _perfBox.setFromObject(r.fig, true);
+        if (isFinite(_perfBox.min.y)) {
+          const lift = _perfBox.min.y - 0.61;
+          r.pivot.position.y -= Math.max(-0.4, Math.min(0.4, lift));
+        }
+        r.baseY = r.pivot.position.y;
+
+        // Simple prop guitar strapped across the guitarist.
+        if (d.role === 'guitarist') {
+          const guitar = new THREE.Group();
+          const bodyMat = new THREE.MeshStandardMaterial({ color: 0xa0322a, roughness: 0.4, metalness: 0.1 });
+          const gBody = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.16, 18), bodyMat);
+          gBody.rotation.x = Math.PI / 2;
+          guitar.add(gBody);
+          const neck = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.25, 0.06),
+            new THREE.MeshStandardMaterial({ color: 0x3a2412, roughness: 0.7 }));
+          neck.position.y = 0.78;
+          guitar.add(neck);
+          const headstock = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.06),
+            new THREE.MeshStandardMaterial({ color: 0x1c1208, roughness: 0.7 }));
+          headstock.position.y = 1.5;
+          guitar.add(headstock);
+          guitar.position.set(0.12, 1.2, 0.5);
+          guitar.rotation.set(0.12, 0, -0.85); // neck up toward the left hand
+          r.pivot.add(guitar);
+        }
+        performers.push(r);
+      }
+    } catch (e) {
+      console.warn('Stage performers failed to load:', e);
+    }
+  })();
+
+  // Pose one performer for absolute time. All angles are rest-relative
+  // Euler deltas (same convention as the seated-passenger poses).
+  function animatePerformer(r, time) {
+    const B = r.bones;
+    if (r.legRig) { applyStandingLegs(r.legRig); placeFeet(r.legRig); }
+    const beatT = time * (BPM / 60) + r.phase;
+    const tb = beatT * Math.PI * 2;          // one beat = 2π
+    if (r.role === 'singer') {
+      // Right hand brings the mic to the mouth and holds it there.
+      pose(B, 'UpperArmR', 1.35, 0.6, -0.45);
+      pose(B, 'LowerArmR', 1.95, 0.3, 0);
+      // Left arm sweeps wide gestures over two-beat phrases.
+      const sweep = Math.sin(tb * 0.5);
+      pose(B, 'UpperArmL', 0.45 + 0.3 * Math.sin(tb * 0.5 + 1.2), -(0.55 + 0.5 * sweep), 0.15);
+      pose(B, 'LowerArmL', 0.65 + 0.3 * Math.sin(tb), 0, 0);
+      pose(B, 'Head', 0.1 * Math.sin(tb) - 0.04, 0.18 * Math.sin(time * 0.6), 0);
+      pose(B, 'Torso', 0.05 + 0.05 * Math.sin(tb), 0.08 * Math.sin(tb * 0.5), 0.04 * Math.sin(tb * 0.5));
+      r.pivot.position.y = r.baseY + Math.abs(Math.sin(tb * 0.5)) * 0.05;
+      r.pivot.rotation.z = Math.sin(tb * 0.5) * 0.05;        // weight shift
+    } else {
+      // Left hand on the fretboard, right hand strums double-time.
+      pose(B, 'UpperArmL', 0.55, -1.05, 0.25);
+      pose(B, 'LowerArmL', 1.1, 0.4, 0);
+      const strum = Math.sin(tb * 2) * 0.22;
+      pose(B, 'UpperArmR', 0.95, 0.35, -0.15);
+      pose(B, 'LowerArmR', 1.25 + strum, 0, 0);
+      // Head-bang on the beat.
+      pose(B, 'Head', 0.22 * Math.max(0, Math.sin(tb)) - 0.05, 0.12 * Math.sin(time * 0.5), 0);
+      pose(B, 'Torso', 0.10 + 0.06 * Math.sin(tb), -0.05, 0.03 * Math.sin(tb * 0.5));
+      r.pivot.position.y = r.baseY + Math.abs(Math.sin(tb * 0.5)) * 0.03;
+      r.pivot.rotation.z = Math.sin(tb * 0.25) * 0.04;
+    }
+  }
+
   // ─── Marquee bulbs around roof base ──────────────────────────
   const bulbGeo = new THREE.SphereGeometry(0.18, 12, 8);
   const bulbCount = 24;
@@ -580,6 +686,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     beam.position.set(i === 0 ? -5 : 5, 14, Z + 8);
     beam.rotation.z = i === 0 ? -0.28 : 0.28;
     beam.rotation.x = -0.08;
+    beam.userData.baseZ = beam.rotation.z;
     group.add(beam);
     beams.push(beam);
   }
@@ -609,11 +716,18 @@ export function buildStage({ anisotropy = 8 } = {}) {
       u.intensity = THREE.MathUtils.lerp(u.intensity, targetUplightIntensity, 0.08);
     }
 
-    // Volumetric spotlight beams breathing/fading
+    // Performers — beat-locked procedural skeleton animation
+    for (const r of performers) animatePerformer(r, time);
+
+    // Volumetric spotlight beams: pulse on the performers' beat at night,
+    // and slowly sweep side to side like concert moving heads.
+    const beatPhase = (time * (BPM / 60)) % 1;
+    const beatPulse = Math.pow(1 - beatPhase, 2.5); // sharp attack, fast decay
     for (let i = 0; i < beams.length; i++) {
       const b = beams[i];
-      const targetOpacity = isNight ? (0.10 + Math.sin(time * 2.5 + i * Math.PI) * 0.03) : 0.0;
-      b.material.opacity = THREE.MathUtils.lerp(b.material.opacity, targetOpacity, 0.05);
+      const targetOpacity = isNight ? (0.07 + beatPulse * 0.09 + Math.sin(time * 2.5 + i * Math.PI) * 0.02) : 0.0;
+      b.material.opacity = THREE.MathUtils.lerp(b.material.opacity, targetOpacity, 0.15);
+      b.rotation.z = b.userData.baseZ + Math.sin(time * 0.7 + i * Math.PI) * 0.16;
     }
 
     // Neon Star pulse
