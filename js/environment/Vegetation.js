@@ -145,6 +145,8 @@ export async function buildVegetation({ coasterFootprint = null, signKeepOut = n
   const swayables = [];
   // Track XZ positions of trees so we can enforce spacing — prevents collisions when wind sways them.
   const treePositions = [];
+  // Solid foliage footprints {x, z, r} for NPC visitor navigation (so walkers route around them).
+  const obstacles = [];
 
   function tooCloseToTree(x, z, minDist) {
     for (const [tx, tz] of treePositions) {
@@ -178,6 +180,14 @@ export async function buildVegetation({ coasterFootprint = null, signKeepOut = n
       group.add(instance);
       placed++;
 
+      // Record a navigation footprint for solid foliage (trunks/bushes/logs), so NPC
+      // visitors route around them. Flat ground-cover (grass/flowers/plants) is walkable.
+      if (opts.obstacleRadius) {
+        const nm = source.name || '';
+        const skip = /Grass|Flower|Plant/.test(nm);
+        if (!skip) obstacles.push({ x, z, r: opts.obstacleRadius * scaleVar });
+      }
+
       if (sway) {
         instance.userData.sway = {
           yaw,
@@ -191,9 +201,12 @@ export async function buildVegetation({ coasterFootprint = null, signKeepOut = n
   }
 
   // Trees need spacing so wind sway doesn't make them collide.
-  placeFrom(trees, 90, { blockLamps: true, sway: true, minSpacing: 6 });
-  placeFrom(bushes, 35, { blockLamps: true });
-  placeFrom(decor, 90,  { blockLamps: false });
+  placeFrom(trees, 90, { blockLamps: true, sway: true, minSpacing: 6, obstacleRadius: 2.1 });
+  placeFrom(bushes, 35, { blockLamps: true, obstacleRadius: 1.6 });
+  placeFrom(decor, 90,  { blockLamps: false, obstacleRadius: 1.2 });
+
+  // Expose solid-foliage footprints for the NPC visitor navigation grid.
+  group.userData.obstacles = obstacles;
 
   // Wind animation tick. Sway amplitude saturates with wind so neighbours can't collide.
   group.userData.tick = (delta, time, windSpeed) => {

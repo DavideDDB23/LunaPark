@@ -17,6 +17,7 @@ import { buildCarousel } from "./environment/Carousel.js";
 import { buildTagada } from "./environment/Tagada.js";
 import { buildCoaster } from "./environment/Coaster.js";
 import { buildRideSign } from "./environment/RideSign.js";
+import { buildVisitors } from "./environment/Visitors.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 import { CameraManager } from './camera/CameraManager.js';
 import { eventBus } from './utils/EventBus.js';
@@ -184,7 +185,8 @@ async function init() {
   console.log("buildSky"); const skyInfo = await buildSky(scene, renderer);
   const lightInfo = buildLights(scene);
 
-  environmentGroup.add(buildGround({ anisotropy: maxAniso }));
+  const ground = buildGround({ anisotropy: maxAniso });
+  environmentGroup.add(ground);
 
   console.log("buildPaths"); const paths = await buildPaths({ anisotropy: maxAniso });
   environmentGroup.add(paths);
@@ -236,6 +238,18 @@ async function init() {
 
   console.log("buildBenches"); const benches = await buildBenches();
   environmentGroup.add(benches);
+
+  // NPC visitors roam the whole park, routing around the (now-placed) trees & rides
+  // and grounded onto the terrain, lifted smoothly over the central bridge deck.
+  console.log("buildVisitors");
+  const bridge = paths.getObjectByName('japanese_bridge');
+  const visitors = await buildVisitors({
+    count: 10,
+    obstacles: vegetation.userData.obstacles || [],
+    coasterFootprint: coaster.userData.footprint,
+    bridge,
+  });
+  environmentGroup.add(visitors);
 
   environmentGroup.add(buildEntranceGate());
   const stage = buildStage({ anisotropy: maxAniso });
@@ -456,6 +470,9 @@ function animate() {
 
   const vegetation = environmentGroup.getObjectByName('vegetation');
   if (vegetation && vegetation.userData.tick) vegetation.userData.tick(delta, time, wind);
+
+  const visitors = environmentGroup.getObjectByName('visitors');
+  if (visitors && visitors.userData.tick) visitors.userData.tick(delta, time);
 
   const gate = environmentGroup.getObjectByName('entranceGate');
   if (gate && gate.userData.tick) gate.userData.tick(delta, time, wind);
