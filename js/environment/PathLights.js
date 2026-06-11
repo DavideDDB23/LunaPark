@@ -6,7 +6,6 @@ export function buildPathLights() {
 
   const positions = [
     [-3, 0, 35], [3, 0, 35],
-    [-3, 0, -15], [3, 0, -15],
     [-3, 0, -50], [3, 0, -50],
   ];
 
