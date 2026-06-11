@@ -27,7 +27,7 @@ export function buildFireworks() {
 
   const mat = new THREE.PointsMaterial({
     color: 0xff6600,
-    size: 0.5,
+    size: 3.5,
     transparent: true,
     opacity: 0.8,
     blending: THREE.AdditiveBlending,
@@ -35,7 +35,7 @@ export function buildFireworks() {
   });
 
   const points = new THREE.Points(geo, mat);
-  points.position.set(0, 20, -130);
+  points.position.set(0, 20, -100);
   group.add(points);
 
   let lastBurst = 0;
@@ -51,12 +51,12 @@ export function buildFireworks() {
       lastBurst = time;
       const cx = (Math.random() - 0.5) * 60;
       const cy = 5 + Math.random() * 15;
-      const cz = -120 + (Math.random() - 0.5) * 20;
+      const cz = (Math.random() - 0.5) * 20;
       const hue = Math.random();
       for (let i = 0; i < count; i++) {
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.random() * Math.PI;
-        const speed = 3 + Math.random() * 8;
+        const speed = 5 + Math.random() * 12;
         p[i * 3] = cx;
         p[i * 3 + 1] = cy;
         p[i * 3 + 2] = cz;
