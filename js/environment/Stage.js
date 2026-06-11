@@ -53,12 +53,14 @@ export function buildStage({ anisotropy = 8 } = {}) {
   platform.rotation.y = Math.PI / 8;
   platform.castShadow = true;
   platform.receiveShadow = true;
+  platform.layers.enable(3);
   group.add(platform);
 
   // Platform edge trim
   const edgeRing = new THREE.Mesh(new THREE.TorusGeometry(11.5, 0.12, 8, 8), goldTrim);
   edgeRing.position.set(0, 0.6, Z);
   edgeRing.rotation.set(Math.PI / 2, 0, Math.PI / 8);
+  edgeRing.layers.enable(3);
   group.add(edgeRing);
 
   // ─── Stairs (3 steps front - corrected slope direction) ────────
@@ -69,6 +71,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     step.position.set(0, 0.09 + i * 0.18, Z + 12 + 0.35 + (2 - i) * 0.7);
     step.castShadow = true;
     step.receiveShadow = true;
+    step.layers.enable(3);
     group.add(step);
   }
 
@@ -79,6 +82,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
   const platCarpet = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.012, 21.0), carpetMat);
   platCarpet.position.set(0, 0.606, Z + 1.5);
   platCarpet.receiveShadow = true;
+  platCarpet.layers.enable(3);
   group.add(platCarpet);
   
   // Stairs carpet treads
@@ -86,24 +90,28 @@ export function buildStage({ anisotropy = 8 } = {}) {
   const step2Carpet = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.012, 0.72), carpetMat);
   step2Carpet.position.set(0, 0.546, Z + 12.35);
   step2Carpet.receiveShadow = true;
+  step2Carpet.layers.enable(3);
   group.add(step2Carpet);
   
   // Step 1: y = 0.27, z = Z + 13.05
   const step1Carpet = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.012, 0.72), carpetMat);
   step1Carpet.position.set(0, 0.366, Z + 13.05);
   step1Carpet.receiveShadow = true;
+  step1Carpet.layers.enable(3);
   group.add(step1Carpet);
   
   // Step 0: y = 0.09, z = Z + 13.75
   const step0Carpet = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.012, 0.72), carpetMat);
   step0Carpet.position.set(0, 0.186, Z + 13.75);
   step0Carpet.receiveShadow = true;
+  step0Carpet.layers.enable(3);
   group.add(step0Carpet);
   
   // Pathway carpet continuation at the bottom
   const pathCarpet = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.012, 2.5), carpetMat);
   pathCarpet.position.set(0, 0.006, Z + 13.75 + 0.36 + 1.25);
   pathCarpet.receiveShadow = true;
+  pathCarpet.layers.enable(3);
   group.add(pathCarpet);
 
   // ─── Stage Footlights (fixtures matching the light sources) ───
@@ -133,17 +141,20 @@ export function buildStage({ anisotropy = 8 } = {}) {
     // Base box
     const baseBox = new THREE.Mesh(footlightFixtureGeo, footlightHousingMat);
     baseBox.castShadow = true;
+    baseBox.layers.enable(3);
     fixture.add(baseBox);
     
     // Gold hood (tilted back to face stage)
     const hood = new THREE.Mesh(footlightHoodGeo, goldTrim);
     hood.position.set(0, 0.15, -0.05);
     hood.rotation.x = -Math.PI / 4; // angle back to stage
+    hood.layers.enable(3);
     fixture.add(hood);
     
     // Bulb inside
     const bulb = new THREE.Mesh(footlightBulbGeo, footlightBulbMat);
     bulb.position.set(0, 0.15, 0);
+    bulb.layers.enable(3);
     fixture.add(bulb);
     
     group.add(fixture);
@@ -152,18 +163,21 @@ export function buildStage({ anisotropy = 8 } = {}) {
   // ─── Floor Compass/Star Medallion ─────────────────────────────
   const medallionGroup = new THREE.Group();
   medallionGroup.position.set(0, 0.605, Z);
+  medallionGroup.layers.enable(3);
   
   // Outer gold ring
   const outerRingGeo = new THREE.RingGeometry(3.6, 3.8, 8);
   const outerRing = new THREE.Mesh(outerRingGeo, goldTrim);
   outerRing.rotation.x = -Math.PI / 2;
   outerRing.rotation.z = Math.PI / 8; // align with platform
+  outerRing.layers.enable(3);
   medallionGroup.add(outerRing);
   
   // Inner gold ring
   const innerRingGeo = new THREE.RingGeometry(1.8, 1.9, 32);
   const innerRing = new THREE.Mesh(innerRingGeo, goldTrim);
   innerRing.rotation.x = -Math.PI / 2;
+  innerRing.layers.enable(3);
   medallionGroup.add(innerRing);
   
   // 8-pointed star points
@@ -174,6 +188,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     starPoint.position.set(Math.cos(angle) * 1.75, 0, Math.sin(angle) * 1.75);
     starPoint.rotation.x = Math.PI / 2;
     starPoint.rotation.z = -angle - Math.PI / 2;
+    starPoint.layers.enable(3);
     medallionGroup.add(starPoint);
   }
   
@@ -192,15 +207,18 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const base = new THREE.Mesh(baseGeo, goldTrim);
     base.position.set(x, 0.78, z);
     base.castShadow = true;
+    base.layers.enable(3);
     group.add(base);
 
     const col = new THREE.Mesh(pillarGeo, pillarMat);
     col.position.set(x, 3.35, z);
     col.castShadow = true;
+    col.layers.enable(3);
     group.add(col);
 
     const cap = new THREE.Mesh(capGeo, goldTrim);
     cap.position.set(x, 5.95, z);
+    cap.layers.enable(3);
     group.add(cap);
 
     // Golden rings around column at 1/3 and 2/3 height
@@ -208,6 +226,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
       const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.12, 16), goldTrim);
       ring.position.set(x, ry, z);
       ring.castShadow = true;
+      ring.layers.enable(3);
       group.add(ring);
     }
 
@@ -294,12 +313,14 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const railGroup = new THREE.Group();
     railGroup.position.set(midX, 0.6, midZ);
     railGroup.rotation.y = -angle;
+    railGroup.layers.enable(3);
 
     // Top rail
     const topBar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, dist, 8), goldTrim);
     topBar.rotation.z = Math.PI / 2;
     topBar.position.y = 0.8;
     topBar.castShadow = true;
+    topBar.layers.enable(3);
     railGroup.add(topBar);
 
     // Bottom rail
@@ -307,6 +328,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     bottomBar.rotation.z = Math.PI / 2;
     bottomBar.position.y = 0.15;
     bottomBar.castShadow = true;
+    bottomBar.layers.enable(3);
     railGroup.add(bottomBar);
 
     // Balusters
@@ -317,6 +339,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
       const baluster = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.65, 6), goldTrim);
       baluster.position.set(bx, 0.475, 0);
       baluster.castShadow = true;
+      baluster.layers.enable(3);
       railGroup.add(baluster);
     }
     group.add(railGroup);
@@ -328,6 +351,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
   roof.position.set(0, 8.45, Z);
   roof.rotation.y = Math.PI / 8;
   roof.castShadow = true;
+  roof.layers.enable(3);
   group.add(roof);
 
   // Golden ribs along the 8 corners of the octagonal roof
@@ -352,6 +376,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const direction = new THREE.Vector3(dx, dy, dz).normalize();
     rib.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
     rib.castShadow = true;
+    rib.layers.enable(3);
     group.add(rib);
   }
 
@@ -372,13 +397,16 @@ export function buildStage({ anisotropy = 8 } = {}) {
       
       const valance = new THREE.Group();
       valance.position.set(sx, 6.1, sz);
+      valance.layers.enable(3);
       
       // Scallop shape: small golden sphere and hanging cone
       const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), goldTrim);
+      sphere.layers.enable(3);
       valance.add(sphere);
       const cone = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 5), goldTrim);
       cone.position.y = -0.09;
       cone.rotation.x = Math.PI; // point down
+      cone.layers.enable(3);
       valance.add(cone);
       
       group.add(valance);
@@ -389,14 +417,17 @@ export function buildStage({ anisotropy = 8 } = {}) {
   const roofRing = new THREE.Mesh(new THREE.CylinderGeometry(12.6, 12.6, 0.25, 8), goldTrim);
   roofRing.position.set(0, 6.3, Z);
   roofRing.rotation.y = Math.PI / 8;
+  roofRing.layers.enable(3);
   group.add(roofRing);
 
   // Finial
   const finialBall = new THREE.Mesh(new THREE.SphereGeometry(0.55, 20, 14), goldTrim);
   finialBall.position.set(0, 11.0, Z);
+  finialBall.layers.enable(3);
   group.add(finialBall);
   const finialSpike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.7, 16), goldTrim);
   finialSpike.position.set(0, 12.4, Z);
+  finialSpike.layers.enable(3);
   group.add(finialSpike);
 
   // ─── Backdrop (folded curtain panels + banner) ───────────────
@@ -416,6 +447,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
   curtainMesh.position.set(0, 3.0, Z - 9.5);
   curtainMesh.castShadow = true;
   curtainMesh.receiveShadow = true;
+  curtainMesh.layers.enable(3);
   group.add(curtainMesh);
 
   // Golden tieback ropes on the sides
@@ -425,6 +457,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const rope = new THREE.Mesh(ropeGeo, ropeMat);
     rope.position.set(sx * 6.5, 2.0, Z - 9.3);
     rope.rotation.set(0, sx * Math.PI / 2, Math.PI / 2);
+    rope.layers.enable(3);
     group.add(rope);
   }
 
@@ -432,23 +465,28 @@ export function buildStage({ anisotropy = 8 } = {}) {
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 18, 12), goldTrim);
   rod.rotation.z = Math.PI / 2;
   rod.position.set(0, 4.5, Z - 8.3);
+  rod.layers.enable(3);
   group.add(rod);
 
   // Banner
   const banner = new THREE.Mesh(new THREE.PlaneGeometry(10, 1.5), bannerMat);
   banner.position.set(0, 4.6, Z - 8.2);
+  banner.layers.enable(3);
   group.add(banner);
 
   // Neon Star Crest on banner
   const stageStarGroup = new THREE.Group();
   stageStarGroup.position.set(0, 4.6, Z - 8.15);
+  stageStarGroup.layers.enable(3);
 
   const starBack = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.08, 5), goldTrim);
   starBack.rotation.x = Math.PI / 2;
+  starBack.layers.enable(3);
   stageStarGroup.add(starBack);
 
   const starNeonMesh = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.1, 5), starNeonMat);
   starNeonMesh.rotation.x = Math.PI / 2;
+  starNeonMesh.layers.enable(3);
   stageStarGroup.add(starNeonMesh);
   group.add(stageStarGroup);
 
@@ -462,29 +500,33 @@ export function buildStage({ anisotropy = 8 } = {}) {
   for (const sx of [-1, 1]) {
     const noteGroup = new THREE.Group();
     noteGroup.position.set(sx * 3.0, 4.6, Z - 8.1);
+    noteGroup.layers.enable(3);
     
     // Note head
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), noteMat);
     head.position.set(-0.06, -0.15, 0);
     head.scale.set(1.3, 1, 0.7);
     head.rotation.z = 0.3;
+    head.layers.enable(3);
     noteGroup.add(head);
     
     // Stem
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.38, 8), noteMat);
     stem.position.set(0, 0.04, 0);
+    stem.layers.enable(3);
     noteGroup.add(stem);
     
     // Flag
     const flag = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 8), noteMat);
     flag.position.set(0.07, 0.16, 0);
     flag.rotation.z = -Math.PI / 4;
+    flag.layers.enable(3);
     noteGroup.add(flag);
     
     group.add(noteGroup);
   }
 
-  // ─── Concert Loudspeakers ───────────────────────────────────
+// ─── Concert Loudspeakers ───────────────────────────────────
   const speakerMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.85, metalness: 0.1 });
   const speakerGold = new THREE.MeshStandardMaterial({ color: 0xddb040, roughness: 0.4, metalness: 0.6 });
 
@@ -495,22 +537,26 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const speaker = new THREE.Group();
     speaker.position.set(spX, 0.6 + 0.9, spZ);
     speaker.rotation.y = -sx * 0.35 + Math.PI;
+    speaker.layers.enable(3);
 
     // Cabinet
     const cabinet = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.8, 0.8), speakerMat);
     cabinet.castShadow = true;
+    cabinet.layers.enable(3);
     speaker.add(cabinet);
 
     // Woofer
     const woofer = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.05, 12), speakerGold);
     woofer.rotation.x = Math.PI / 2;
     woofer.position.set(0, -0.35, 0.41);
+    woofer.layers.enable(3);
     speaker.add(woofer);
 
     // Tweeter
     const tweeter = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.05, 12), speakerGold);
     tweeter.rotation.x = Math.PI / 2;
     tweeter.position.set(0, 0.35, 0.41);
+    tweeter.layers.enable(3);
     speaker.add(tweeter);
 
     group.add(speaker);
@@ -635,6 +681,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     const bulbMatInstance = bulbMat.clone();
     const bulb = new THREE.Mesh(bulbGeo, bulbMatInstance);
     bulb.position.set(Math.cos(a) * r, 6.2, Math.sin(a) * r + Z);
+    bulb.layers.enable(3);
     group.add(bulb);
     stageBulbs.push(bulb);
   }
@@ -650,7 +697,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
   group.add(spot);
   group.add(spot.target);
 
-  // Volumetric spotlight beams (translucent cones)
+  // Volumetric spotlight beam (single beam for performance)
   const beamGeo = new THREE.ConeGeometry(3.2, 16.0, 16, 1, true);
   beamGeo.translate(0, -8.0, 0); // shift origin to tip
   const beamColors = [0x00ffff, 0xff00ff];

@@ -59,6 +59,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = true;
+      o.layers.enable(2);
     }
   });
 
@@ -124,11 +125,13 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   platformMesh.position.y = 0.3; // resting on ground
   platformMesh.receiveShadow = true;
   platformMesh.castShadow = true;
+  platformMesh.layers.enable(2);
   rotatingAssembly.add(platformMesh);
 
   // Gold platform trim
   const trimMesh = new THREE.Mesh(new THREE.CylinderGeometry(12.05, 12.05, 0.15, 48), goldMat);
   trimMesh.position.y = 0.3;
+  trimMesh.layers.enable(2);
   rotatingAssembly.add(trimMesh);
 
   // Central column: Mirror-finished main support cylinder (radius 2.0, height 6.3) resting on platform surface, touching canopy underside
@@ -136,15 +139,18 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   columnMesh.position.y = 0.6 + 3.15; // centered: bottom at y=0.6 (platform surface), top at y=6.9 (canopy rim bottom)
   columnMesh.castShadow = true;
   columnMesh.receiveShadow = true;
+  columnMesh.layers.enable(2);
   rotatingAssembly.add(columnMesh);
 
   // Column gold moldings (decorative bands)
   const bottomBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
   bottomBand.position.y = 0.6 + 0.1; // base of column, on platform surface
+  bottomBand.layers.enable(2);
   rotatingAssembly.add(bottomBand);
 
   const topBand = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.2, 24), goldMat);
   topBand.position.y = 6.9 - 0.1; // top of column
+  topBand.layers.enable(2);
   rotatingAssembly.add(topBand);
 
   // Canopy conical roof: Cone of radius 13.2, height 3.5
@@ -152,12 +158,14 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   canopyMesh.position.y = 0.3 + 0.3 + 5.5 + 1.75 + 1.0; // 0.6 + 5.5 + 1.75 + 1.0 = 8.85
   canopyMesh.castShadow = true;
   canopyMesh.receiveShadow = true;
+  canopyMesh.layers.enable(2);
   rotatingAssembly.add(canopyMesh);
 
   // Canopy valance/rim
   const canopyRim = new THREE.Mesh(new THREE.CylinderGeometry(13.2, 13.2, 0.4, 32), goldMat);
   canopyRim.position.y = 0.3 + 0.3 + 5.5 + 1.0; // 0.6 + 5.5 + 1.0 = 7.1
   canopyRim.castShadow = true;
+  canopyRim.layers.enable(2);
   rotatingAssembly.add(canopyRim);
 
   // ── Poles & Horses ──
@@ -193,10 +201,10 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   rotatingAssembly.add(centerLight);
   ridePointLights.push(centerLight);
 
-  // Canopy Rim Lights
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xffdd88, 0, 35, 1.5);
+  // Canopy Rim Lights (reduced to 2 for performance, using light layers)
+  for (let i = 0; i < 2; i++) {
+    const angle = (i / 2) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xffdd88, 0, 45, 1.5);
     pl.position.set(13.22 * Math.cos(angle), 7.1, 13.22 * Math.sin(angle));
     pl.layers.set(2);
     rotatingAssembly.add(pl);

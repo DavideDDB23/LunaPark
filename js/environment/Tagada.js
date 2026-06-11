@@ -504,6 +504,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const pole = new THREE.Mesh(poleGeo, railMat);
     pole.position.set(railRadius * Math.cos(a), railHeight / 2, railRadius * Math.sin(a));
     pole.castShadow = true;
+    pole.layers.enable(2);
     discMeshGroup.add(pole);
   }
 
@@ -790,6 +791,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const bulb = new THREE.Mesh(bulbGeo, bulbMat);
     // Positioned on the chrome outer rim just below handrail height
     bulb.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
+    bulb.layers.enable(2);
     discMeshGroup.add(bulb);
     bulbs.push(bulb);
   }
@@ -803,10 +805,10 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   discMeshGroup.add(centerLight);
   ridePointLights.push(centerLight);
 
-  // Rim Lights
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xff00ff, 0, 35, 1.5);
+  // Rim Lights (reduced to 2 for performance, using light layers)
+  for (let i = 0; i < 2; i++) {
+    const angle = (i / 2) * Math.PI * 2;
+    const pl = new THREE.PointLight(0xff00ff, 0, 45, 1.5);
     pl.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
     pl.layers.set(2);
     discMeshGroup.add(pl);

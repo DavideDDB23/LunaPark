@@ -73,7 +73,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   model.traverse((o) => {
     if (o.isLight) toRemove.push(o);
     if (o.name === 'plane') toRemove.push(o);
-    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.layers.enable(2); }
   });
   toRemove.forEach((o) => o.parent && o.parent.remove(o));
 

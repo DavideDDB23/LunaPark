@@ -50,6 +50,10 @@ camera.lookAt(0, 0, 0);
 
 const clock = new THREE.Clock();
 
+const fpsEl = document.getElementById('fps');
+let fpsFrames = 0;
+let fpsLastTime = performance.now();
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -393,6 +397,9 @@ async function init() {
   interactionManager.registerRide(tagada);
   interactionManager.registerRide(coaster);
 
+  // Share interactive objects with CameraManager for optimized raycasting
+  cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
+
   // EventBus: click interactions
   eventBus.on('interact-click', ({ object }) => {
     // Check if lamppost clicked
@@ -586,7 +593,7 @@ function onResize() {
 window.addEventListener('resize', onResize);
 
 function animate() {
-  const delta = clock.getDelta();
+  const delta = Math.min(clock.getDelta(), 0.05);
   const time = clock.getElapsedTime();
   const wind = getWindSpeed();
   if (!cameraManager || cameraManager.state !== 'flying') {
@@ -631,6 +638,17 @@ function animate() {
   if (world.lamps?.userData.tick) world.lamps.userData.tick(delta, time);
 
   renderer.render(scene, camera);
+
+  // FPS counter
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsLastTime >= 500) {
+    const fps = Math.round((fpsFrames * 1000) / (now - fpsLastTime));
+    if (fpsEl) fpsEl.textContent = `FPS: ${fps}`;
+    fpsFrames = 0;
+    fpsLastTime = now;
+  }
+
   requestAnimationFrame(animate);
 }
 
