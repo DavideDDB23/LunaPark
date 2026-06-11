@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadColorTexture, loadLinearTexture, loadGLB } from '../utils/loaders.js';
+import { isNightNow } from '../utils/dayNight.js';
 import {
   loadVisitorTemplates, makeRider, pose,
   applyStandingLegs, placeFeet,
@@ -685,16 +686,18 @@ export function buildStage({ anisotropy = 8 } = {}) {
 
   // ─── Animation Tick ─────────────────────────────────────────
   group.userData.tick = (delta, time) => {
-    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
-    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    const isNight = isNightNow(group);
 
     const targetSpotIntensity = isNight ? 100.0 : 0.0;
     const targetUplightIntensity = isNight ? 20.0 : 0.0;
 
-    // Smooth spotlight and uplight transition
-    spot.intensity = THREE.MathUtils.lerp(spot.intensity, targetSpotIntensity, 0.08);
+    // Smooth spotlight and uplight transition (exponential, frame-rate independent).
+    // Stage.js is the spotlight's ONLY writer — DayNightCycle used to also set
+    // it every frame, and the final value depended on tick order.
+    const k = 1 - Math.exp(-5.0 * delta);
+    spot.intensity = THREE.MathUtils.lerp(spot.intensity, targetSpotIntensity, k);
     for (const u of uplights) {
-      u.intensity = THREE.MathUtils.lerp(u.intensity, targetUplightIntensity, 0.08);
+      u.intensity = THREE.MathUtils.lerp(u.intensity, targetUplightIntensity, k);
     }
 
     // Performers — beat-locked procedural skeleton animation
@@ -707,7 +710,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
     for (let i = 0; i < beams.length; i++) {
       const b = beams[i];
       const targetOpacity = isNight ? (0.07 + beatPulse * 0.09 + Math.sin(time * 2.5 + i * Math.PI) * 0.02) : 0.0;
-      b.material.opacity = THREE.MathUtils.lerp(b.material.opacity, targetOpacity, 0.15);
+      b.material.opacity = THREE.MathUtils.lerp(b.material.opacity, targetOpacity, 1 - Math.exp(-9.0 * delta));
       b.rotation.z = b.userData.baseZ + Math.sin(time * 0.7 + i * Math.PI) * 0.16;
     }
 

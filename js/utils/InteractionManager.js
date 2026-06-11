@@ -82,13 +82,12 @@ export class InteractionManager {
       }
     };
 
+    // Pointer Events already cover mouse, touch and pen — registering the
+    // legacy touch* events as well made every tap fire onDown twice (the ride
+    // toggled on+off instantly and the panel appeared dead on touch screens).
     dom.addEventListener('pointermove', onMove);
     dom.addEventListener('pointerdown', onDown);
     dom.addEventListener('wheel', onWheel, { passive: false, capture: true });
-
-    // Mobile Touch Events
-    dom.addEventListener('touchmove', onMove);
-    dom.addEventListener('touchstart', onDown);
   }
 
   updateNDC(clientX, clientY) {

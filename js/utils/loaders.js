@@ -42,9 +42,12 @@ export function sanitizeMaterials(root) {
         emissiveIntensity: m.emissiveIntensity != null ? m.emissiveIntensity : 1,
         roughness: m.roughness != null ? m.roughness : 0.9,
         metalness: m.metalness != null ? m.metalness : 0.0,
-        transparent: m.transparent || !!m.map, // fallback for alpha
+        // alphaTest handles foliage cutout in the OPAQUE pass; flagging every
+        // textured material `transparent` pushed most of the scene into the
+        // sorted transparent pass (no early-Z, sorting artifacts on foliage).
+        transparent: m.transparent === true,
         opacity: m.opacity != null ? m.opacity : 1,
-        alphaTest: m.alphaTest || 0.5,
+        alphaTest: m.alphaTest || (m.map ? 0.5 : 0),
         side: m.side != null ? m.side : THREE.DoubleSide, // useful for foliage
         name: m.name,
       });

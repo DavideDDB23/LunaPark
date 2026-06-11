@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 const PRESETS = {
-  1: { pos: [70, 60, 70],   target: [0, 0, 0] },
-  2: { pos: [-10, 25, -10], target: [-50, 22, -50] },
-  3: { pos: [15, 18, -15],  target: [40, 5, -40] },
-  4: { pos: [15, 18, 15],   target: [40, 0, 40] },
-  5: { pos: [-15, 18, 15],  target: [-40, 0, 40] },
-  6: { pos: [0, 12, 25],    target: [0, 4, 0] },
+  1: { pos: [70, 60, 70],   target: [0, 0, 0] },     // overview
+  2: { pos: [-10, 25, -10], target: [-50, 22, -50] }, // ferris wheel
+  3: { pos: [15, 18, -15],  target: [40, 5, -40] },   // carousel
+  4: { pos: [14, 24, 12],   target: [52, 10, 54] },   // roller coaster
+  5: { pos: [-15, 18, 15],  target: [-40, 0, 40] },   // tagada
+  6: { pos: [0, 14, -58],   target: [0, 4, -88] },    // stage
 };
 
 const FLY_DURATION = 1.2;
@@ -41,13 +41,10 @@ export class CameraManager {
     this._tmpForward = new THREE.Vector3();
     this._clickStart = { x: 0, y: 0 };
     this._hasMoved = false;
-    this._lastHoverTime = 0;
-    this._hoverThrottleMs = 50;
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
     this._onPointerUp = this._onPointerUp.bind(this);
-    this._onPointerHover = this._onPointerHover.bind(this);
     this._bindEvents();
   }
 
@@ -171,6 +168,9 @@ export class CameraManager {
   _cleanupFPV() {
     this._fpvTarget = null;
     this._fpvRide = null;
+    // Rides with getFpvUp (the coaster) roll the camera with the track — make
+    // sure orbit mode always gets a clean world-up back.
+    this.camera.up.set(0, 1, 0);
     if (this._hiddenRiders && this._hiddenRiders.length > 0) {
       for (const rider of this._hiddenRiders) {
         if (rider && rider.pivot) {
@@ -195,7 +195,6 @@ export class CameraManager {
   destroy() {
     window.removeEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown);
-    this.renderer.domElement.removeEventListener('pointermove', this._onPointerHover);
     window.removeEventListener('pointermove', this._onPointerMove);
     window.removeEventListener('pointerup', this._onPointerUp);
   }
@@ -252,6 +251,13 @@ export class CameraManager {
 
   _tickFPV() {
     if (!this._fpvRide || !this._fpvTarget) { this.exitFPV(); return; }
+
+    // Optional ride-supplied up vector: lets the coaster camera bank with the
+    // track and go genuinely upside-down through the loop (a fixed world-up
+    // lookAt would yaw-flip at the top instead).
+    if (this._fpvRide.getFpvUp) {
+      this._fpvRide.getFpvUp(this._fpvTarget, this.camera.up);
+    }
 
     if (this._fpvRide.getFpvCameraPos) {
       this._fpvRide.getFpvCameraPos(this._fpvTarget, this.camera.position);
@@ -358,45 +364,12 @@ export class CameraManager {
     }
   }
 
-  _onPointerHover(ev) {
-    if (this.state !== 'orbit') return;
-    const now = Date.now();
-    if (now - this._lastHoverTime < this._hoverThrottleMs) return;
-    this._lastHoverTime = now;
-
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this._ndc.set(
-      ((ev.clientX - rect.left) / rect.width) * 2 - 1,
-      -((ev.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    this._ray.setFromCamera(this._ndc, this.camera);
-    const intersects = this._ray.intersectObjects(this.interactiveObjects, true);
-    
-    let hitInteractive = false;
-    for (const hit of intersects) {
-      let obj = hit.object;
-      while (obj) {
-        if (obj.name === 'controlPanel' || obj.userData.lampId) {
-          hitInteractive = true;
-          break;
-        }
-        obj = obj.parent;
-      }
-      if (hitInteractive) break;
-    }
-
-    if (hitInteractive) {
-      this.renderer.domElement.style.cursor = 'pointer';
-    } else {
-      if (this.renderer.domElement.style.cursor === 'pointer') {
-        this.renderer.domElement.style.cursor = '';
-      }
-    }
-  }
+  // Hover cursor is owned by the InteractionManager (single writer): this class
+  // used to raycast the same objects on every pointermove just to set the same
+  // cursor, doubling the per-move raycast cost and fighting over the style.
 
   _bindEvents() {
     window.addEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.addEventListener('pointerdown', this._onPointerDown);
-    this.renderer.domElement.addEventListener('pointermove', this._onPointerHover);
   }
 }

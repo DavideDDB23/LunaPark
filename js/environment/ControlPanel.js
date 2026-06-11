@@ -288,11 +288,7 @@ export class ControlPanel {
       this.phase + (this.running ? 1 : -1) * (delta / dur), 0, 1
     );
     this.ease = this.phase * this.phase * (3 - 2 * this.phase); // smoothstep
-    
-    if (this.group.parent && this.group.parent.name === 'coaster') {
-      console.log(`COASTER_PANEL: running=${this.running} phase=${this.phase} ease=${this.ease} delta=${delta} dur=${dur}`);
-    }
-    
+
     // Decrement eStop button animation timer
     if (this.eStopPressTime > 0) {
       this.eStopPressTime = Math.max(0, this.eStopPressTime - delta);

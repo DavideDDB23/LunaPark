@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from './ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { isNightNow } from '../utils/dayNight.js';
 import {
   loadVisitorTemplates,
   makeRider,
@@ -370,8 +371,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
       controller.speedMultiplier = 1.0;
     }
 
-    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
-    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    const isNight = isNightNow(group);
 
     if (isNight) {
       ridePointLights.forEach((pl, idx) => {

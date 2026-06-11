@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { isNightNow } from '../utils/dayNight.js';
 
 // Ride Animation Constants
 const MAX_SPIN_SPEED = 2.0;       // rad/s platform rotation at full speed
@@ -980,8 +981,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     }
 
     // ── Light show: smooth day↔night, with chase / pulse patterns ─────────────
-    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
-    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    const isNight = isNightNow(group);
     controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
     const nf = controller.nightMix;
 

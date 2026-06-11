@@ -60,12 +60,12 @@ export function buildRideHint({ position = [0, 4.2, 0] } = {}) {
   const _camPos = new THREE.Vector3();
   const _myPos = new THREE.Vector3();
 
-  sprite.userData.tick = (time, camera) => {
+  sprite.userData.tick = (time, camera, delta = 0.016) => {
     sprite.getWorldPosition(_myPos);
     camera.getWorldPosition(_camPos);
     const d = _camPos.distanceTo(_myPos);
     const target = THREE.MathUtils.smoothstep(SHOW_DIST - d, 0, 12) * 0.92;
-    material.opacity += (target - material.opacity) * 0.08;
+    material.opacity += (target - material.opacity) * (1 - Math.exp(-5.0 * delta));
     sprite.position.y = baseY + Math.sin(time * 1.4) * 0.08; // gentle float
   };
   return sprite;

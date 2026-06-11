@@ -3,6 +3,7 @@ import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.j
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
 import { ControlPanel } from './ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { isNightNow } from '../utils/dayNight.js';
 
 const HORSE_MODEL_URL = 'assets/models/carousel_horse.glb';
 
@@ -432,8 +433,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     }
 
     // 3. Emissive bulbs blink at night (read night state from scene lights)
-    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
-    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    const isNight = isNightNow(group);
 
     if (isNight) {
       bulbs.forEach((b, idx) => {

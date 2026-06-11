@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isNightNow } from '../utils/dayNight.js';
 
 function makeWelcomeTexture(text = 'LUNA  PARK') {
   const canvas = document.createElement('canvas');
@@ -371,13 +372,15 @@ export function buildEntranceGate() {
   const signH = 2.9;
   const signY = baseH + pillarH + 1.9;
   const signOffsetZ = archDepth / 2 + 0.6;  // well in front of arch so it's not buried inside it
-  // Segmented so the banner can ripple like cloth in the wind (animated in the tick).
-  const signGeo = new THREE.PlaneGeometry(signW, signH, 24, 6);
   const signBoards = [];
 
   function makeSignAssembly(facingNorth) {
     const dir = facingNorth ? 1 : -1; // +Z = outside park (front), -Z = inside park (back)
     const zPos = Z + dir * signOffsetZ;
+
+    // Each board gets its OWN segmented geometry — the cloth ripple writes the
+    // vertex buffer per board, so a shared geometry would deform twice.
+    const signGeo = new THREE.PlaneGeometry(signW, signH, 24, 6);
 
     // The board hangs from its chains: a pivot at the top edge lets it swing,
     // while per-vertex waves ripple the cloth (strongest at the free bottom edge).
@@ -520,8 +523,7 @@ export function buildEntranceGate() {
   // ─── Wind and Light animation tick ──────────────────────────────
   group.userData.tick = (delta, time, windSpeed) => {
     // 1. LIGHTS ANIMATION (Flicker, Chasing, Uplighting, Neon)
-    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
-    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    const isNight = isNightNow(group);
 
     const targetLanternIntensity = isNight ? 2.5 : 0.0;
     const targetUplightIntensity = isNight ? 2.2 : 0.0;

@@ -117,7 +117,7 @@ export async function buildLampposts() {
     lampRoot.add(hitbox);
 
     // High-performance PointLight shining in all directions
-    const pointLight = new THREE.PointLight(0xfffaf0, 0, 70, 1.2);
+    const pointLight = new THREE.PointLight(0xfffaf0, 0, 90, 1.2);
     pointLight.position.set(0, lampHeadY, 0);
     pointLight.name = `${id}_light`;
     pointLight.castShadow = false;
@@ -180,15 +180,17 @@ export async function buildLampposts() {
       }
     }
 
-    // Drive emissive intensity on the shared instanced materials based on
-    // the average night state. We sample the first lamp's state — all lamps
-    // share the same time-phase transition so this is representative.
-    const firstLamp = group.children[0];
-    if (!firstLamp) return;
-    const samplePL = firstLamp.userData.pointLight;
-    if (!samplePL) return;
-    const normalizedIntensity = samplePL.intensity / 120.0;
-    const emissiveStrength = normalizedIntensity * 8.0;
+    // Drive emissive intensity on the shared instanced materials from the
+    // AVERAGE lamp intensity. (Sampling only lamp_0 meant manually switching
+    // that one lamp off at night blacked out the bulb glow of all 12 heads
+    // while their point lights stayed on.)
+    let sum = 0, n = 0;
+    for (const lampRoot of group.children) {
+      const pl = lampRoot.userData.pointLight;
+      if (pl) { sum += pl.intensity; n++; }
+    }
+    if (!n) return;
+    const emissiveStrength = (sum / n / 120.0) * 8.0;
     for (const im of instancedMeshes) {
       const mat = im.material;
       if (mat.emissive) {

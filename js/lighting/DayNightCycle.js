@@ -26,7 +26,6 @@ export class DayNightCycle {
     hemi,
     setSkyTime,
     getLamps,
-    getStageSpotLight,
     getWaterMaterial,
   }) {
     this.scene = scene;
@@ -35,7 +34,6 @@ export class DayNightCycle {
     this.hemi = hemi;
     this.setSkyTime = setSkyTime;
     this.getLamps = getLamps;
-    this.getStageSpotLight = getStageSpotLight;
     this.getWaterMaterial = getWaterMaterial;
 
     this.t = 0.5;
@@ -128,11 +126,11 @@ export class DayNightCycle {
     // ── Lamppost lights — on at night ─────────────────────────────
     const nightFactor = THREE.MathUtils.smoothstep(1.0 - sunHeight, 0.78, 1.05);
     const isNight = nightFactor > 0.05;
+    this.nightFactor = nightFactor;
     eventBus.emit('time-phase-change', { isNight, nightFactor });
 
-    // ── Stage spotlight ───────────────────────────────────────────
-    const spot = this.getStageSpotLight?.();
-    if (spot) spot.intensity = nightFactor * 90;
+    // (Stage spotlight is owned by Stage.js's own tick — having two writers
+    // per frame meant the final intensity depended on call order.)
 
     // ── Water shader sun direction + night dim ────────────────────
     const waterMat = this.getWaterMaterial?.();

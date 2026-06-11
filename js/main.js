@@ -19,6 +19,8 @@ import { buildCoaster } from "./environment/Coaster.js";
 import { buildRideSign } from "./environment/RideSign.js";
 import { buildRideHint } from "./environment/RideHints.js";
 import { buildVisitors } from "./environment/Visitors.js";
+import { buildFireworks } from "./environment/Fireworks.js";
+import { buildPathLights } from "./environment/PathLights.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 import { CameraManager } from './camera/CameraManager.js';
 import { eventBus } from './utils/EventBus.js';
@@ -76,6 +78,10 @@ let rideSigns = [];
 let rideHints = [];
 let cameraManager = null;
 const fpvTmpVec = new THREE.Vector3();
+const fpvTmpQuat = new THREE.Quaternion();
+// Animated objects, cached once after init() — getObjectByName is a full
+// recursive scene traversal, far too expensive to repeat 12× per frame.
+const world = {};
 
 cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const rides = [];
@@ -162,6 +168,12 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
       const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
       fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
+      // Hand-held shake proportional to the ride's running ease — sells the
+      // tagada's violence from the inside without touching the scene itself.
+      const shake = tg.userData.controller.ease || 0;
+      const tN = performance.now() * 0.001;
+      fpvTmpVec.x += Math.sin(tN * 23.0) * 0.045 * shake;
+      fpvTmpVec.y += Math.sin(tN * 31.0 + 1.7) * 0.05 * shake;
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
@@ -177,6 +189,30 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       targetVec.copy(fpvTmpVec);
     }
   });
+  // Roller coaster — front seat of the lead carriage. The dolly's local frame
+  // is +Z = travel, +Y = track-up, so getFpvUp rolls the camera WITH the track
+  // (banked turns lean, the loop goes properly upside-down).
+  const co = environmentGroup.getObjectByName('coaster');
+  if (co) rides.push({
+    group: co,
+    getFpvTarget: () => co.userData.controller.cars[0]?.dolly || null,
+    getFpvOffset: () => new THREE.Vector3(0, 1.9, 0),
+    getRiders: () => co.userData.controller.riders.slice(0, 2), // the lead car's two riders
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      fpvTmpVec.set(0.17, 2.05, 0.5); // head height, centred on the cart footprint
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      fpvTmpVec.set(0.17, 1.55, 9.0); // look ahead down the track
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      fpvTarget.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+    }
+  });
   return rides;
 });
 let autoAdvance = true;
@@ -184,29 +220,29 @@ let autoAdvance = true;
 async function init() {
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
-  console.log("buildSky"); const skyInfo = await buildSky(scene, renderer);
+  const skyInfo = await buildSky(scene, renderer);
   const lightInfo = buildLights(scene);
 
   const ground = buildGround({ anisotropy: maxAniso });
   environmentGroup.add(ground);
 
-  console.log("buildPaths"); const paths = await buildPaths({ anisotropy: maxAniso });
+  const paths = await buildPaths({ anisotropy: maxAniso });
   environmentGroup.add(paths);
 
-  console.log("buildRiver"); const river = await buildRiver();
+  const river = await buildRiver();
   environmentGroup.add(river);
 
-  console.log("buildFence"); const fence = await buildFence({ anisotropy: maxAniso });
+  const fence = await buildFence({ anisotropy: maxAniso });
   environmentGroup.add(fence);
 
-  console.log("buildLampposts"); const lamps = await buildLampposts();
+  const lamps = await buildLampposts();
   environmentGroup.add(lamps);
 
-  console.log("buildFoodStalls"); const stalls = await buildFoodStalls();
+  const stalls = await buildFoodStalls();
   environmentGroup.add(stalls);
 
   // Coaster builds before vegetation so trees can be kept clear of its exact track footprint.
-  console.log("buildCoaster");
+  
   const coaster = await buildCoaster({ position: [52, 0, 54], camera, renderer, anisotropy: maxAniso });
   environmentGroup.add(coaster);
   window.__lp.coaster = coaster.userData.controller;
@@ -234,16 +270,16 @@ async function init() {
     signKeepOut.push([f.panel[0], f.panel[2], 4.5]);
   }
 
-  console.log("buildVegetation");
+  
   const vegetation = await buildVegetation({ coasterFootprint: coaster.userData.footprint, signKeepOut });
   environmentGroup.add(vegetation);
 
-  console.log("buildBenches"); const benches = await buildBenches();
+  const benches = await buildBenches();
   environmentGroup.add(benches);
 
   // NPC visitors roam the whole park, routing around the (now-placed) trees & rides
   // and grounded onto the terrain, lifted smoothly over the central bridge deck.
-  console.log("buildVisitors");
+  
   const bridge = paths.getObjectByName('japanese_bridge');
   const visitors = await buildVisitors({
     count: 10,
@@ -257,24 +293,32 @@ async function init() {
   const stage = buildStage({ anisotropy: maxAniso });
   environmentGroup.add(stage);
 
-  console.log("buildFerrisWheel");
+  // Night-time fireworks show behind the stage + path spotlights at the key
+  // walkway points (both driven by the day/night cycle via 'time-phase-change').
+  const fireworks = buildFireworks();
+  scene.add(fireworks);
+
+  const pathLights = buildPathLights();
+  environmentGroup.add(pathLights);
+
+  
   const ferrisWheel = await buildFerrisWheel({ position: [-50, 0, -50], camera, renderer });
   environmentGroup.add(ferrisWheel);
   window.__lp.ferrisWheel = ferrisWheel.userData.controller;
 
-  console.log("buildCarousel");
+  
   const carousel = await buildCarousel({ position: [40, 0, -40], camera, renderer, anisotropy: maxAniso });
   environmentGroup.add(carousel);
   window.__lp.carousel = carousel.userData.controller;
 
-  console.log("buildTagada");
+  
   const tagada = await buildTagada({ position: [-40, 0, 40], camera, renderer, anisotropy: maxAniso });
   environmentGroup.add(tagada);
   window.__lp.tagada = tagada.userData.controller;
 
   // ── Place each ride's frontage: build the name marquee and move the ride's on/off control panel
   //    to it, both facing the path/entrance (see FRONTAGES above). ──
-  console.log("buildRideFrontages");
+  
   rideSigns = FRONTAGES.map(({ title, theme, groupName, sign, panel }) => {
     const group = environmentGroup.getObjectByName(groupName);
 
@@ -302,6 +346,8 @@ async function init() {
   window.__lp.rideSigns = rideSigns;
 
   // Day/night controller — slider in HUD drives this.
+  // (The stage spotlight is intentionally NOT wired here: Stage.js owns it —
+  // two writers per frame fought each other and the winner depended on order.)
   dayNight = new DayNightCycle({
     scene,
     renderer,
@@ -309,7 +355,6 @@ async function init() {
     hemi: lightInfo.hemi,
     setSkyTime: skyInfo.setTime,
     getLamps: () => lamps.children,
-    getStageSpotLight: () => stage.userData.spotLight,
     getWaterMaterial: () => {
       const water = river.getObjectByName('water');
       const surface = water?.getObjectByName('river_surface');
@@ -331,10 +376,13 @@ async function init() {
     }
   });
 
-  // Register ride control panels
+  // Register ride control panels (all four — the coaster's used to run its own
+  // private raycaster, which double-raycasted every mousemove and let clicks on
+  // its panel ALSO trigger the camera's click-to-fly).
   interactionManager.registerClickable(ferrisWheel.userData.controller.panel);
   interactionManager.registerClickable(carousel.userData.controller.panel);
   interactionManager.registerClickable(tagada.userData.controller.panel);
+  interactionManager.registerClickable(coaster.userData.controller.panel);
 
   // Share interactive objects with CameraManager for optimized raycasting
   cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
@@ -343,6 +391,7 @@ async function init() {
   interactionManager.registerRide(ferrisWheel);
   interactionManager.registerRide(carousel);
   interactionManager.registerRide(tagada);
+  interactionManager.registerRide(coaster);
 
   // EventBus: click interactions
   eventBus.on('interact-click', ({ object }) => {
@@ -366,11 +415,19 @@ async function init() {
       if (ferrisWheel.userData.controller.panel === curr) ferrisWheel.userData.controller.toggle();
       if (carousel.userData.controller.panel === curr) carousel.userData.controller.toggle();
       if (tagada.userData.controller.panel === curr) tagada.userData.controller.toggle();
+      if (coaster.userData.controller.panel === curr) coaster.userData.controller.toggle();
     }
   });
 
   // EventBus: speed adjustments
   eventBus.on('speed-scroll', ({ rideId, delta }) => {
+    if (rideId === 'coaster') {
+      // the coaster's speed knob is `speedScale` (it scales the station
+      // state-machine's physical speeds, not a simple angular multiplier)
+      const c = coaster.userData.controller;
+      c.speedScale = Math.max(0.2, Math.min(1.5, c.speedScale + delta));
+      return;
+    }
     let controller = null;
     if (rideId === 'ferrisWheel') controller = ferrisWheel.userData.controller;
     if (rideId === 'carousel') controller = carousel.userData.controller;
@@ -414,7 +471,16 @@ async function init() {
     });
   }
 
-  console.log("hiding loader"); loaderEl.classList.add("hidden");
+  // Cache every per-frame reference once — animate() must never traverse the scene.
+  Object.assign(world, {
+    river, vegetation, visitors, stage, ferrisWheel, carousel, tagada, coaster,
+    lamps, stalls, fireworks,
+    gate: environmentGroup.getObjectByName('entranceGate'),
+    timeInput: document.getElementById('timeOfDay'),
+    timeVal: document.getElementById('timeVal'),
+  });
+
+  loaderEl.classList.add("hidden");
 
   // Emit initial light color after all async objects are loaded and listening
   if (colorInput) {
@@ -528,64 +594,42 @@ function animate() {
   }
 
   if (autoAdvance && dayNight) {
-    const hoursPerSec = 0.1;
+    const hoursPerSec = 0.05; // full day in ~8 minutes — slow enough to enjoy each phase
     let nextHour = dayNight.t * 24 + hoursPerSec * delta;
     if (nextHour >= 24) nextHour -= 24;
     dayNight.setHour(nextHour);
 
-    const timeInput = document.getElementById('timeOfDay');
-    const timeVal = document.getElementById('timeVal');
-    if (timeInput) timeInput.value = nextHour;
-    if (timeVal) {
+    if (world.timeInput) world.timeInput.value = nextHour;
+    if (world.timeVal) {
       const h = Math.floor(nextHour);
       const m = Math.floor((nextHour - h) * 60);
-      timeVal.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      world.timeVal.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
     drawTimeArc(nextHour);
   }
 
-  const river = environmentGroup.getObjectByName('river');
-  if (river && river.userData.update) river.userData.update(delta, time);
-
-  const vegetation = environmentGroup.getObjectByName('vegetation');
-  if (vegetation && vegetation.userData.tick) vegetation.userData.tick(delta, time, wind);
-
-  const visitors = environmentGroup.getObjectByName('visitors');
-  if (visitors && visitors.userData.tick) visitors.userData.tick(delta, time);
-
-  const gate = environmentGroup.getObjectByName('entranceGate');
-  if (gate && gate.userData.tick) gate.userData.tick(delta, time, wind);
-
-  const stalls = environmentGroup.getObjectByName('foodStalls');
-  if (stalls && stalls.userData.tick) stalls.userData.tick(delta, time, wind);
-
-  const stage = environmentGroup.getObjectByName('stage');
-  if (stage && stage.userData.tick) stage.userData.tick(delta, time);
-
-  const ferris = environmentGroup.getObjectByName('ferrisWheel');
-  if (ferris && ferris.userData.tick) ferris.userData.tick(delta, time);
-
-  const carousel = environmentGroup.getObjectByName('carousel');
-  if (carousel && carousel.userData.tick) carousel.userData.tick(delta, time);
-
-  const tagada = environmentGroup.getObjectByName('tagada');
-  if (tagada && tagada.userData.tick) tagada.userData.tick(delta, time);
-
-  const coaster = environmentGroup.getObjectByName('coaster');
-  if (coaster && coaster.userData.tick) coaster.userData.tick(delta, time);
+  if (world.river) world.river.userData.update(delta, time);
+  if (world.vegetation?.userData.tick) world.vegetation.userData.tick(delta, time, wind);
+  if (world.visitors?.userData.tick) world.visitors.userData.tick(delta, time);
+  if (world.gate?.userData.tick) world.gate.userData.tick(delta, time, wind);
+  if (world.stalls?.userData.tick) world.stalls.userData.tick(delta, time, wind);
+  if (world.stage?.userData.tick) world.stage.userData.tick(delta, time);
+  if (world.ferrisWheel?.userData.tick) world.ferrisWheel.userData.tick(delta, time);
+  if (world.carousel?.userData.tick) world.carousel.userData.tick(delta, time);
+  if (world.tagada?.userData.tick) world.tagada.userData.tick(delta, time);
+  if (world.coaster?.userData.tick) world.coaster.userData.tick(delta, time);
+  if (world.fireworks?.userData.tick) world.fireworks.userData.tick(delta, time);
 
   for (const sign of rideSigns) {
     if (sign.userData.tick) sign.userData.tick(time, delta);
   }
   for (const hint of rideHints) {
-    hint.userData.tick(time, camera);
+    hint.userData.tick(time, camera, delta);
   }
 
   if (cameraManager) cameraManager.tick(delta);
-  const lamps = environmentGroup.getObjectByName('lampposts');
-  if (lamps && lamps.userData.tick) {
-    lamps.userData.tick(delta, time);
-  }
+  if (world.lamps?.userData.tick) world.lamps.userData.tick(delta, time);
+
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

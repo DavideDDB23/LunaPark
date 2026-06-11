@@ -28,6 +28,7 @@ import * as THREE from 'three';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from './ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { isNightNow } from '../utils/dayNight.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
 
 const MODEL_URL = 'assets/models/animated_roller_coaster.glb';
@@ -729,8 +730,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     });
 
     // 5. ── Night light show: the rail itself glows + gently breathes ──
-    const sun = group.parent?.parent?.getObjectByName('sun') || group.parent?.getObjectByName('sun');
-    const isNight = sun ? (sun.position.y < 5.0 || sun.intensity < 0.5) : false;
+    const isNight = isNightNow(group);
     controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * dt));
     const nf = controller.nightMix;
     const breathe = 0.5 + 0.5 * Math.sin(timeVal * 1.6);
@@ -764,23 +764,11 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     });
   }
 
-  // ── Click-to-toggle via raycasting on the panel ──
-  if (camera && renderer) {
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const dom = renderer.domElement;
-    const pick = (ev) => {
-      const r = dom.getBoundingClientRect();
-      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      return ray.intersectObject(controlPanel.group, true).length > 0;
-    };
-    dom.addEventListener('pointerdown', (ev) => { if (pick(ev)) controller.toggle(); });
-    dom.addEventListener('pointermove', (ev) => {
-      if (pick(ev)) dom.style.cursor = 'pointer';
-      else if (dom.style.cursor === 'pointer') dom.style.cursor = '';
-    });
-  }
+  // Click-to-toggle is handled centrally by the InteractionManager (main.js
+  // registers this ride's controlPanel like the other three rides). The old
+  // private raycaster here double-raycasted every mousemove, fought over the
+  // cursor style, and let panel clicks ALSO trigger the camera click-to-fly.
+  void camera; void renderer;
 
   group.traverse((o) => {
     if (o.isMesh) {
