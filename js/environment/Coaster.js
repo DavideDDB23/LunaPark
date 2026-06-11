@@ -494,7 +494,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
 
   // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
   // Smooth start/stop acceleration (rampUp: 1.0s, rampDown: 1.5s)
-  const controlPanel = new ControlPanel({ initialRunning: true, rampUp: 1.0, rampDown: 1.5 });
+  const controlPanel = new ControlPanel({ initialRunning: true });
   group.add(controlPanel.group);
   group.updateMatrixWorld(true);
 
@@ -602,7 +602,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
 
   group.userData.tick = (delta, _time) => {
     const dt = Math.min(0.1, delta);
-    const ease = controlPanel.tick(delta);
+    const ease = controlPanel.tick(delta, controller.speedScale);
     controller.ease = ease;
 
     if (ease > 0.0001) {

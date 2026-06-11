@@ -396,7 +396,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
   group.userData.tick = (delta, time) => {
     // Gradual start/stop transitions driven by the shared ControlPanel
-    const ease = controlPanel.tick(delta);
+    const ease = controlPanel.tick(delta, controller.speedMultiplier);
 
     // 1. Platform rotation
     const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;

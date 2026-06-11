@@ -150,10 +150,6 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     ridePointLights.push(pl);
   }
 
-  eventBus.on('color-change', (hex) => {
-    ridePointLights.forEach(pl => pl.color.set(hex));
-  });
-
   wheelSpin.attach(wheelNode); // the visual ring now spins with us
 
   // ── Gondolas: a mount at each cabin hanger orbits with the wheel; a pivot at that same
@@ -318,6 +314,14 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   const ferrisBeacon = new THREE.Mesh(new THREE.SphereGeometry(1.0, 18, 14), ferrisBeaconMat);
   bulbSpin.add(ferrisBeacon);
 
+  eventBus.on('color-change', (hex) => {
+    ridePointLights.forEach(pl => pl.color.set(hex));
+    ferrisRimBulbs.forEach(b => { b.material.color.set(hex); b.material.emissive.set(hex); });
+    ferrisSpokeBulbs.forEach(b => { b.material.color.set(hex); b.material.emissive.set(hex); });
+    ferrisBeaconMat.color.set(hex);
+    ferrisBeaconMat.emissive.set(hex);
+  });
+
   // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
   const controlPanel = new ControlPanel({ initialRunning: true });
   controlPanel.group.position.set(radiusFinal * 0.36, 0, radiusFinal * 0.61);
@@ -350,7 +354,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   group.userData.tick = (delta, time) => {
     // Ease the speed factor using our reusable ControlPanel's tick
-    const ease = controlPanel.tick(delta);
+    const ease = controlPanel.tick(delta, controller.speedMultiplier);
 
     const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
     controller.angle += controller.maxSpeed * ease * speedMult * delta;
