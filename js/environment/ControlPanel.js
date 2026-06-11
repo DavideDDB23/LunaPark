@@ -1,21 +1,22 @@
 import * as THREE from 'three';
 
 export class ControlPanel {
-  constructor({ initialRunning = true, onToggle, rampUp = 1.5, rampDown = 2.0 } = {}) {
+  constructor({ initialRunning = true, onToggle, rampUp = 0.5, rampDown = 0.5 } = {}) {
     this.group = new THREE.Group();
     this.group.name = 'controlPanel';
 
     this.running = initialRunning;
     this.phase = initialRunning ? 1.0 : 0.0;
     this.ease = initialRunning ? 1.0 : 0.0;
+    this.speedMultiplier = 1.0;
     this.onToggle = onToggle;
     this.eStopPressTime = 0.0;
 
     this.RAMP_UP = rampUp;
     this.RAMP_DOWN = rampDown;
 
-    this.LEVER_REST = -0.05;  // nearly vertical when off
-    this.LEVER_ON = 0.65;     // more forward lean when on
+    this.LEVER_REST = 2.62;  // pointing down-forward (~ -60 deg from horizontal) when off
+    this.LEVER_ON = 0.52;   // pointing up-forward (~ 60 deg from horizontal) when on
 
     this.build();
     this.setState(this.ease);
@@ -26,10 +27,10 @@ export class ControlPanel {
     this.group.scale.setScalar(3.5);
 
     // Premium materials
-    const metalBody = new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 0.4, metalness: 0.7 });
-    const darkConsoleMat = new THREE.MeshStandardMaterial({ color: 0x1c2027, roughness: 0.6, metalness: 0.4 });
-    const accentBrass = new THREE.MeshStandardMaterial({ color: 0xb58900, roughness: 0.3, metalness: 0.8 }); // gold/brass trim
-    const screenMat = new THREE.MeshBasicMaterial({ color: 0x00ccff }); // glowing cyan LCD screen
+    const metalBody = new THREE.MeshStandardMaterial({ color: 0x2e3440, roughness: 0.2, metalness: 0.8 });
+    const darkConsoleMat = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.5, metalness: 0.2 });
+    const accentBrass = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.15, metalness: 0.9 }); // gold/brass trim
+    const screenMat = new THREE.MeshBasicMaterial({ map: this.createScreenTexture() });
     const emergencyButtonMat = new THREE.MeshStandardMaterial({ color: 0xd30000, roughness: 0.5 });
     const emergencyBaseMat = new THREE.MeshStandardMaterial({ color: 0xffd300, roughness: 0.4 }); // yellow guard
     const greenButtonMat = new THREE.MeshStandardMaterial({ color: 0x00aa22, roughness: 0.5 });
@@ -105,58 +106,20 @@ export class ControlPanel {
     bezel.position.z = -0.08;
     consoleGroup.add(bezel);
 
-    // LCD Screen (cyan glow)
-    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.02), screenMat);
-    screen.position.set(-0.22, 0.08, 0.091);
+    // Lever mounting bracket (to prevent floating) - positioned on the right
+    const leverBracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.20), metalBody);
+    leverBracket.position.set(0.35, 0.05, 0.185);
+    consoleGroup.add(leverBracket);
+
+    // LCD Screen (cyan glow) - ENLARGED
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.44, 0.02), screenMat);
+    screen.position.set(-0.16, 0.0, 0.091);
     consoleGroup.add(screen);
 
-    // Screen frame
-    const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.36, 0.01), metalBody);
-    screenFrame.position.set(-0.22, 0.08, 0.085);
+    // Screen frame - ENLARGED
+    const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.48, 0.01), metalBody);
+    screenFrame.position.set(-0.16, 0.0, 0.085);
     consoleGroup.add(screenFrame);
-
-    // Emergency Stop Button
-    const eStopBase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 12), emergencyBaseMat);
-    eStopBase.rotation.x = Math.PI / 2;
-    eStopBase.position.set(0.28, 0.12, 0.091);
-    consoleGroup.add(eStopBase);
-
-    this.eStopButton = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 12), emergencyButtonMat);
-    this.eStopButton.rotation.x = Math.PI / 2;
-    this.eStopButton.position.set(0.28, 0.12, 0.13);
-    consoleGroup.add(this.eStopButton);
-
-    // Start / Stop Buttons
-    const greenBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 10), greenButtonMat);
-    greenBtn.rotation.x = Math.PI / 2;
-    greenBtn.position.set(0.16, -0.12, 0.091);
-    consoleGroup.add(greenBtn);
-
-    const blackBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 10), blackButtonMat);
-    blackBtn.rotation.x = Math.PI / 2;
-    blackBtn.position.set(0.36, -0.12, 0.091);
-    consoleGroup.add(blackBtn);
-
-    // Rotary Dials/Knobs
-    const dialGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.04, 8);
-    const dialPointerGeo = new THREE.BoxGeometry(0.015, 0.03, 0.05);
-
-    this.dials = [];
-    for (let i = 0; i < 2; i++) {
-      const dialGroup = new THREE.Group();
-      dialGroup.position.set(-0.35 + i * 0.18, -0.15, 0.091);
-      
-      const dialBase = new THREE.Mesh(dialGeo, metalBody);
-      dialBase.rotation.x = Math.PI / 2;
-      dialGroup.add(dialBase);
-
-      const dialPointer = new THREE.Mesh(dialPointerGeo, accentBrass);
-      dialPointer.position.set(0, 0.03, 0.02);
-      dialGroup.add(dialPointer);
-
-      consoleGroup.add(dialGroup);
-      this.dials.push(dialGroup);
-    }
 
     // 5. Semaphore Tower housing (arched top)
     const semTower = new THREE.Group();
@@ -217,9 +180,9 @@ export class ControlPanel {
     greenVisor.position.set(0, -0.16, 0.12);
     semTower.add(greenVisor);
 
-    // 6. Mechanical Lever
+    // 6. Mechanical Lever - shifted to the right of the panel to align with the bracket
     this.lever = new THREE.Group();
-    this.lever.position.set(0.0, 1.45, 0.20);
+    this.lever.position.set(0.35, 1.40, 0.28);
     this.group.add(this.lever);
 
     // Lever Hinge Mount
@@ -254,6 +217,9 @@ export class ControlPanel {
     this.greenMat.color.lerpColors(this._greenOff, this._greenOn, ease);
     this.lever.rotation.x = THREE.MathUtils.lerp(this.LEVER_REST, this.LEVER_ON, ease);
 
+    // Update canvas screen texture
+    this.updateScreen(ease);
+
     // Blinking yellow beacon when running, fading off when stopped
     if (this.running) {
       this.beaconMat.emissiveIntensity = 0.75 + Math.sin(Date.now() * 0.01) * 0.45;
@@ -261,11 +227,7 @@ export class ControlPanel {
       this.beaconMat.emissiveIntensity = THREE.MathUtils.lerp(this.beaconMat.emissiveIntensity, 0.0, 0.1);
     }
 
-    // Slowly rotate dials when ease changes
-    if (this.dials) {
-      this.dials[0].rotation.z = ease * Math.PI * 1.5;
-      this.dials[1].rotation.z = (1.0 - ease) * Math.PI * 1.5;
-    }
+    // Rotary dials removed
 
     // Animate emergency button press
     if (this.eStopButton) {
@@ -282,7 +244,8 @@ export class ControlPanel {
     if (this.onToggle) this.onToggle(this.running);
   }
 
-  tick(delta) {
+  tick(delta, currentSpeed = 1.0) {
+    this.speedMultiplier = currentSpeed;
     const dur = this.running ? this.RAMP_UP : this.RAMP_DOWN;
     this.phase = THREE.MathUtils.clamp(
       this.phase + (this.running ? 1 : -1) * (delta / dur), 0, 1
@@ -296,5 +259,91 @@ export class ControlPanel {
 
     this.setState(this.ease);
     return this.ease;
+  }
+
+  createScreenTexture() {
+    const W = 256, H = 192;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    
+    this.screenCanvas = canvas;
+    this.screenCtx = ctx;
+
+    this.screenTexture = new THREE.CanvasTexture(canvas);
+    this.screenTexture.colorSpace = THREE.SRGBColorSpace;
+    return this.screenTexture;
+  }
+
+  updateScreen(ease) {
+    if (!this.screenCtx) return;
+    const ctx = this.screenCtx;
+    const W = this.screenCanvas.width;
+    const H = this.screenCanvas.height;
+
+    // Clear background
+    ctx.fillStyle = '#06131c';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(0, 204, 255, 0.12)';
+    ctx.lineWidth = 2;
+    const gridSize = 16;
+    for (let x = 0; x < W; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+    for (let y = 0; y < H; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+
+    // Title / Status Label
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 22px monospace';
+    ctx.fillStyle = '#80e5ff';
+    ctx.fillText('SYSTEM STATUS', W / 2, 30);
+
+    // Draw status bar
+    const isRunning = this.running;
+    const statusText = isRunning ? 'RUNNING' : 'STANDBY';
+    const statusColor = isRunning ? '#00ff66' : '#ff3333';
+    
+    ctx.font = 'bold 30px monospace';
+    ctx.fillStyle = statusColor;
+    ctx.fillText(statusText, W / 2, 75);
+
+    // Draw animated graphic
+    ctx.strokeStyle = statusColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    const waveY = 125;
+    if (isRunning) {
+      // Dynamic sine wave
+      const time = Date.now() * 0.006;
+      ctx.moveTo(15, waveY);
+      for (let x = 15; x < W - 15; x++) {
+        const y = waveY + Math.sin(x * 0.06 - time) * 16 * ease * this.speedMultiplier;
+        ctx.lineTo(x, y);
+      }
+    } else {
+      // Flat line
+      ctx.moveTo(15, waveY);
+      ctx.lineTo(W - 15, waveY);
+    }
+    ctx.stroke();
+
+    // Speed percentage text at bottom
+    ctx.font = 'bold 18px monospace';
+    ctx.fillStyle = '#80e5ff';
+    const speedPct = Math.round(ease * this.speedMultiplier * 100);
+    ctx.fillText(`DRIVE SPEED: ${speedPct}%`, W / 2, 165);
+
+    this.screenTexture.needsUpdate = true;
   }
 }
