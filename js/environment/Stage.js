@@ -694,6 +694,9 @@ export function buildStage({ anisotropy = 8 } = {}) {
   spot.shadow.mapSize.set(1024, 1024);
   spot.name = 'stage_spotlight';
   spot.layers.set(3);
+  spot.userData.isManual = false;
+  spot.userData.targetOn = false;
+  spot.userData.blinkTime = 0.0;
   group.add(spot);
   group.add(spot.target);
 
@@ -735,16 +738,34 @@ export function buildStage({ anisotropy = 8 } = {}) {
   group.userData.tick = (delta, time) => {
     const isNight = isNightNow(group);
 
-    const targetSpotIntensity = isNight ? 100.0 : 0.0;
-    const targetUplightIntensity = isNight ? 20.0 : 0.0;
+    let spotOn;
+    if (spot.userData.blinkTime > 0) {
+      spot.userData.blinkTime -= delta;
+      const step = Math.floor(spot.userData.blinkTime / 0.10);
+      const targetOn = isNight;
+      spotOn = (step % 2 === 0) ? targetOn : !targetOn;
 
-    // Smooth spotlight and uplight transition (exponential, frame-rate independent).
-    // Stage.js is the spotlight's ONLY writer — DayNightCycle used to also set
-    // it every frame, and the final value depended on tick order.
-    const k = 1 - Math.exp(-5.0 * delta);
-    spot.intensity = THREE.MathUtils.lerp(spot.intensity, targetSpotIntensity, k);
-    for (const u of uplights) {
-      u.intensity = THREE.MathUtils.lerp(u.intensity, targetUplightIntensity, k);
+      const targetSpotIntensity = spotOn ? 100.0 : 0.0;
+      const targetUplightIntensity = spotOn ? 20.0 : 0.0;
+
+      // Set intensity directly during blink for sharp feedback
+      spot.intensity = targetSpotIntensity;
+      for (const u of uplights) {
+        u.intensity = targetUplightIntensity;
+      }
+    } else {
+      spotOn = spot.userData.isManual ? spot.userData.targetOn : isNight;
+      const targetSpotIntensity = spotOn ? 100.0 : 0.0;
+      const targetUplightIntensity = spotOn ? 20.0 : 0.0;
+
+      // Smooth spotlight and uplight transition (exponential, frame-rate independent).
+      // Stage.js is the spotlight's ONLY writer — DayNightCycle used to also set
+      // it every frame, and the final value depended on tick order.
+      const k = 1 - Math.exp(-5.0 * delta);
+      spot.intensity = THREE.MathUtils.lerp(spot.intensity, targetSpotIntensity, k);
+      for (const u of uplights) {
+        u.intensity = THREE.MathUtils.lerp(u.intensity, targetUplightIntensity, k);
+      }
     }
 
     // Performers — beat-locked procedural skeleton animation

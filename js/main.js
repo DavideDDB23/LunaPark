@@ -25,6 +25,7 @@ import { DayNightCycle } from "./lighting/DayNightCycle.js";
 import { CameraManager } from './camera/CameraManager.js';
 import { eventBus } from './utils/EventBus.js';
 import { InteractionManager } from './utils/InteractionManager.js';
+import { isNightNow } from './utils/dayNight.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -342,7 +343,7 @@ async function init() {
     }
 
     // Floating interaction hint above the panel — fades in when the camera is near.
-    const hint = buildRideHint({ position: [panel[0], 4.4, panel[2]] });
+    const hint = buildRideHint({ position: [panel[0], 9.2, panel[2]] });
     environmentGroup.add(hint);
     rideHints.push(hint);
     return s;
@@ -371,7 +372,7 @@ async function init() {
   dayNight.setHour(12);
 
   // --- Interaction Manager & Event Wiring ---
-  const interactionManager = new InteractionManager(camera, renderer, scene);
+  const interactionManager = new InteractionManager(camera, renderer, scene, controls);
 
   // Register lampposts (only the lamp roots, not the instanced meshes)
   lamps.children.forEach(lamp => {
@@ -388,14 +389,11 @@ async function init() {
   interactionManager.registerClickable(tagada.userData.controller.panel);
   interactionManager.registerClickable(coaster.userData.controller.panel);
 
+  // Register stage spotlight for manual toggle
+  interactionManager.registerClickable(stage.userData.spotLight);
+
   // Share interactive objects with CameraManager for optimized raycasting
   cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
-
-  // Register rides for speed-scrolling
-  interactionManager.registerRide(ferrisWheel);
-  interactionManager.registerRide(carousel);
-  interactionManager.registerRide(tagada);
-  interactionManager.registerRide(coaster);
 
   // Share interactive objects with CameraManager for optimized raycasting
   cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
@@ -408,8 +406,22 @@ async function init() {
       curr = curr.parent;
     }
     if (curr && curr.userData.lampId) {
-      curr.userData.isManual = true;
-      curr.userData.targetOn = !curr.userData.targetOn;
+      const isNight = isNightNow(curr);
+      if (!curr.userData.isManual) {
+        // Auto -> Manual opposite state
+        curr.userData.isManual = true;
+        curr.userData.targetOn = !isNight;
+        curr.userData.blinkTime = 0;
+      } else if (curr.userData.targetOn === isNight) {
+        // Manual matching state -> Auto (triggers blink)
+        curr.userData.isManual = false;
+        curr.userData.targetOn = isNight;
+        curr.userData.blinkTime = 0.4;
+      } else {
+        // Manual opposite state -> Manual matching state
+        curr.userData.targetOn = isNight;
+        curr.userData.blinkTime = 0;
+      }
       return;
     }
 
@@ -423,6 +435,31 @@ async function init() {
       if (carousel.userData.controller.panel === curr) carousel.userData.controller.toggle();
       if (tagada.userData.controller.panel === curr) tagada.userData.controller.toggle();
       if (coaster.userData.controller.panel === curr) coaster.userData.controller.toggle();
+      return;
+    }
+
+    // Check if stage spotlight clicked
+    curr = object;
+    while (curr && curr.name !== 'stage_spotlight') {
+      curr = curr.parent;
+    }
+    if (curr && curr.name === 'stage_spotlight') {
+      const isNight = isNightNow(curr);
+      if (!curr.userData.isManual) {
+        // Auto -> Manual opposite state
+        curr.userData.isManual = true;
+        curr.userData.targetOn = !isNight;
+        curr.userData.blinkTime = 0;
+      } else if (curr.userData.targetOn === isNight) {
+        // Manual matching state -> Auto (triggers blink)
+        curr.userData.isManual = false;
+        curr.userData.targetOn = isNight;
+        curr.userData.blinkTime = 0.4;
+      } else {
+        // Manual opposite state -> Manual matching state
+        curr.userData.targetOn = isNight;
+        curr.userData.blinkTime = 0;
+      }
     }
   });
 

@@ -95,6 +95,7 @@ export async function buildLampposts() {
     lampRoot.userData.targetOn = false;
     lampRoot.userData.nightFactor = 0.0;
     lampRoot.userData.instanceIndex = i;
+    lampRoot.userData.blinkTime = 0.0;
     group.add(lampRoot);
 
     // Fill the instance matrices for every bucket. Each instance sits at the
@@ -143,9 +144,6 @@ export async function buildLampposts() {
     lastGlobalIsNight = isNight;
 
     for (const lampRoot of group.children) {
-      if (phaseTransitioned) {
-        lampRoot.userData.isManual = false;
-      }
       if (!lampRoot.userData.isManual) {
         lampRoot.userData.targetOn = isNight;
       }
@@ -160,6 +158,16 @@ export async function buildLampposts() {
     for (const lampRoot of group.children) {
       const pl = lampRoot.userData.pointLight;
       if (!pl) continue;
+
+      if (lampRoot.userData.blinkTime > 0) {
+        lampRoot.userData.blinkTime -= delta;
+        const step = Math.floor(lampRoot.userData.blinkTime / 0.10);
+        // During blink, alternate between Auto's target state and its opposite
+        const isNight = lampRoot.userData.targetOn; // targetOn is set to current isNight when resetting
+        const isBlinkOn = (step % 2 === 0) ? isNight : !isNight;
+        pl.intensity = isBlinkOn ? 120.0 : 0.0;
+        continue;
+      }
 
       let targetIntensity = 0;
       if (lampRoot.userData.targetOn) {
