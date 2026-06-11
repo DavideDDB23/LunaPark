@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeHintTexture(lines) {
-  const W = 512, H = 160;
+  const W = 640, H = 180;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
@@ -30,10 +30,10 @@ function makeHintTexture(lines) {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 44px system-ui, sans-serif';
+  ctx.font = 'bold 38px system-ui, sans-serif';
   ctx.fillStyle = '#ffe9a8';
   ctx.fillText(lines[0], W / 2, H * 0.32);
-  ctx.font = '34px system-ui, sans-serif';
+  ctx.font = '30px system-ui, sans-serif';
   ctx.fillStyle = '#cfe2ff';
   ctx.fillText(lines[1], W / 2, H * 0.70);
 
@@ -45,13 +45,13 @@ function makeHintTexture(lines) {
 
 export function buildRideHint({ position = [0, 4.2, 0] } = {}) {
   const material = new THREE.SpriteMaterial({
-    map: makeHintTexture(['CLICK PANEL — ON / OFF', 'scroll on ride: speed']),
+    map: makeHintTexture(['Click Panel to Turn On/Off', 'Scroll on Panel: Speed']),
     transparent: true,
     opacity: 0.0,
     depthWrite: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(5.2, 1.62, 1);
+  sprite.scale.set(5.76, 1.62, 1);
   sprite.position.set(position[0], position[1], position[2]);
   sprite.name = 'rideHint';
 
