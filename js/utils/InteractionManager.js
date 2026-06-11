@@ -2,15 +2,15 @@ import * as THREE from 'three';
 import { eventBus } from './EventBus.js';
 
 export class InteractionManager {
-  constructor(camera, renderer, scene) {
+  constructor(camera, renderer, scene, controls) {
     this.camera = camera;
     this.renderer = renderer;
     this.scene = scene;
+    this.controls = controls;
     
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.interactiveObjects = [];
-    this.rideObjects = [];
 
     this.lastMoveTime = 0;
     this.throttleMs = 50;
@@ -20,10 +20,6 @@ export class InteractionManager {
 
   registerClickable(object) {
     this.interactiveObjects.push(object);
-  }
-
-  registerRide(object) {
-    this.rideObjects.push(object);
   }
 
   initListeners() {
@@ -65,11 +61,12 @@ export class InteractionManager {
       this.updateNDC(e.clientX, e.clientY);
       this.raycaster.setFromCamera(this.mouse, this.camera);
 
-      const hits = this.raycaster.intersectObjects(this.rideObjects, true);
+      const hits = this.raycaster.intersectObjects(this.interactiveObjects, true);
       if (hits.length > 0) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
+        if (this.controls) this.controls.enableZoom = false;
         // Find root ride object with controller
         let curr = hits[0].object;
         while (curr && !curr.userData.controller) {
@@ -79,6 +76,8 @@ export class InteractionManager {
           const delta = e.deltaY > 0 ? -0.1 : 0.1;
           eventBus.emit('speed-scroll', { rideId: curr.name, delta });
         }
+      } else {
+        if (this.controls) this.controls.enableZoom = true;
       }
     };
 
