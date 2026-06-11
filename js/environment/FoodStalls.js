@@ -62,13 +62,15 @@ function makeSteam({ x, y, z }) {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  // Normal (alpha) blending: additive steam disappears against a bright sky;
+  // a soft grey-white puff reads against both sky and night backgrounds.
   const material = new THREE.PointsMaterial({
     map: makeSteamSprite(),
-    size: 0.85,
+    color: 0xd8dfe6,
+    size: 1.05,
     transparent: true,
-    opacity: 0.34,
+    opacity: 0.45,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
   });
   const points = new THREE.Points(geometry, material);
   points.frustumCulled = false; // tiny system; skip stale-bbox culling
@@ -87,7 +89,7 @@ function makeSteam({ x, y, z }) {
     }
     geometry.attributes.position.needsUpdate = true;
     // whole-system breathing: thicker steam in calm air, shredded in wind
-    material.opacity = 0.32 + 0.07 * Math.sin(time * 1.3) - Math.min(0.12, windSpeed * 0.03);
+    material.opacity = 0.42 + 0.08 * Math.sin(time * 1.3) - Math.min(0.15, windSpeed * 0.04);
   };
   return points;
 }

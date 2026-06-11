@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
+import { loadColorTexture, loadLinearTexture, loadGLB } from '../utils/loaders.js';
 import {
   loadVisitorTemplates, makeRider, pose,
   applyStandingLegs, placeFeet,
@@ -515,33 +515,6 @@ export function buildStage({ anisotropy = 8 } = {}) {
     group.add(speaker);
   }
 
-  // ─── Microphone Stand ───────────────────────────────────────
-  const micGroup = new THREE.Group();
-  micGroup.position.set(0, 0.6, Z + 5);
-
-  const micBase = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.04, 12), goldTrim);
-  micBase.position.y = 0.02;
-  micBase.castShadow = true;
-  micGroup.add(micBase);
-
-  const micPole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.8, 8), goldTrim);
-  micPole.position.y = 0.9;
-  micPole.castShadow = true;
-  micGroup.add(micPole);
-
-  const micBoom = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.6, 8), goldTrim);
-  micBoom.position.set(0, 1.8, 0.15);
-  micBoom.rotation.x = 0.4;
-  micBoom.castShadow = true;
-  micGroup.add(micBoom);
-
-  const micCapsule = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), speakerMat);
-  micCapsule.position.set(0, 1.9, 0.3);
-  micCapsule.castShadow = true;
-  micGroup.add(micCapsule);
-
-  group.add(micGroup);
-
   // ─── Performers — singer at the mic + guitarist, fully procedural ───
   // Same Quaternius templates as the visitors; every bone is driven by
   // beat-locked f(t) math (no clips, no AnimationMixer). The volumetric
@@ -551,7 +524,23 @@ export function buildStage({ anisotropy = 8 } = {}) {
   const _perfBox = new THREE.Box3();
   (async () => {
     try {
-      const templates = await loadVisitorTemplates(2);
+      const [templates, micGltf, guitarGltf] = await Promise.all([
+        loadVisitorTemplates(2),
+        loadGLB('assets/models/classic_microphone.glb').catch(() => null),
+        loadGLB('assets/models/guitar_low_poly.glb').catch(() => null),
+      ]);
+
+      // Classic microphone (imported, static prop) in front of the singer.
+      if (micGltf) {
+        const mic = micGltf.scene;
+        mic.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.layers.enable(3); } });
+        mic.scale.setScalar(1.35);
+        mic.updateMatrixWorld(true);
+        const mb = new THREE.Box3().setFromObject(mic);
+        mic.position.set(0, 0.6 - mb.min.y, Z + 5); // base flush on the deck
+        group.add(mic);
+      }
+
       if (!templates.length) return;
       const defs = [
         { x: 0.0,  z: Z + 4.45, facing: 0.0, role: 'singer' },
@@ -584,22 +573,14 @@ export function buildStage({ anisotropy = 8 } = {}) {
         }
         r.baseY = r.pivot.position.y;
 
-        // Simple prop guitar strapped across the guitarist.
-        if (d.role === 'guitarist') {
-          const guitar = new THREE.Group();
-          const bodyMat = new THREE.MeshStandardMaterial({ color: 0xa0322a, roughness: 0.4, metalness: 0.1 });
-          const gBody = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.16, 18), bodyMat);
-          gBody.rotation.x = Math.PI / 2;
-          guitar.add(gBody);
-          const neck = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.25, 0.06),
-            new THREE.MeshStandardMaterial({ color: 0x3a2412, roughness: 0.7 }));
-          neck.position.y = 0.78;
-          guitar.add(neck);
-          const headstock = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.06),
-            new THREE.MeshStandardMaterial({ color: 0x1c1208, roughness: 0.7 }));
-          headstock.position.y = 1.5;
-          guitar.add(headstock);
-          guitar.position.set(0.12, 1.2, 0.5);
+        // Imported low-poly guitar strapped across the guitarist (the model's
+        // origin sits at the bottom of the body, neck running up +Y).
+        if (d.role === 'guitarist' && guitarGltf) {
+          const guitar = guitarGltf.scene.clone(true);
+          guitar.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.layers.enable(3); } });
+          const gSize = new THREE.Box3().setFromObject(guitar).getSize(new THREE.Vector3());
+          guitar.scale.setScalar(1.7 / (gSize.y || 1)); // ~half the performer's height
+          guitar.position.set(-0.35, 0.95, 0.5);
           guitar.rotation.set(0.12, 0, -0.85); // neck up toward the left hand
           r.pivot.add(guitar);
         }
