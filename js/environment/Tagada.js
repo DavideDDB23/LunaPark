@@ -165,9 +165,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const rimBulbs = [];
   const basePanels = [];
   const armStrips = [];
-  const pistonRods = [];
-  const targetsInf = [];
-  const targetsSup = [];
+
 
   // 1. ── Foundation + faceted illuminated base ───────────────────────────────
   const foundation = new THREE.Mesh(new THREE.CylinderGeometry(12.4, 12.8, 0.4, 48), baseConcreteMat);
@@ -315,54 +313,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     armStrips.push(strip);
   }
 
-  // Hydraulic piston cylinders (outer sleeves, child of fixed base 'group')
-  const pistonCylH = armLength * 0.55;
-  const pistonCylinders = [];
-  const PISTON_X_OFFSET = 0.78;
-  const PISTON_Z_OFFSET = -0.32;
-  const PISTON_BASE_Y = ARM_PIVOT_Y + 0.15; // Raised slightly above foundation for mechanical clearance
-
-  for (const side of [-1, 1]) {
-    // 1. Lower ball joint mounting (static on the base 'group')
-    const baseBall = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), darkChromeMat);
-    baseBall.position.set(side * PISTON_X_OFFSET, PISTON_BASE_Y, PISTON_Z_OFFSET);
-    baseBall.castShadow = true;
-    group.add(baseBall);
-
-    const baseSupport = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.2, 12), metalPedestalMat);
-    baseSupport.position.set(side * PISTON_X_OFFSET, PISTON_BASE_Y - 0.1, PISTON_Z_OFFSET);
-    baseSupport.castShadow = true;
-    group.add(baseSupport);
-
-    // 2. Target_Inferiore (child of fixed base 'group')
-    const targetInf = new THREE.Object3D();
-    targetInf.name = `target_inf_${side}`;
-    targetInf.position.set(side * PISTON_X_OFFSET, PISTON_BASE_Y, PISTON_Z_OFFSET);
-    group.add(targetInf);
-    targetsInf.push(targetInf);
-
-    // 3. Cylinder Group (child of fixed base 'group')
-    const cylGroup = new THREE.Group();
-    cylGroup.name = `piston_cyl_group_${side}`;
-    cylGroup.position.set(side * PISTON_X_OFFSET, PISTON_BASE_Y, PISTON_Z_OFFSET);
-    group.add(cylGroup);
-    pistonCylinders.push(cylGroup);
-
-    // Cylinder Body (child of cylGroup)
-    const cylGeo = new THREE.CylinderGeometry(0.16, 0.16, pistonCylH, 16);
-    cylGeo.rotateX(Math.PI / 2);
-    cylGeo.translate(0, 0, -pistonCylH / 2);
-    const cylMesh = new THREE.Mesh(cylGeo, chromeMat);
-    cylMesh.castShadow = true;
-    cylGroup.add(cylMesh);
-    cylGroup.userData.body = cylMesh;
-
-    // Cylinder Socket (outer housing of ball joint, child of cylGroup)
-    const cylSocket = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), chromeMat);
-    cylSocket.castShadow = true;
-    cylGroup.add(cylSocket);
-  }
-
   // 4. ── Disc pivot (tilts/bumps with the arm, does NOT spin) ─────────────────
   const discPivot = new THREE.Group();
   discPivot.name = 'tagada_disc_pivot';
@@ -374,51 +324,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   connector.position.y = -0.75; // spans from y = -1.5 to y = 0
   connector.castShadow = true;
   discPivot.add(connector);
-
-  // Piston rods (inner shafts, child of platform 'discPivot')
-  const rodLen = armLength * 0.5;
-  const PISTON_TOP_Y = -0.15; // Offset below discPivot center to attach underneath platform connector
-
-  for (const side of [-1, 1]) {
-    // 1. Upper ball joint mounting (static on platform 'discPivot')
-    const topBall = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), darkChromeMat);
-    topBall.position.set(side * PISTON_X_OFFSET, PISTON_TOP_Y, PISTON_Z_OFFSET);
-    topBall.castShadow = true;
-    discPivot.add(topBall);
-
-    const topSupport = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.15, 12), metalPedestalMat);
-    topSupport.position.set(side * PISTON_X_OFFSET, PISTON_TOP_Y + 0.075, PISTON_Z_OFFSET);
-    topSupport.castShadow = true;
-    discPivot.add(topSupport);
-
-    // 2. Target_Superiore (child of platform 'discPivot')
-    const targetSup = new THREE.Object3D();
-    targetSup.name = `target_sup_${side}`;
-    targetSup.position.set(side * PISTON_X_OFFSET, PISTON_TOP_Y, PISTON_Z_OFFSET);
-    discPivot.add(targetSup);
-    targetsSup.push(targetSup);
-
-    // 3. Rod Group (child of platform 'discPivot')
-    const rodGroup = new THREE.Group();
-    rodGroup.name = `piston_rod_group_${side}`;
-    rodGroup.position.set(side * PISTON_X_OFFSET, PISTON_TOP_Y, PISTON_Z_OFFSET);
-    discPivot.add(rodGroup);
-    pistonRods.push(rodGroup);
-
-    // Rod Body (child of rodGroup)
-    const rodGeo = new THREE.CylinderGeometry(0.09, 0.09, rodLen, 16);
-    rodGeo.rotateX(Math.PI / 2);
-    rodGeo.translate(0, 0, -rodLen / 2);
-    const rodMesh = new THREE.Mesh(rodGeo, chromeMat);
-    rodMesh.castShadow = true;
-    rodGroup.add(rodMesh);
-    rodGroup.userData.body = rodMesh;
-
-    // Rod Socket (outer housing of ball joint, child of rodGroup)
-    const rodSocket = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), chromeMat);
-    rodSocket.castShadow = true;
-    rodGroup.add(rodSocket);
-  }
 
   // 5. ── Spinning disc mesh group ────────────────────────────────────────────
   const discMeshGroup = new THREE.Group();
@@ -857,7 +762,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
 
   const _seatW = new THREE.Vector3();
   group.userData.tick = (delta, time) => {
-    const ease = controlPanel.tick(delta);
+    const ease = controlPanel.tick(delta, controller.speedMultiplier);
 
     const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
     controller.spinAngle += controller.maxSpeed * ease * speedMult * delta;
@@ -896,42 +801,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
 
     // Update world matrices of the hierarchy so getWorldPosition is accurate
     group.updateMatrixWorld(true);
-
-    const posSupWorld = new THREE.Vector3();
-    const posInfWorld = new THREE.Vector3();
-    const parentQuat = new THREE.Quaternion();
-
-    for (let i = 0; i < pistonCylinders.length; i++) {
-      const cyl = pistonCylinders[i];
-      const rod = pistonRods[i];
-
-      // Get world positions of attachment points
-      targetsSup[i].getWorldPosition(posSupWorld);
-      targetsInf[i].getWorldPosition(posInfWorld);
-
-      // Distance between attachment points
-      const span = posSupWorld.distanceTo(posInfWorld);
-
-      // Cylinder: child of fixed base 'group' (no parent rotation), looks at Target_Superiore
-      cyl.up.set(0, 1, 0);
-      cyl.lookAt(posSupWorld);
-
-      // Rod: child of 'discPivot' (which tilts/rotates), looks at Target_Inferiore.
-      // We align the rod's local up vector with the world up vector (0, 1, 0)
-      discPivot.getWorldQuaternion(parentQuat);
-      const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(parentQuat.invert());
-      rod.up.copy(localUp);
-      rod.lookAt(posInfWorld);
-
-      // Scale along Z axis (pointing axis) of the body meshes, to avoid scaling the ball sockets
-      // Cylinder: we want its length to be 60% of span
-      const cylScaleZ = (span * 0.6) / pistonCylH;
-      cyl.userData.body.scale.set(1, 1, cylScaleZ);
-
-      // Rod: we want its length to be 55% of span
-      const rodScaleZ = (span * 0.55) / rodLen;
-      rod.userData.body.scale.set(1, 1, rodScaleZ);
-    }
 
     // Passenger poses + dynamics: each body hangs on a damped vertical spring
     // driven by the REAL seat acceleration (pitch/roll/bump of the platform),
