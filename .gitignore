@@ -31,3 +31,6 @@ debug.js
 *.usda
 *.mtlx
 *.tres
+
+# Git worktrees (local dev only)
+.worktrees/

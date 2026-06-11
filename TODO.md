@@ -62,6 +62,7 @@ No imported animations — all motion is JavaScript math.
  - [x] Fix position of some passenger models (some are clipped into the chair)
  - [x] Fix arm override (hands-up animation) when the ride is on
  - [x] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
+ - [x] Remove the two pistons that cross the central mast ("albero") of the Tagada
 
 ---
 
@@ -92,7 +93,8 @@ Each ride has a small 3D control panel placed next to it.
 - [x] **Ride decoration light colour picker**: an HTML colour picker that changes the colour of all the decorative lights on the rides
 - [x] **Space bar**: toggles the time-of-day auto-advance on/off (time automatically moves forward)
 - [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
- - [ ] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message)
+ - [-] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message)
+   ✅ Implemented via `RideHints.js` — 4 sprite billboards with proximity fade
 
 ---
 
@@ -101,8 +103,8 @@ Each ride has a small 3D control panel placed next to it.
 A heads-up display showing the current time of day. Already partially designed — needs to be wired in.
 
  - [x] Digital clock showing the current hour:minute (e.g. "14:30")
- - [ ] Semicircular arc with a sun/moon icon tracking its position across the sky
- - [ ] Day / Dusk / Night phase label
+ - [-] Semicircular arc with a sun/moon icon tracking its position across the sky ✅ (`drawTimeArc()` in `main.js:498`)
+ - [-] Day / Dusk / Night phase label ✅ (inside `drawTimeArc()`, lines 558–564)
  - [x] Manual time slider (drag to change time of day)
  - [x] Auto-advance toggle button
  - [x] Slow down auto-advance speed (reduce rate of time progression)
@@ -111,12 +113,12 @@ A heads-up display showing the current time of day. Already partially designed �
 
 ## 🔴 NPC VISITORS
 
-- [ ] 8–12 human visitors walking around the park between waypoints
-- [ ] Each visitor is a simple human figure (body, head, two arms)
-- [ ] They walk toward a destination, stop and wait 1–5 seconds, then pick a new destination
-- [ ] While walking, arms swing back and forth (walk animation in JS)
-- [ ] Various body colours / outfits so they look different from each other
-- [ ] They follow the paths — waypoints placed at path intersections and near each ride
+- [-] 8–12 human visitors walking around the park between waypoints ✅ (10 NPCs in `Visitors.js`, 864 lines)
+- [-] Each visitor is a simple human figure (body, head, two arms) ✅ (procedural gait + analytic leg IK)
+- [-] They walk toward a destination, stop and wait 1–5 seconds, then pick a new destination ✅ (state machine: wait ↔ walk)
+- [-] While walking, arms swing back and forth (walk animation in JS) ✅ (speed-scaled arm swing with elbow flex)
+- [-] Various body colours / outfits so they look different from each other ✅ (14 outfits + HSL shift per NPC)
+- [-] They follow the paths — waypoints placed at path intersections and near each ride ✅ (A* pathfinding with cost-weighted grid)
 
 ---
 
@@ -126,7 +128,8 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] During the day: off
 - [x] During the night: blinking/pulsing with a sine wave, each light slightly out of phase with the others so they don't all blink at the same time
 - [x] Colour controlled by the HTML colour picker
-- [ ] Apply the colour-picker colour to **Tagada** and **Carousel** decoration lights as well (currently only Ferris Wheel and Roller Coaster update)
+- [x] Apply the colour-picker colour to **Tagada** and **Carousel** decoration lights as well (currently only Ferris Wheel and Roller Coaster update)
+  ✅ Both now fully update. **Fixed**: `FerrisWheel.js` — `ferrisRimBulbs[]`, `ferrisSpokeBulbs[]`, `ferrisBeaconMat` are now updated by the colour picker too.
 
 ---
 
@@ -134,14 +137,14 @@ A heads-up display showing the current time of day. Already partially designed �
 
 The night scene is too dark between attractions — needs ambient fill and moonlight.
 
-- [ ] **Moonlight**: add blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity ~0.05–0.1
-- [ ] **Night hemisphere fill**: raise hemisphere intensity 0.22 → ~0.35 at night
-- [ ] **Exposure**: raise night tone-mapping 0.36 → ~0.45–0.50
-- [ ] **Background/environment intensity**: raise at night for sky/reflections
-- [ ] **Path spotlights**: add 2–4 spotlights at key path intersections
-- [ ] **Lamppost radius**: increase 70 → ~90 for better coverage overlap
-- [ ] **Water night tint**: brighten river shader night color so it's visible after dark
-- [ ] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist.
+- [x] **Moonlight**: add blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity ~0.05–0.1 ✅ (intensity 0.40, `DayNightCycle.js:96-99`)
+- [x] **Night hemisphere fill**: raise hemisphere intensity 0.22 → ~0.35 at night ✅ (`DayNightCycle.js:102`, night = 0.35)
+- [x] **Exposure**: raise night tone-mapping 0.36 → ~0.45–0.50 ✅ (night = 0.48, `DayNightCycle.js:117`)
+- [x] **Background/environment intensity**: raise at night for sky/reflections ✅ (bg=0.34, env=0.42)
+- [x] **Path spotlights**: add 2–4 spotlights at key path intersections ✅ (6 spotlights in `PathLights.js`)
+- [x] **Lamppost radius**: increase 70 → ~90 for better coverage overlap ✅ (distance=90 in `Lampposts.js:120`)
+- [x] **Water night tint**: brighten river shader night color so it's visible after dark ✅ (`uNight` uniform in `Water.js`)
+- [x] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist. (Implemented via 3-state click cycle: Auto -> Manual opposite state -> Manual matching state -> Auto, with confirmation blink)
 - [ ] **Prova**: aggiungere layer 0 alle luci delle giostre (`.enable(0)` o `.set(0+2)`) così illuminano anche ground/vegetazione, e controllare impatto sulle performance (FPS/draw call)
 
 ---
@@ -221,20 +224,16 @@ The examiner will ask you to demo the project live and then ask technical questi
 
 ---
 
-## 📋 Order to Build Things
+## 📋 Remaining Tasks (prioritised)
+
+- [-] Animazione dei modelli delle persone (da rifinire: braccia e camminata)
+- [-] Fuochi d'artificio (da rifinire: dimensione e distanza)
 
 ```
-1st  →  AnimationManager + Ferris Wheel (counter-rotation is the key graded feature)
-2nd  →  Carousel (horses bobbing)
-3rd  →  Roller Coaster (track curve + Frenet cart)
-4th  →  Tagada (compound arm)
-5th  →  Control panels for all 4 rides
-6th  →  Click-to-fly camera + raycasting interactions
-7th  →  FPV gondola camera
-8th  →  NPC visitors
-9th  →  Time HUD + UI overlay fully wired
-10th →  Emissive blink lights on rides
-11th →  Performance check + GitHub Pages
-12th →  Technical report
-13th →  Submit
+P0  →  Layer 0 for ride lights + FPS check
+P0  →  Technical report PDF (luna_park_report.pdf)
+P1  →  Deploy GitHub Pages + test live URL
+P1  →  GUI improvements (layout, labels, tooltips)
+P1  →  Backup video + oral exam prep
+P2  →  Submission formalities (email, tag, check)
 ```
