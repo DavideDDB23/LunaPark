@@ -68,7 +68,7 @@ async function loadAll(names) {
   return out;
 }
 
-function inExclusionZone(x, z, blockLamps, coasterFP, signKeepOut) {
+function inExclusionZone(x, z, blockLamps, coasterFP, trainFP, signKeepOut) {
   // Ride frontages (name marquees + control panels) — keep trees clear so they read from the path.
   if (signKeepOut) {
     for (const [sx, sz, sr] of signKeepOut) {
@@ -115,6 +115,16 @@ function inExclusionZone(x, z, blockLamps, coasterFP, signKeepOut) {
     }
   }
 
+  // Train (Scenic Railway) — keep trees clear of the train tracks
+  if (trainFP) {
+    const pad2 = trainFP.pad * trainFP.pad;
+    const a = trainFP.pts;
+    for (let i = 0; i < a.length; i += 2) {
+      const dx = x - a[i], dz = z - a[i + 1];
+      if (dx * dx + dz * dz < pad2) return true;
+    }
+  }
+
   // Food stalls (Kiosks)
   for (const [bx, bz] of BOOTHS) {
     if (Math.hypot(x - bx, z - bz) < BOOTH_RADIUS) return true;
@@ -129,7 +139,7 @@ function inExclusionZone(x, z, blockLamps, coasterFP, signKeepOut) {
   return false;
 }
 
-export async function buildVegetation({ coasterFootprint = null, signKeepOut = null } = {}) {
+export async function buildVegetation({ coasterFootprint = null, trainFootprint = null, signKeepOut = null } = {}) {
   const group = new THREE.Group();
   group.name = 'vegetation';
 
@@ -166,7 +176,7 @@ export async function buildVegetation({ coasterFootprint = null, signKeepOut = n
       attempts++;
       const x = (random() - 0.5) * 190;
       const z = (random() - 0.5) * 190;
-      if (inExclusionZone(x, z, blockLamps, coasterFootprint, signKeepOut)) continue;
+      if (inExclusionZone(x, z, blockLamps, coasterFootprint, trainFootprint, signKeepOut)) continue;
       if (minSpacing > 0 && tooCloseToTree(x, z, minSpacing)) continue;
       const source = list[Math.floor(random() * list.length)];
       if (!source) continue;

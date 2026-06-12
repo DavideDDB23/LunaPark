@@ -284,7 +284,7 @@ async function init() {
     { title: 'SKY WHEEL',       theme: 'ferris',    groupName: 'ferrisWheel', sign: [-26, 0, -38], panel: [-18, 0, -32] },
     { title: 'GOLDEN CAROUSEL', theme: 'carousel',  groupName: 'carousel',    sign: [22, 0, -26],  panel: [15, 0, -20] },
     { title: 'TURBO TAGADA',    theme: 'tagada',    groupName: 'tagada',      sign: [-22, 0, 28],  panel: [-15, 0, 34] },
-    { title: 'SCENIC RAILWAY',  theme: 'train',     groupName: 'train',       sign: [0, 0, -65],   panel: [-8, 0, -60] },
+    { title: 'SCENIC RAILWAY',  theme: 'train',     groupName: 'train',       sign: [76, 0, -65],   panel: [68, 0, -60] },
     { title: 'SHOOTING GALLERY', theme: 'gallery',  groupName: 'shootingGallery', sign: [22, 0, 20], panel: [18, 0, 28] },
   ];
   // Tree keep-out [x, z, radius] for each frontage so the signs/panels stay visible from the path:
@@ -299,7 +299,24 @@ async function init() {
   }
 
   
-  const vegetation = await buildVegetation({ coasterFootprint: coaster.userData.footprint, signKeepOut });
+  // Panoramic train — loops around the park on a deformed ring
+  const train = await buildTrain({ anisotropy: maxAniso });
+  environmentGroup.add(train);
+  window.__lp.train = train.userData.controller;
+
+  // Train footprint added as obstacle so visitors won't walk on tracks
+  if (train.userData.footprint) {
+    const pad = train.userData.footprint.pad;
+    for (let i = 0; i < train.userData.footprint.pts.length; i += 2) {
+      signKeepOut.push([train.userData.footprint.pts[i], train.userData.footprint.pts[i+1], pad]);
+    }
+  }
+
+  const vegetation = await buildVegetation({ 
+    coasterFootprint: coaster.userData.footprint, 
+    trainFootprint: train.userData.footprint,
+    signKeepOut 
+  });
   environmentGroup.add(vegetation);
 
   const benches = await buildBenches();
@@ -329,10 +346,7 @@ async function init() {
   const balloon = await buildBalloon();
   environmentGroup.add(balloon);
 
-  // Panoramic train — loops around the park on a deformed ring
-  const train = await buildTrain({ anisotropy: maxAniso });
-  environmentGroup.add(train);
-  window.__lp.train = train.userData.controller;
+
 
   // Shooting gallery — interactive FPV aim mode with targets
   const shootingGallery = await buildShootingGallery({ camera, renderer, controls });
