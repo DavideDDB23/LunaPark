@@ -13,11 +13,12 @@ const PRESETS = {
 
 const FLY_DURATION = 1.2;
 const FPV_OFFSET = new THREE.Vector3(0, 1.5, 0);
-const WALK_SPEED = 15;
-const SPRINT_SPEED = 35;
+const WALK_SPEED = 10;
+const SPRINT_SPEED = 22;
 const EYE_HEIGHT = 1.7;
 const COLLISION_BUFFER = 0.3;
 const DEBOUNCE_MS = 200;
+const BACKWARD_MULTIPLIER = 0.7;
 const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export class CameraManager {
@@ -69,7 +70,6 @@ export class CameraManager {
     this._onPointerUp = this._onPointerUp.bind(this);
     this._onPointerHover = this._onPointerHover.bind(this);
     this._bindEvents();
-    setTimeout(() => this.buildCollidableMeshes(), 1000);
   }
 
   flyToPreset(index) {
@@ -177,6 +177,13 @@ export class CameraManager {
     });
   }
 
+  initCollidableMeshes() {
+    this.buildCollidableMeshes();
+    if (this._collidableMeshes.length === 0) {
+      setTimeout(() => this.buildCollidableMeshes(), 2000);
+    }
+  }
+
   _checkCollision(position, direction, distance) {
     this._walkCollisionRay.set(position, direction);
     const hits = this._walkCollisionRay.intersectObjects(this._collidableMeshes, false);
@@ -193,7 +200,7 @@ export class CameraManager {
   _tickWalk(delta) {
     if (!this._pointerLockControls) return;
 
-    const speed = this._walkKeys.shift ? SPRINT_SPEED : WALK_SPEED;
+    const baseSpeed = this._walkKeys.shift ? SPRINT_SPEED : WALK_SPEED;
     const forward = new THREE.Vector3();
     const right = new THREE.Vector3();
     this.camera.getWorldDirection(forward);
@@ -210,8 +217,14 @@ export class CameraManager {
     if (this._walkDirection.lengthSq() > 0) {
       this._walkDirection.normalize();
 
-      const moveX = this._walkDirection.x * speed * delta;
-      const moveZ = this._walkDirection.z * speed * delta;
+      let effectiveSpeed = baseSpeed;
+      const dot = this._walkDirection.dot(forward);
+      if (dot < -0.5) {
+        effectiveSpeed *= BACKWARD_MULTIPLIER;
+      }
+
+      const moveX = this._walkDirection.x * effectiveSpeed * delta;
+      const moveZ = this._walkDirection.z * effectiveSpeed * delta;
 
       const dirX = new THREE.Vector3(Math.sign(moveX), 0, 0);
       const safeX = this._checkCollision(this.camera.position, dirX, Math.abs(moveX));
