@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
 const PRESETS = {
 
@@ -13,11 +12,6 @@ const PRESETS = {
 
 const FLY_DURATION = 1.2;
 const FPV_OFFSET = new THREE.Vector3(0, 1.5, 0);
-const WALK_SPEED = 15;
-const SPRINT_SPEED = 35;
-const EYE_HEIGHT = 1.7;
-const COLLISION_BUFFER = 0.3;
-const DEBOUNCE_MS = 200;
 const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export class CameraManager {
@@ -50,26 +44,12 @@ export class CameraManager {
     this._hasMoved = false;
     this._lastHoverTime = 0;
     this._hoverThrottleMs = 50;
-    this._preFpvMode = null;
-    this._walkKeys = { w: false, a: false, s: false, d: false, shift: false };
-    this._walkDirection = new THREE.Vector3();
-    this._walkRay = new THREE.Raycaster();
-    this._walkCollisionRay = new THREE.Raycaster();
-    this._collidableMeshes = [];
-    this._groundTarget = null;
-    this._lastVToggle = 0;
-    this._pointerLockControls = null;
-    this._onKeyUp = this._onKeyUp.bind(this);
-    this._onWalkKeyDown = this._onWalkKeyDown.bind(this);
-    this._onPointerLockChange = this._onPointerLockChange.bind(this);
-    this._onPointerLockError = this._onPointerLockError.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
     this._onPointerUp = this._onPointerUp.bind(this);
     this._onPointerHover = this._onPointerHover.bind(this);
     this._bindEvents();
-    setTimeout(() => this.buildCollidableMeshes(), 1000);
   }
 
   flyToPreset(index) {
@@ -103,186 +83,10 @@ export class CameraManager {
     );
   }
 
-  enterWalkMode() {
-    if (this.state !== 'orbit') return;
-    const now = Date.now();
-    if (now - this._lastVToggle < DEBOUNCE_MS) return;
-    this._lastVToggle = now;
-
-    this._walkRay.set(this.camera.position, new THREE.Vector3(0, -1, 0));
-    const hits = this._walkRay.intersectObjects(this._collidableMeshes, false);
-    let groundY = 0;
-    for (const hit of hits) {
-      const obj = hit.object;
-      if (obj.name === 'sky' || obj.name === 'water' || obj.userData.transparent) continue;
-      groundY = hit.point.y;
-      break;
-    }
-    this.camera.position.y = groundY + EYE_HEIGHT;
-    this._groundTarget = groundY;
-
-    this._preFpvMode = null;
-    this.state = 'walk';
-    this.controls.enabled = false;
-
-    this._pointerLockControls = new PointerLockControls(this.camera, this.renderer.domElement);
-    this.renderer.domElement.requestPointerLock();
-
-    document.addEventListener('pointerlockchange', this._onPointerLockChange);
-    document.addEventListener('pointerlockerror', this._onPointerLockError);
-    window.addEventListener('keydown', this._onWalkKeyDown);
-    window.addEventListener('keyup', this._onKeyUp);
-  }
-
-  exitWalkMode() {
-    if (this.state !== 'walk') return;
-
-    if (document.pointerLockElement) {
-      document.exitPointerLock();
-    }
-
-    if (this._pointerLockControls) {
-      this._pointerLockControls.dispose();
-      this._pointerLockControls = null;
-    }
-
-    document.removeEventListener('pointerlockchange', this._onPointerLockChange);
-    document.removeEventListener('pointerlockerror', this._onPointerLockError);
-    window.removeEventListener('keydown', this._onWalkKeyDown);
-    window.removeEventListener('keyup', this._onKeyUp);
-
-    this._walkKeys.w = false;
-    this._walkKeys.a = false;
-    this._walkKeys.s = false;
-    this._walkKeys.d = false;
-    this._walkKeys.shift = false;
-
-    this.controls.target.set(
-      this.camera.position.x,
-      this.camera.position.y - 1,
-      this.camera.position.z - 5
-    );
-    this.controls.enabled = true;
-    this.state = 'orbit';
-  }
-
-  buildCollidableMeshes() {
-    this._collidableMeshes = [];
-    this.scene.traverse((obj) => {
-      if (!obj.isMesh) return;
-      if (obj.name === 'sky' || obj.name === 'water') return;
-      if (obj.userData.transparent) return;
-      if (obj.isLight || obj.isHelper) return;
-      this._collidableMeshes.push(obj);
-    });
-  }
-
-  _checkCollision(position, direction, distance) {
-    this._walkCollisionRay.set(position, direction);
-    const hits = this._walkCollisionRay.intersectObjects(this._collidableMeshes, false);
-    for (const hit of hits) {
-      const obj = hit.object;
-      if (obj.name === 'sky' || obj.name === 'water' || obj.userData.transparent) continue;
-      if (hit.distance < distance) {
-        return Math.max(0, hit.distance - COLLISION_BUFFER);
-      }
-    }
-    return distance;
-  }
-
-  _tickWalk(delta) {
-    if (!this._pointerLockControls) return;
-
-    const speed = this._walkKeys.shift ? SPRINT_SPEED : WALK_SPEED;
-    const forward = new THREE.Vector3();
-    const right = new THREE.Vector3();
-    this.camera.getWorldDirection(forward);
-    forward.y = 0;
-    forward.normalize();
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
-    this._walkDirection.set(0, 0, 0);
-    if (this._walkKeys.w) this._walkDirection.add(forward);
-    if (this._walkKeys.s) this._walkDirection.sub(forward);
-    if (this._walkKeys.d) this._walkDirection.add(right);
-    if (this._walkKeys.a) this._walkDirection.sub(right);
-
-    if (this._walkDirection.lengthSq() > 0) {
-      this._walkDirection.normalize();
-
-      const moveX = this._walkDirection.x * speed * delta;
-      const moveZ = this._walkDirection.z * speed * delta;
-
-      const dirX = new THREE.Vector3(Math.sign(moveX), 0, 0);
-      const safeX = this._checkCollision(this.camera.position, dirX, Math.abs(moveX));
-      this.camera.position.x += Math.sign(moveX) * safeX;
-
-      const dirZ = new THREE.Vector3(0, 0, Math.sign(moveZ));
-      const safeZ = this._checkCollision(this.camera.position, dirZ, Math.abs(moveZ));
-      this.camera.position.z += Math.sign(moveZ) * safeZ;
-    }
-
-    this._updateGroundFollowing(delta);
-  }
-
-  _updateGroundFollowing(delta) {
-    const origin = this.camera.position.clone();
-    origin.y += 5;
-    this._walkRay.set(origin, new THREE.Vector3(0, -1, 0));
-    const hits = this._walkRay.intersectObjects(this._collidableMeshes, false);
-    let groundY = 0;
-    for (const hit of hits) {
-      const obj = hit.object;
-      if (obj.name === 'sky' || obj.name === 'water' || obj.userData.transparent) continue;
-      groundY = hit.point.y;
-      break;
-    }
-    const targetY = groundY + EYE_HEIGHT;
-    this.camera.position.y += (targetY - this.camera.position.y) * Math.min(delta * 10, 1);
-  }
-
-  _onWalkKeyDown(ev) {
-    if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA') return;
-    const key = ev.key.toLowerCase();
-    if (key === 'w') this._walkKeys.w = true;
-    else if (key === 'a') this._walkKeys.a = true;
-    else if (key === 's') this._walkKeys.s = true;
-    else if (key === 'd') this._walkKeys.d = true;
-    else if (key === 'shift') this._walkKeys.shift = true;
-  }
-
-  _onKeyUp(ev) {
-    const key = ev.key.toLowerCase();
-    if (key === 'w') this._walkKeys.w = false;
-    else if (key === 'a') this._walkKeys.a = false;
-    else if (key === 's') this._walkKeys.s = false;
-    else if (key === 'd') this._walkKeys.d = false;
-    else if (key === 'shift') this._walkKeys.shift = false;
-  }
-
-  _onPointerLockChange() {
-    if (document.pointerLockElement !== this.renderer.domElement) {
-      if (this.state === 'walk') {
-        this._walkKeys.w = false;
-        this._walkKeys.a = false;
-        this._walkKeys.s = false;
-        this._walkKeys.d = false;
-        this._walkKeys.shift = false;
-      }
-    }
-  }
-
-  _onPointerLockError(err) {
-    console.error('Pointer lock error:', err);
-    if (this.state === 'walk') this.exitWalkMode();
-  }
-
   enterFPV() {
     if (this.state === 'fpv') return;
     const rides = this.getRides();
     if (!rides || rides.length === 0) return;
-
-    this._preFpvMode = this.state;
 
     const referencePos = (this.state === 'flying') ? this._flyTo : this.camera.position;
 
@@ -337,23 +141,12 @@ export class CameraManager {
 
     const prePos = this._preFpvPos;
     const preTarget = this._preFpvTarget;
-    const preMode = this._preFpvMode;
-    const fpvRide = this._fpvRide;
 
     this._preFpvPos = null;
     this._preFpvTarget = null;
-    this._preFpvMode = null;
-
-    this._cleanupFPV();
-
-    if (preMode === 'walk') {
-      this.state = 'orbit';
-      this.controls.enabled = true;
-      this.enterWalkMode();
-      return;
-    }
 
     if (prePos && preTarget) {
+      // Calculate current look direction of the camera to determine starting look target
       this._tmpQuat.copy(this.camera.quaternion);
       this._tmpForward.set(0, 0, -1).applyQuaternion(this._tmpQuat);
       const currentLookTarget = this.camera.position.clone().add(this._tmpForward.multiplyScalar(20));
@@ -365,12 +158,14 @@ export class CameraManager {
         preTarget
       );
     } else {
+      // Fallback
       this.state = 'orbit';
-      if (fpvRide) {
-        fpvRide.group.getWorldPosition(this._tmpVec);
+      if (this._fpvRide) {
+        this._fpvRide.group.getWorldPosition(this._tmpVec);
         this.controls.target.copy(this._tmpVec);
       }
       this.controls.enabled = true;
+      this._cleanupFPV();
     }
   }
 
@@ -396,11 +191,9 @@ export class CameraManager {
   tick(delta) {
     if (this.state === 'flying') this._tickFlight(delta);
     else if (this.state === 'fpv') this._tickFPV();
-    else if (this.state === 'walk') this._tickWalk(delta);
   }
 
   destroy() {
-    if (this.state === 'walk') this.exitWalkMode();
     window.removeEventListener('keydown', this._onKeyDown);
     this.renderer.domElement.removeEventListener('pointerdown', this._onPointerDown);
     this.renderer.domElement.removeEventListener('pointermove', this._onPointerHover);
@@ -483,23 +276,6 @@ export class CameraManager {
   _onKeyDown(ev) {
     if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA') return;
     const key = ev.key;
-
-    if (key === 'v' || key === 'V') {
-      if (this.state === 'walk') {
-        this.exitWalkMode();
-      } else if (this.state === 'orbit') {
-        this.enterWalkMode();
-      }
-      return;
-    }
-
-    if (this.state === 'walk') {
-      if (key === 'c' || key === 'C') {
-        if (this.state === 'walk') this.enterFPV();
-      }
-      return;
-    }
-
     if (key >= '1' && key <= '6') {
       this.flyToPreset(parseInt(key));
     } else if (key === 'c' || key === 'C') {
