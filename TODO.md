@@ -24,6 +24,10 @@
 - [x] Rocks
 - [x] Ferris Wheel (counter-rotating gondolas, 8 gondolas, 2 passengers each, passenger sway)
 - [x] Carousel (rotating platform, cone canopy, 8 horses with phase-offset bobbing, jockeys, control panel)
+- [x] Night fireworks (particle burst system synced with day/night cycle — 3 burst types: spherical, corona, willow)
+- [x] Hot air balloon (drifts with wind, 3 tether cables, night glow, random initial position)
+- [x] Panoramic train (CatmullRom ring track, locomotive + 3 wagons, control panel, night bulbs)
+- [x] Shooting gallery (10 targets, FPV aim mode with pointer lock, score + timer, camera shake on hit)
 
 ---
 
@@ -227,7 +231,6 @@ The examiner will ask you to demo the project live and then ask technical questi
 ## 📋 Remaining Tasks (prioritised)
 
 - [-] Animazione dei modelli delle persone (da rifinire: braccia e camminata)
-- [-] Fuochi d'artificio (da rifinire: dimensione e distanza)
 
 ```
 P0  →  Layer 0 for ride lights + FPS check

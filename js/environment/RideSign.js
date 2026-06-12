@@ -44,6 +44,20 @@ export const SIGN_THEMES = {
     accent: '#ff5a7a',
     neonHex: 0x1fe0c8, neonEmissive: 0x12bfa6, bulbHex: 0xfff1c0, crownHex: 0xff5a7a,
   },
+  train: {
+    bgInner: '#1a3a0a', bgOuter: '#0a1405', glow: '#4ade80',
+    plate: 'rgba(10,20,5,0.55)', border: '#d4af37',
+    textTop: '#ffffff', textMid: '#e0ffe0', textBot: '#7dd87d', outline: '#0a1f05',
+    accent: '#fbbf24',
+    neonHex: 0x4ade80, neonEmissive: 0x22c55e, bulbHex: 0xfff1c0, crownHex: 0xfbbf24,
+  },
+  gallery: {
+    bgInner: '#3a1a0a', bgOuter: '#140a05', glow: '#fb923c',
+    plate: 'rgba(20,10,5,0.55)', border: '#d4af37',
+    textTop: '#ffffff', textMid: '#ffe0c8', textBot: '#fdba74', outline: '#1f0f05',
+    accent: '#ef4444',
+    neonHex: 0xfb923c, neonEmissive: 0xf97316, bulbHex: 0xfff1c0, crownHex: 0xef4444,
+  },
 };
 
 function roundRect(ctx, x, y, w, h, r) {

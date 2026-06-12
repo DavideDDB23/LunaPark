@@ -70,6 +70,12 @@ export async function loadVisitorTemplates(count) {
               mat.roughness = 0.6;
               mat.metalness = 0.0;
             }
+            mat.onBeforeCompile = (shader) => {
+              shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <opaque_fragment>',
+                '#include <opaque_fragment>\ngl_FragColor.rgb = min(gl_FragColor.rgb, vec3(1.0));'
+              );
+            };
           });
         }
       }

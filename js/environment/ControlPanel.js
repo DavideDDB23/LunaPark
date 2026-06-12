@@ -70,28 +70,17 @@ export class ControlPanel {
     topCollar.position.y = postHeight + 0.02;
     this.group.add(topCollar);
 
-    // 3. Cable Conduit (flexible metal pipe details)
-    const conduitGroup = new THREE.Group();
-    const conduitSegments = 12;
-    const conduitRadius = 0.035;
-    for (let i = 0; i < conduitSegments; i++) {
-      const t = i / (conduitSegments - 1);
-      const angle = t * Math.PI * 0.45;
-      const x = 0.16 + Math.sin(angle) * 0.1;
-      const y = 1.25 - t * 1.15;
-      const z = -0.05 + Math.cos(angle) * 0.08;
+    const flangeCollar = new THREE.Mesh(collarGeo, accentBrass);
+    flangeCollar.position.y = 1.16;
+    this.group.add(flangeCollar);
 
-      const seg = new THREE.Mesh(new THREE.CylinderGeometry(conduitRadius, conduitRadius, 0.1, 8), accentBrass);
-      seg.position.set(x, y, z);
-      seg.rotation.z = -angle * 0.8;
-      seg.rotation.x = angle * 0.3;
-      conduitGroup.add(seg);
-    }
-    this.group.add(conduitGroup);
+    const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.04, 16), metalBody);
+    flange.position.y = 1.22;
+    this.group.add(flange);
 
     // 4. Sloped Console Group
     const consoleGroup = new THREE.Group();
-    consoleGroup.position.set(0.0, 1.35, 0.0);
+    consoleGroup.position.set(0.0, 1.54, 0.0);
     consoleGroup.rotation.x = 0; // vertical panel face
     this.group.add(consoleGroup);
 
@@ -106,11 +95,6 @@ export class ControlPanel {
     bezel.position.z = -0.08;
     consoleGroup.add(bezel);
 
-    // Lever mounting bracket (to prevent floating) - positioned on the right
-    const leverBracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.20), metalBody);
-    leverBracket.position.set(0.35, 0.05, 0.185);
-    consoleGroup.add(leverBracket);
-
     // LCD Screen (cyan glow) - ENLARGED
     const screen = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.44, 0.02), screenMat);
     screen.position.set(-0.16, 0.0, 0.091);
@@ -121,9 +105,14 @@ export class ControlPanel {
     screenFrame.position.set(-0.16, 0.0, 0.085);
     consoleGroup.add(screenFrame);
 
+    const leverMountDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.02, 16), metalBody);
+    leverMountDisc.rotation.x = Math.PI / 2;
+    leverMountDisc.position.set(0.35, 0.05, 0.095);
+    consoleGroup.add(leverMountDisc);
+
     // 5. Semaphore Tower housing (arched top)
     const semTower = new THREE.Group();
-    semTower.position.set(0.0, 1.95, -0.05);
+    semTower.position.set(0.0, 2.14, -0.05);
     this.group.add(semTower);
 
     const housing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.68, 0.22), darkConsoleMat);
@@ -171,18 +160,18 @@ export class ControlPanel {
     const visorGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.16, 12, 1, true, -Math.PI / 2, Math.PI); // Half cylinder
     
     const redVisor = new THREE.Mesh(visorGeo, metalBody);
-    redVisor.rotation.x = Math.PI / 2;
+    redVisor.rotation.set(Math.PI / 2, 0, -Math.PI / 2);
     redVisor.position.set(0, 0.16, 0.12);
     semTower.add(redVisor);
 
     const greenVisor = new THREE.Mesh(visorGeo, metalBody);
-    greenVisor.rotation.x = Math.PI / 2;
+    greenVisor.rotation.set(Math.PI / 2, 0, -Math.PI / 2);
     greenVisor.position.set(0, -0.16, 0.12);
     semTower.add(greenVisor);
 
-    // 6. Mechanical Lever - shifted to the right of the panel to align with the bracket
+    // 6. Mechanical Lever - flush to panel face
     this.lever = new THREE.Group();
-    this.lever.position.set(0.35, 1.40, 0.28);
+    this.lever.position.set(0.35, 1.59, 0.18);
     this.group.add(this.lever);
 
     // Lever Hinge Mount
@@ -195,20 +184,20 @@ export class ControlPanel {
     this.lever.add(hingeCovers);
 
     // Lever Stick (bicolored)
-    const lowerStick = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.3, 8), metalBody);
-    lowerStick.position.y = 0.15;
+    const lowerStick = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.2, 8), metalBody);
+    lowerStick.position.y = 0.10;
     lowerStick.castShadow = true;
     this.lever.add(lowerStick);
 
-    const upperStick = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.25, 8), accentBrass);
-    upperStick.position.y = 0.42;
+    const upperStick = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.18, 8), accentBrass);
+    upperStick.position.y = 0.30;
     upperStick.castShadow = true;
     this.lever.add(upperStick);
 
     // Knob
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 10),
       new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.4 }));
-    knob.position.y = 0.55;
+    knob.position.y = 0.40;
     this.lever.add(knob);
   }
 

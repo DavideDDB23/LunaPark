@@ -20,12 +20,19 @@ import { buildRideSign } from "./environment/RideSign.js";
 import { buildRideHint } from "./environment/RideHints.js";
 import { buildVisitors } from "./environment/Visitors.js";
 import { buildFireworks } from "./environment/Fireworks.js";
-import { buildPathLights } from "./environment/PathLights.js";
+import { buildBalloon } from "./environment/Balloon.js";
+import { buildTrain } from "./environment/Train.js";
+import { buildShootingGallery } from "./environment/ShootingGallery.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 import { CameraManager } from './camera/CameraManager.js';
 import { eventBus } from './utils/EventBus.js';
 import { InteractionManager } from './utils/InteractionManager.js';
 import { isNightNow } from './utils/dayNight.js';
+
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -48,6 +55,20 @@ const camera = new THREE.PerspectiveCamera(
 );
 camera.position.set(60, 45, 80);
 camera.lookAt(0, 0, 0);
+
+// Post-processing
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.4, 0.85);
+bloomPass.threshold = 1.5; // Raised threshold so balloons don't bloom, only fireworks/lamps
+bloomPass.strength = 0.35;
+bloomPass.radius = 0.4;
+composer.addPass(bloomPass);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
 
 const clock = new THREE.Clock();
 
@@ -263,6 +284,8 @@ async function init() {
     { title: 'SKY WHEEL',       theme: 'ferris',    groupName: 'ferrisWheel', sign: [-26, 0, -38], panel: [-18, 0, -32] },
     { title: 'GOLDEN CAROUSEL', theme: 'carousel',  groupName: 'carousel',    sign: [22, 0, -26],  panel: [15, 0, -20] },
     { title: 'TURBO TAGADA',    theme: 'tagada',    groupName: 'tagada',      sign: [-22, 0, 28],  panel: [-15, 0, 34] },
+    { title: 'SCENIC RAILWAY',  theme: 'train',     groupName: 'train',       sign: [0, 0, -65],   panel: [-8, 0, -60] },
+    { title: 'SHOOTING GALLERY', theme: 'gallery',  groupName: 'shootingGallery', sign: [22, 0, 20], panel: [18, 0, 28] },
   ];
   // Tree keep-out [x, z, radius] for each frontage so the signs/panels stay visible from the path:
   // a circle at the sign, another IN FRONT of it (along its facing dir, toward the path), + the panel.
@@ -302,9 +325,20 @@ async function init() {
   // walkway points (both driven by the day/night cycle via 'time-phase-change').
   const fireworks = buildFireworks();
   scene.add(fireworks);
+  // Hot air balloon — drifts slowly across the sky with tether cables
+  const balloon = await buildBalloon();
+  environmentGroup.add(balloon);
 
-  const pathLights = buildPathLights();
-  environmentGroup.add(pathLights);
+  // Panoramic train — loops around the park on a deformed ring
+  const train = await buildTrain({ anisotropy: maxAniso });
+  environmentGroup.add(train);
+  window.__lp.train = train.userData.controller;
+
+  // Shooting gallery — interactive FPV aim mode with targets
+  const shootingGallery = await buildShootingGallery({ camera, renderer, controls });
+  shootingGallery.position.set(30, 0, 25);
+  environmentGroup.add(shootingGallery);
+  window.__lp.shootingGallery = shootingGallery.userData.controller;
 
   
   const ferrisWheel = await buildFerrisWheel({ position: [-50, 0, -50], camera, renderer });
@@ -388,6 +422,8 @@ async function init() {
   interactionManager.registerClickable(carousel.userData.controller.panel);
   interactionManager.registerClickable(tagada.userData.controller.panel);
   interactionManager.registerClickable(coaster.userData.controller.panel);
+  interactionManager.registerClickable(train.userData.controller.panel);
+  interactionManager.registerClickable(shootingGallery.userData.controller.panel);
 
   // Register stage spotlight for manual toggle
   interactionManager.registerClickable(stage.userData.spotLight);
@@ -435,6 +471,8 @@ async function init() {
       if (carousel.userData.controller.panel === curr) carousel.userData.controller.toggle();
       if (tagada.userData.controller.panel === curr) tagada.userData.controller.toggle();
       if (coaster.userData.controller.panel === curr) coaster.userData.controller.toggle();
+      if (train.userData.controller.panel === curr) train.userData.controller.toggle();
+      if (shootingGallery.userData.controller.panel === curr) shootingGallery.userData.controller.toggle();
       return;
     }
 
@@ -505,6 +543,20 @@ async function init() {
       autoAdvance = !autoAdvance;
       if (autoCheckbox) autoCheckbox.checked = autoAdvance;
     }
+    // T key: enter shooting gallery aim mode if nearby
+    if (e.code === 'KeyT') {
+      const sg = shootingGallery.userData.controller;
+      if (sg && !sg.aimMode) {
+        const dist = camera.position.distanceTo(new THREE.Vector3(30, 2.5, 25));
+        if (dist < 50) {
+          sg.enterAimMode();
+        }
+      }
+    }
+    // F key: trigger fireworks show
+    if (e.code === 'KeyF') {
+      eventBus.emit('trigger-fireworks-show');
+    }
   });
 
   const helpBtn = document.getElementById('helpBtn');
@@ -518,7 +570,7 @@ async function init() {
   // Cache every per-frame reference once — animate() must never traverse the scene.
   Object.assign(world, {
     river, vegetation, visitors, stage, ferrisWheel, carousel, tagada, coaster,
-    lamps, stalls, fireworks,
+    lamps, stalls, fireworks, balloon, train, shootingGallery,
     gate: environmentGroup.getObjectByName('entranceGate'),
     timeInput: document.getElementById('timeOfDay'),
     timeVal: document.getElementById('timeVal'),
@@ -626,6 +678,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', onResize);
 
@@ -663,6 +716,9 @@ function animate() {
   if (world.tagada?.userData.tick) world.tagada.userData.tick(delta, time);
   if (world.coaster?.userData.tick) world.coaster.userData.tick(delta, time);
   if (world.fireworks?.userData.tick) world.fireworks.userData.tick(delta, time);
+  if (world.balloon?.userData.tick) world.balloon.userData.tick(delta, time, wind);
+  if (world.train?.userData.tick) world.train.userData.tick(delta, time);
+  if (world.shootingGallery?.userData.tick) world.shootingGallery.userData.tick(delta, time);
 
   for (const sign of rideSigns) {
     if (sign.userData.tick) sign.userData.tick(time, delta);
@@ -674,7 +730,7 @@ function animate() {
   if (cameraManager) cameraManager.tick(delta);
   if (world.lamps?.userData.tick) world.lamps.userData.tick(delta, time);
 
-  renderer.render(scene, camera);
+  composer.render();
 
   // FPS counter
   fpsFrames++;
@@ -688,6 +744,7 @@ function animate() {
 
   requestAnimationFrame(animate);
 }
+
 
 init()
   .then(() => animate())
