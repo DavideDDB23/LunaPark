@@ -633,7 +633,7 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   const time = clock.getElapsedTime();
   const wind = getWindSpeed();
-  if (!cameraManager || cameraManager.state !== 'flying') {
+  if (!cameraManager || (cameraManager.state !== 'flying' && cameraManager.state !== 'walk')) {
     controls.update(delta);
   }
 

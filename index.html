@@ -101,6 +101,12 @@
       font-weight: 500;
       color: rgba(255, 255, 255, 0.85);
     }
+    .hud-separator {
+      grid-column: 1 / -1;
+      border: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      margin: 2px 0;
+    }
     
     /* Custom Range Slider Styling */
     input[type="range"] {
@@ -535,27 +541,30 @@
 
     <div class="hud-controls-grid">
       <!-- Wind Row -->
-      <label for="wind">Wind:</label>
-      <input id="wind" type="range" min="0" max="3" step="0.05" value="1" />
+      <label for="wind">Wind Speed:</label>
+      <input id="wind" type="range" min="0" max="3" step="0.05" value="1" title="Controls vegetation and water animation intensity" />
       <span id="windVal" class="control-value">1.00</span>
 
       <!-- Time Row -->
       <label for="timeOfDay">Time:</label>
-      <input id="timeOfDay" type="range" min="0" max="24" step="0.1" value="12" />
+      <input id="timeOfDay" type="range" min="0" max="24" step="0.1" value="12" title="Drag to change time of day (0–24h)" />
       <span id="timeVal" class="control-value">12:00</span>
 
       <!-- Auto Time Row -->
       <label for="autoTime">Auto Time:</label>
       <label class="toggle-switch">
-        <input id="autoTime" type="checkbox" checked />
+        <input id="autoTime" type="checkbox" checked title="Toggle automatic day/night cycle" />
         <span class="toggle-slider"></span>
       </label>
       <span id="autoStateVal" class="state-val">ON</span>
 
+      <!-- Separator -->
+      <hr class="hud-separator" />
+
       <!-- Lights Row -->
-      <label for="lightColor">Lights:</label>
+      <label for="lightColor">Ride Lights:</label>
       <div class="color-picker-wrapper">
-        <input id="lightColor" type="color" value="#ffdd88" />
+        <input id="lightColor" type="color" value="#ffdd88" title="Change colour of all ride decoration lights" />
         <span class="color-pill-preview" id="colorPillPreview"></span>
       </div>
       <span id="colorHexVal" class="color-hex-val">#FFDD88</span>
@@ -586,9 +595,15 @@
             <ul>
               <li><kbd>1</kbd> - <kbd>6</kbd>: Ride Cam Presets</li>
               <li><kbd>C</kbd>: First-Person FPV Ride</li>
+              <li><kbd>V</kbd>: Toggle Walking Mode</li>
+              <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>: Move (Walking Mode)</li>
+              <li><kbd>Shift</kbd>: Sprint (Walking Mode)</li>
+              <li>Mouse: Look Around (Walking Mode)</li>
               <li><kbd>Space</kbd>: Pause/Resume Time</li>
               <li><kbd>Scroll on Ride</kbd>: Adjust Speed (0.2x - 1.5x)</li>
               <li>Click Lamppost: Toggle Light On/Off</li>
+              <li>Click Stage Spotlight: Toggle On/Off</li>
+              <li>Click Ride Panel: Start/Stop Ride</li>
               <li><kbd>ESC</kbd>: Exit Active View</li>
             </ul>
           </div>
