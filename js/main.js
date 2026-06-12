@@ -690,10 +690,7 @@ function animate() {
 }
 
 init()
-  .then(() => {
-    cameraManager.initCollidableMeshes();
-    animate();
-  })
+  .then(() => animate())
   .catch((err) => {
     console.error('Init failed:', err);
     loaderEl.textContent = 'Failed to load scene — see console.';
