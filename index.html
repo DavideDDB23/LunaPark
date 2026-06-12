@@ -45,6 +45,11 @@
       flex-direction: column;
       gap: 15px;
       box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: gap 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #hud.collapsed {
+      gap: 0;
+      padding-bottom: 15px;
     }
     #hud * {
       pointer-events: auto;
@@ -66,30 +71,68 @@
       padding-bottom: 10px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: border-color 0.3s ease, padding-bottom 0.3s ease;
+    }
+    #hud.collapsed .hud-title {
+      border-bottom-color: rgba(255, 255, 255, 0);
+      padding-bottom: 0;
+    }
+    .hud-title-left {
+      display: flex;
+      align-items: center;
       gap: 8px;
     }
-    .pulse-dot {
-      width: 6px;
-      height: 6px;
-      background-color: #ffa01c;
-      border-radius: 50%;
-      box-shadow: 0 0 8px #ffa01c;
-      animation: pulse 2s infinite;
-      display: inline-block;
+    .hud-toggle-btn {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s ease, background-color 0.2s ease;
+      border-radius: 4px;
     }
-    @keyframes pulse {
-      0% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(255, 160, 28, 0.7);
-      }
-      70% {
-        transform: scale(1);
-        box-shadow: 0 0 0 5px rgba(255, 160, 28, 0);
-      }
-      100% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(255, 160, 28, 0);
-      }
+    .hud-toggle-btn:hover {
+      color: #ffa01c;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .chevron-icon {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #hud.collapsed .chevron-icon {
+      transform: rotate(180deg);
+    }
+    .ferris-wheel-icon {
+      color: #ffa01c;
+      flex-shrink: 0;
+    }
+    .wheel-rotate {
+      transform-origin: 12px 10px;
+      animation: spin-slow 15s linear infinite;
+    }
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .hud-body {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-height: 800px;
+      opacity: 1;
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+      overflow: hidden;
+    }
+    #hud.collapsed .hud-body {
+      max-height: 0;
+      opacity: 0;
+      pointer-events: none;
     }
     .hud-controls-grid {
       display: grid;
@@ -583,69 +626,96 @@
   <div id="shootScore">Score: 0</div>
   <div id="shootTimer">Time: 30s</div>
   <div id="hud">
-    <div class="hud-title">
-      <span class="pulse-dot"></span>
-      Luna Park — Interactive Controls
-    </div>
-
-    <div class="hud-controls-grid">
-      <!-- Wind Row -->
-      <label for="wind">Wind:</label>
-      <input id="wind" type="range" min="0" max="3" step="0.05" value="1" />
-      <span id="windVal" class="control-value">1.00</span>
-
-      <!-- Time Row -->
-      <label for="timeOfDay">Time:</label>
-      <input id="timeOfDay" type="range" min="0" max="24" step="0.1" value="12" />
-      <span id="timeVal" class="control-value">12:00</span>
-
-      <!-- Auto Time Row -->
-      <label for="autoTime">Auto Time:</label>
-      <label class="toggle-switch">
-        <input id="autoTime" type="checkbox" checked />
-        <span class="toggle-slider"></span>
-      </label>
-      <span id="autoStateVal" class="state-val">ON</span>
-
-      <!-- Lights Row -->
-      <label for="lightColor">Lights:</label>
-      <div class="color-picker-wrapper">
-        <input id="lightColor" type="color" value="#ffdd88" />
-        <span class="color-pill-preview" id="colorPillPreview"></span>
+    <div class="hud-title" id="hudTitle">
+      <div class="hud-title-left">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ferris-wheel-icon">
+          <!-- Support stand (static) -->
+          <path d="M12 10L8 21M12 10L16 21M7 21H17" />
+          <!-- Rotating wheel -->
+          <g class="wheel-rotate">
+            <circle cx="12" cy="10" r="7" />
+            <path d="M12 3v14M5 10h14M7.05 5.05l9.9 9.9M7.05 14.95l9.9-9.9" />
+            <circle cx="12" cy="3" r="1.2" fill="currentColor" />
+            <circle cx="19" cy="10" r="1.2" fill="currentColor" />
+            <circle cx="12" cy="17" r="1.2" fill="currentColor" />
+            <circle cx="5" cy="10" r="1.2" fill="currentColor" />
+            <circle cx="16.95" cy="5.05" r="1.2" fill="currentColor" />
+            <circle cx="7.05" cy="14.95" r="1.2" fill="currentColor" />
+            <circle cx="16.95" cy="14.95" r="1.2" fill="currentColor" />
+            <circle cx="7.05" cy="5.05" r="1.2" fill="currentColor" />
+          </g>
+          <!-- Center hub -->
+          <circle cx="12" cy="10" r="1.2" fill="currentColor" />
+        </svg>
+        <span>Luna Park — Interactive Controls</span>
       </div>
-      <span id="colorHexVal" class="color-hex-val">#FFDD88</span>
+      <button class="hud-toggle-btn" type="button" aria-label="Toggle HUD">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="chevron-icon">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+      </button>
     </div>
 
-    <div class="time-arc-wrap">
-      <canvas id="timeArc" width="240" height="130"></canvas>
-    </div>
+    <div class="hud-body">
+      <div class="hud-controls-grid">
+        <!-- Wind Row -->
+        <label for="wind">Wind:</label>
+        <input id="wind" type="range" min="0" max="3" step="0.05" value="1" />
+        <span id="windVal" class="control-value">1.00</span>
 
-    <div class="hud-footer">
-      <div class="accordion-item">
-        <button id="helpBtn" class="accordion-header">
-          <span>Help & Keybindings</span>
-          <span class="accordion-icon">▾</span>
-        </button>
-        <div id="helpPanel" style="display: none;">
-          <div class="help-section">
-            <strong>Mouse Navigation</strong>
-            <ul>
-              <li>Drag: Orbit View</li>
-              <li>Scroll: Zoom (outside rides)</li>
-              <li>Right-Drag: Pan View</li>
-              <li>Left Click on Object: Fly to Object</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <strong>Shortcuts & Interactions</strong>
-            <ul>
-              <li><kbd>1</kbd> - <kbd>6</kbd>: Ride Cam Presets</li>
-              <li><kbd>C</kbd>: First-Person FPV Ride</li>
-              <li><kbd>Space</kbd>: Pause/Resume Time</li>
-              <li><kbd>Scroll on Ride</kbd>: Adjust Speed (0.2x - 1.5x)</li>
-              <li>Click Lamppost: Toggle Light On/Off</li>
-              <li><kbd>ESC</kbd>: Exit Active View</li>
-            </ul>
+        <!-- Time Row -->
+        <label for="timeOfDay">Time:</label>
+        <input id="timeOfDay" type="range" min="0" max="24" step="0.1" value="12" />
+        <span id="timeVal" class="control-value">12:00</span>
+
+        <!-- Auto Time Row -->
+        <label for="autoTime">Auto Time:</label>
+        <label class="toggle-switch">
+          <input id="autoTime" type="checkbox" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="autoStateVal" class="state-val">ON</span>
+
+        <!-- Lights Row -->
+        <label for="lightColor">Lights:</label>
+        <div class="color-picker-wrapper">
+          <input id="lightColor" type="color" value="#ffdd88" />
+          <span class="color-pill-preview" id="colorPillPreview"></span>
+        </div>
+        <span id="colorHexVal" class="color-hex-val">#FFDD88</span>
+      </div>
+
+      <div class="time-arc-wrap">
+        <canvas id="timeArc" width="240" height="130"></canvas>
+      </div>
+
+      <div class="hud-footer">
+        <div class="accordion-item">
+          <button id="helpBtn" class="accordion-header">
+            <span>Help & Keybindings</span>
+            <span class="accordion-icon">▾</span>
+          </button>
+          <div id="helpPanel" style="display: none;">
+            <div class="help-section">
+              <strong>Mouse Navigation</strong>
+              <ul>
+                <li>Drag: Orbit View</li>
+                <li>Scroll: Zoom (outside rides)</li>
+                <li>Right-Drag: Pan View</li>
+                <li>Left Click on Object: Fly to Object</li>
+              </ul>
+            </div>
+            <div class="help-section">
+              <strong>Shortcuts & Interactions</strong>
+              <ul>
+                <li><kbd>1</kbd> - <kbd>6</kbd>: Ride Cam Presets</li>
+                <li><kbd>C</kbd>: First-Person FPV Ride</li>
+                <li><kbd>Space</kbd>: Pause/Resume Time</li>
+                <li><kbd>Scroll on Ride</kbd>: Adjust Speed (0.2x - 1.5x)</li>
+                <li>Click Lamppost: Toggle Light On/Off</li>
+                <li><kbd>ESC</kbd>: Exit Active View</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -823,6 +893,15 @@
         requestAnimationFrame(syncUI);
       }
       requestAnimationFrame(syncUI);
+
+      // Toggle HUD collapse state
+      const hud = document.getElementById('hud');
+      const hudTitle = document.getElementById('hudTitle');
+      if (hud && hudTitle) {
+        hudTitle.addEventListener('click', () => {
+          hud.classList.toggle('collapsed');
+        });
+      }
     })();
   </script>
 
