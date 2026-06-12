@@ -34,3 +34,12 @@ debug.js
 
 # Git worktrees (local dev only)
 .worktrees/
+
+# AI assistant plans / memory
+.opencode/
+
+# Playwright MCP runtime artifacts (screenshots, console logs, page snapshots)
+.playwright-mcp/
+
+# Scratch / debug scripts (not part of the published app)
+scratch/
