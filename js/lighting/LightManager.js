@@ -13,10 +13,11 @@ export function buildLights(scene) {
   sun.position.set(50, 80, 30);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = -80;
-  sun.shadow.camera.right = 80;
-  sun.shadow.camera.top = 80;
-  sun.shadow.camera.bottom = -80;
+  sun.shadow.camera.left = -110;
+  sun.shadow.camera.right = 110;
+  sun.shadow.camera.top = 110;
+  sun.shadow.camera.bottom = -110;
+  sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.camera.near = 0.1;
   sun.shadow.camera.far = 250;
   sun.shadow.bias = -0.001;
