@@ -13,9 +13,9 @@ import { eventBus } from '../utils/EventBus.js';
 //
 // Time convention: t ∈ [0, 1] where
 //   0.00 = midnight       sun at -90° (under horizon)
-//   0.25 = sunrise        sun on +X horizon
+//   0.25 = sunrise        sun on -X horizon (west)
 //   0.50 = noon           sun overhead
-//   0.75 = sunset         sun on -X horizon
+//   0.75 = sunset         sun on +X horizon (east)
 //   1.00 = midnight (wraps)
 
 export class DayNightCycle {
@@ -62,10 +62,10 @@ export class DayNightCycle {
 
   _apply() {
     const t = this.t;
-    // Sun travels east → up → west → underground.
+    // Sun travels west → up → east → underground.
     const sunAngle = (t - 0.25) * Math.PI * 2;
     const sunY = Math.sin(sunAngle);
-    const sunX = Math.cos(sunAngle);
+    const sunX = -Math.cos(sunAngle);
     const sunZ = 0.25; // small southward bias so shadows aren't axis-aligned
 
     this._sunDir.set(sunX, sunY, sunZ).normalize();
