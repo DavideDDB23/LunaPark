@@ -154,6 +154,20 @@ Applied painted flat-colour texture (different colours per visitor for variety).
 | Fence segment | Merged | — | Merged (same, frustum culled) |
 | Carousel horse | Full GLB | Low-poly | BoxGeometry |
 | Visitor | Full | Low-poly | Single cylinder |
+| Train wagon | Full GLB | Full GLB | Procedural fallback |
+
+---
+
+## External Models — Actually Used
+
+| Model | Source | License | File |
+|---|---|---|---|
+| Train (Wacky Worm Coaster) | Sketchfab (animated kiddie coaster) | CC | `assets/models/WormCoaster/wacky_worm.glb` |
+| Stylized Carnival Booth | Sketchfab (Keyotine) | CC | `assets/models/stylized_carnival_booth.glb` |
+| Vegetation (trees, bushes, etc.) | Quaternius | CC0 | `assets/models/` (various) |
+| Visitor templates | Quaternius (Universal Base Characters) | CC0 | `assets/models/` (various) |
+| Roller Coaster Pack | Poly Pizza | CC0 | `assets/models/roller_coaster_pack.glb` |
+| Kenney Train Kit (other carriages) | [Kenney.nl](https://kenney.nl/assets/train-kit) | CC0 | `assets/models/KenneyTrainKit/` |
 
 ---
 
