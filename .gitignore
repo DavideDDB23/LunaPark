@@ -43,3 +43,13 @@ debug.js
 
 # Scratch / debug scripts (not part of the published app)
 scratch/
+
+# TODO export artifacts
+TODO.html
+TODO_files/
+
+# Screenshots (ad-hoc captures, not committed)
+screenshot-*.png
+
+# Test output (runtime artifacts)
+tests/out/

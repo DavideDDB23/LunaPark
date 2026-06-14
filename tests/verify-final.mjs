@@ -8,7 +8,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
 page.on('pageerror', (e) => console.log('[error]', e.message));
 page.on('console', (m) => {
-  if (m.type() === 'error' || m.type() === 'warning') console.log('[page]', m.text());
+  console.log('[page]', m.text());
 });
 
 console.log('Navigating to Luna Park...');
@@ -22,11 +22,29 @@ await page.waitForTimeout(2000);
 console.log('Positioning camera to view river crossing and East fence...');
 await page.evaluate(() => {
   if (window.__lp) {
-    const { camera, controls } = window.__lp;
-    // Look at river crossing [82, 5.5, 0] and East fence corridor [92, 0, 30] from a good angle
+    const { camera, controls, scene, THREE } = window.__lp;
     camera.position.set(40, 28, 65);
     controls.target.set(85, 3, 20);
     controls.update();
+
+    const trainGroup = scene.getObjectByName('train');
+    if (trainGroup) {
+      console.log('Found train group');
+      trainGroup.traverse((child) => {
+        if (child.isInstancedMesh && child.geometry && child.geometry.type === 'CylinderGeometry') {
+          console.log('Found pillars InstancedMesh, count =', child.count);
+          const matrix = new THREE.Matrix4();
+          const position = new THREE.Vector3();
+          for (let i = 0; i < child.count; i++) {
+            child.getMatrixAt(i, matrix);
+            position.setFromMatrixPosition(matrix);
+            console.log(`Pillar ${i}: [${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}]`);
+          }
+        }
+      });
+    } else {
+      console.log('Train group not found');
+    }
   } else {
     console.error('window.__lp not found!');
   }
