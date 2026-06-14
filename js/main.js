@@ -21,7 +21,7 @@ import { buildRideHint } from "./environment/RideHints.js";
 import { buildVisitors } from "./environment/Visitors.js";
 import { buildFireworks } from "./environment/Fireworks.js";
 import { buildBalloon } from "./environment/Balloon.js";
-import { buildTrain } from "./environment/Train.js";
+import { buildTrain } from "./environment/Train.js?v=11";
 import { buildShootingGallery } from "./environment/ShootingGallery.js";
 import { DayNightCycle } from "./lighting/DayNightCycle.js";
 import { CameraManager } from './camera/CameraManager.js';
@@ -239,6 +239,29 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
+  const tr = environmentGroup.getObjectByName('train');
+  if (tr) rides.push({
+    group: tr,
+    getFpvTarget: () => tr.userData.controller.cars[0]?.mesh || null,
+    getFpvOffset: () => new THREE.Vector3(0, 1.8, -0.3),
+    getRiders: () => [],
+    getFpvCameraPos: (fpvTarget, targetVec) => {
+      // Place the camera inside the locomotive cabin (slightly high, toward the back)
+      fpvTmpVec.set(0, 1.7, -0.4);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      // Look forward along the direction of the locomotive
+      fpvTmpVec.set(0, 1.5, 8.0);
+      fpvTarget.localToWorld(fpvTmpVec);
+      targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      fpvTarget.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+    }
+  });
   return rides;
 });
 let autoAdvance = true;
@@ -285,7 +308,7 @@ async function init() {
     { title: 'GOLDEN CAROUSEL', theme: 'carousel',  groupName: 'carousel',    sign: [22, 0, -26],  panel: [15, 0, -20] },
     { title: 'TURBO TAGADA',    theme: 'tagada',    groupName: 'tagada',      sign: [-22, 0, 28],  panel: [-15, 0, 34] },
     { title: 'SCENIC RAILWAY',  theme: 'train',     groupName: 'train',       sign: [76, 0, -65],   panel: [68, 0, -60] },
-    { title: 'SHOOTING GALLERY', theme: 'gallery',  groupName: 'shootingGallery', sign: [22, 0, 20], panel: [18, 0, 28] },
+    { title: 'SHOOTING GALLERY', theme: 'gallery',  groupName: 'shootingGallery', sign: [11, 0, 20], panel: null },
   ];
   // Tree keep-out [x, z, radius] for each frontage so the signs/panels stay visible from the path:
   // a circle at the sign, another IN FRONT of it (along its facing dir, toward the path), + the panel.
@@ -295,7 +318,9 @@ async function init() {
     const fx = Math.sin(yaw), fz = Math.cos(yaw); // unit vector the sign faces (toward the path)
     signKeepOut.push([f.sign[0], f.sign[2], 10.0]);
     signKeepOut.push([f.sign[0] + fx * 9, f.sign[2] + fz * 9, 8.0]);
-    signKeepOut.push([f.panel[0], f.panel[2], 4.5]);
+    if (f.panel) {
+      signKeepOut.push([f.panel[0], f.panel[2], 4.5]);
+    }
   }
 
   
@@ -350,7 +375,7 @@ async function init() {
 
   // Shooting gallery — interactive FPV aim mode with targets
   const shootingGallery = await buildShootingGallery({ camera, renderer, controls });
-  shootingGallery.position.set(30, 0, 25);
+  shootingGallery.position.set(12, 0, 24);
   environmentGroup.add(shootingGallery);
   window.__lp.shootingGallery = shootingGallery.userData.controller;
 
@@ -391,7 +416,9 @@ async function init() {
     }
 
     // Floating interaction hint above the panel — fades in when the camera is near.
-    const hint = buildRideHint({ position: [panel[0], 9.2, panel[2]] });
+    const hintPos = panel ? [panel[0], 9.2, panel[2]] : [sign[0], 9.2, sign[2]];
+    const hint = buildRideHint({ position: hintPos });
+    hint.name = 'rideHint_' + groupName;
     environmentGroup.add(hint);
     rideHints.push(hint);
     return s;
@@ -437,7 +464,11 @@ async function init() {
   interactionManager.registerClickable(tagada.userData.controller.panel);
   interactionManager.registerClickable(coaster.userData.controller.panel);
   interactionManager.registerClickable(train.userData.controller.panel);
-  interactionManager.registerClickable(shootingGallery.userData.controller.panel);
+  
+  const sgHint = rideHints.find(h => h.name === 'rideHint_shootingGallery');
+  if (sgHint) {
+    interactionManager.registerClickable(sgHint);
+  }
 
   // Register stage spotlight for manual toggle
   interactionManager.registerClickable(stage.userData.spotLight);
@@ -486,7 +517,15 @@ async function init() {
       if (tagada.userData.controller.panel === curr) tagada.userData.controller.toggle();
       if (coaster.userData.controller.panel === curr) coaster.userData.controller.toggle();
       if (train.userData.controller.panel === curr) train.userData.controller.toggle();
-      if (shootingGallery.userData.controller.panel === curr) shootingGallery.userData.controller.toggle();
+      return;
+    }
+
+    let checkHint = object;
+    while (checkHint && checkHint.name !== 'rideHint_shootingGallery') {
+      checkHint = checkHint.parent;
+    }
+    if (checkHint && checkHint.name === 'rideHint_shootingGallery') {
+      shootingGallery.userData.controller.enterAimMode();
       return;
     }
 
@@ -561,7 +600,7 @@ async function init() {
     if (e.code === 'KeyT') {
       const sg = shootingGallery.userData.controller;
       if (sg && !sg.aimMode) {
-        const dist = camera.position.distanceTo(new THREE.Vector3(30, 2.5, 25));
+        const dist = camera.position.distanceTo(new THREE.Vector3(12, 0, 24));
         if (dist < 50) {
           sg.enterAimMode();
         }

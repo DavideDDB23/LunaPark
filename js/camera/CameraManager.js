@@ -5,7 +5,7 @@ const PRESETS = {
   1: { pos: [70, 60, 70],   target: [0, 0, 0] },     // overview
   2: { pos: [-10, 25, -10], target: [-50, 22, -50] }, // ferris wheel
   3: { pos: [15, 18, -15],  target: [40, 5, -40] },   // carousel
-  4: { pos: [14, 24, 12],   target: [52, 10, 54] },   // roller coaster
+  4: { pos: [0, 30, -5],    target: [52, 10, 54] },   // roller coaster
   5: { pos: [-15, 18, 15],  target: [-40, 0, 40] },   // tagada
   6: { pos: [0, 14, -58],   target: [0, 4, -88] },    // stage
 };
@@ -81,6 +81,18 @@ export class CameraManager {
       this.controls.target.clone(),
       targetPos.clone()
     );
+  }
+
+  flyToPosition(pos, targetLook, onComplete) {
+    this._startFlight(
+      this.camera.position.clone(),
+      pos,
+      this.controls.target.clone(),
+      targetLook
+    );
+    if (onComplete) {
+      setTimeout(onComplete, FLY_DURATION * 1000 + 50);
+    }
   }
 
   enterFPV() {
@@ -305,6 +317,7 @@ export class CameraManager {
 
   _onPointerDown(ev) {
     if (ev.button !== 0 || this.state !== 'orbit') return;
+    if (document.pointerLockElement) return;
     if (ev.target !== this.renderer.domElement) return;
     this._clickStart.x = ev.clientX;
     this._clickStart.y = ev.clientY;

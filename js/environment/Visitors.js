@@ -63,11 +63,11 @@ const GAIT = {
   hipStand: 0.90,    // hip-joint height standing (lowered to prevent IK snapping)
   hipWalk: 0.86,     // mean hip-joint height walking (lowered to keep knees soft)
   bob: 0.022,        // pelvis vertical bob (increased slightly to soften weight transfer)
-  sway: 0.020,       // pelvis lateral weight shift
-  pelvYaw: 0.05, pelvRoll: 0.02, // reduced twisting
+  sway: 0.024,       // pelvis lateral weight shift (slightly increased for weight transfer clarity)
+  pelvYaw: 0.06, pelvRoll: 0.04, // slightly increased for natural hip movement
   lean: 0.02, leanV: 0.03,   // forward trunk lean
-  armSwing: 0.45, armLag: 0.12, // restored to full swing amplitude
-  elbow: 0.05, elbowSwing: 0.10,
+  armSwing: 0.48, armLag: 0.12, // slightly wider swing
+  elbow: 0.10, elbowSwing: 0.22, // increased elbow swing for more dynamic arm motion
   footOut: 0.07,     // out-toeing (rad)
   stepWidth: 0.88,   // foot lateral spacing, × hip-joint half-span
   heelPitch: 0.15,   // dorsiflexion at heel strike (rad)
@@ -389,10 +389,11 @@ function applyGaitPose(w, time) {
   const bob = Math.cos(4 * Math.PI * (p - 0.31)) * GAIT.bob * L * (0.6 + 0.4 * vNorm);
   const hipY = lerp(rig.ankleH + GAIT.hipStand * L + breathe * 0.004 * L,
                     rig.ankleH + GAIT.hipWalk * L + bob, mb);
+  // Invert swayX and roll to swing/tilt pelvis towards the weight-bearing leg (biomechanically correct)
   const swayX = lerp(Math.sin(time * 0.5 + seed * 5) * 0.018 * L,
-                     Math.cos(TWO_PI * (p - 0.31)) * GAIT.sway * L, mb);
+                     -Math.cos(TWO_PI * (p - 0.31)) * GAIT.sway * L, mb);
   const yaw = -GAIT.pelvYaw * Math.cos(TWO_PI * p) * mb * vNorm;
-  const roll = GAIT.pelvRoll * Math.cos(TWO_PI * (p - 0.31)) * mb + w.lean;
+  const roll = -GAIT.pelvRoll * Math.cos(TWO_PI * (p - 0.31)) * mb + w.lean;
   _qPelv.setFromAxisAngle(Y_UP, yaw)
     .multiply(_qSpin.setFromAxisAngle(X_AX, 0.035 * mb))
     .multiply(_qT.setFromAxisAngle(FWD, roll));
@@ -419,7 +420,8 @@ function applyGaitPose(w, time) {
   // ── trunk, head, arms ──
   const counter = -1.6 * yaw;                     // shoulders counter-rotate
   const lean = (GAIT.lean + GAIT.leanV * vNorm) * mb + 0.012 * breathe;
-  const bounce = 0.014 * Math.cos(4 * Math.PI * p + 0.7) * mb;
+  // Align chest bounce in opposition to hip bobbing (maximum lean at double support, minimum at mid-stance)
+  const bounce = -0.012 * Math.cos(4 * Math.PI * (p - 0.31)) * mb;
   const U = rig.upper;
 
   // Idle action overlay — only while standing, eased in by w.idleW.

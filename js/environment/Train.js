@@ -3,7 +3,6 @@ import { ControlPanel } from './ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
 import { isNightNow } from '../utils/dayNight.js';
 import { loadGLB } from '../utils/loaders.js';
-import { loadVisitorTemplates, makeRider, updateRider, ACTIONS_SEATED_GENERAL } from './Passengers.js';
 
 // ── CatmullRom control points for the train ring ─
 const CONTROL_POINTS = [
@@ -11,13 +10,15 @@ const CONTROL_POINTS = [
   new THREE.Vector3(45, 1.2, -80),    // NE inner curve (outside Carousel)
   new THREE.Vector3(82, 1.2, -82),    // NE outer corner curve
   new THREE.Vector3(92, 0.3, -40),    // East-North (near East fence)
-  new THREE.Vector3(92, 5.5, 0),      // East River crossing (elevated)
-  new THREE.Vector3(92, 1.2, 35),     // East-South (near East fence, next to Coaster, ground level)
-  new THREE.Vector3(80, 1.2, 52),     // Westward bulge midpoint (moderate curve through coaster zone)
-  new THREE.Vector3(92, 1.2, 70),     // SE outer curve (near East fence, ground level)
-  new THREE.Vector3(82, 1.2, 86),     // SE corner curve (curves West, ground level)
-  new THREE.Vector3(45, 5.5, 86),     // S transition to elevate (starts climbing and heading West)
-  new THREE.Vector3(0, 5.5, 80),      // South crossing (elevated over path at Z=80)
+  new THREE.Vector3(88, 3.5, -12),    // NEW: East transition (descending from East-North)
+  new THREE.Vector3(72, 5.5, 12),     // NEW: East River crossing (elevated)
+  new THREE.Vector3(45, 8.5, 18),     // NEW: Curve north of coaster, elevated, climbing
+  new THREE.Vector3(22, 11.5, 26),    // NEW: High scenic bridge section, well north of coaster (y=11.5)
+  new THREE.Vector3(15, 11.5, 34),    // NEW: High flyover heading to path crossing (y=11.5)
+  new THREE.Vector3(0, 11.5, 39),     // NEW: High street crossing, elevated over central path at Z=39 (y=11.5)
+  new THREE.Vector3(-6.0, 11.5, 43.5), // Sostituisci il vecchio (-3, 11.5, 40)
+  new THREE.Vector3(-18, 11.5, 60),   // NEW: High curve between trees (first green circle) (y=11.5)
+  new THREE.Vector3(-50, 6.5, 78),    // NEW: South-West transition (descending after first green circle)
   new THREE.Vector3(-85, 1.2, 92),    // SW outer corner curve (outside Tagada)
   new THREE.Vector3(-92, 0.3, 40),    // West-South (near West fence)
   new THREE.Vector3(-92, 5.5, 0),     // West River crossing (elevated)
@@ -27,9 +28,6 @@ const CONTROL_POINTS = [
 ];
 
 const TRAIN_SPEED = 6;
-const CAR_SPACING = 5.5;
-const NUM_WAGONS = 3;
-const TOTAL_CARS = 1 + NUM_WAGONS;
 
 export async function buildTrain({ anisotropy = 8 } = {}) {
   const group = new THREE.Group();
@@ -106,9 +104,9 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     const t = i / sleeperCount;
     const p = curve.getPointAt(t);
     // Skip if not elevated, or if over the main street (X centered at 0, width ~6) or the river (Z centered at 0, width ~20)
-    // Also skip placing pillars inside the Roller Coaster area (X > 20, Z > 15) to avoid clipping with coaster structures,
-    // and near the Shooting Gallery panel (around X=18, Z=28)
-    if (p.y > 0.6 && Math.abs(p.x) >= 5.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 15.0) && !(Math.abs(p.x - 18.0) < 4.0 && Math.abs(p.z - 28.0) < 4.0)) {
+    // Also skip placing pillars inside the Roller Coaster area (X > 20, Z > 30) to avoid clipping with coaster structures,
+    // and near the Shooting Gallery (around X=12, Z=24)
+    if (p.y > 0.6 && Math.abs(p.x) >= 4.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 30.0) && !(Math.abs(p.x - 12.0) < 5.0 && Math.abs(p.z - 24.0) < 5.0)) {
       pillarCount += 2;
     }
   }
@@ -128,7 +126,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     const t = i / sleeperCount;
     const p = curve.getPointAt(t);
     
-    if (p.y > 0.6 && Math.abs(p.x) >= 5.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 15.0) && !(Math.abs(p.x - 18.0) < 4.0 && Math.abs(p.z - 28.0) < 4.0)) {
+    if (p.y > 0.6 && Math.abs(p.x) >= 4.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 30.0) && !(Math.abs(p.x - 12.0) < 5.0 && Math.abs(p.z - 24.0) < 5.0)) {
       curve.getTangentAt(t, tempTangent);
       tempRight.crossVectors(tempTangent, upVec).normalize();
       
@@ -153,225 +151,119 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
   }
   group.add(pillars);
 
-  // ── Load Assets ──
-  let trainModel;
-  try {
-    const gltf = await loadGLB('assets/models/train.glb');
-    trainModel = gltf.scene;
-    trainModel.scale.set(0.6, 0.6, 0.6); // scale appropriately
-    trainModel.rotation.y = Math.PI / 2; // point +Z forward based on orientation constraint
-    
-    // Process model to ensure materials and shadows
-    trainModel.traverse(child => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (child.material) {
-          child.material = child.material.clone();
-        }
-      }
-    });
-  } catch (e) {
-    console.warn("Could not load train.glb, falling back to procedural", e);
-  }
-
-  const templates = await loadVisitorTemplates();
-  const passengers = [];
-
-  // ── Build Train Cars ──
+  // ── Load Wacky Worm Coaster Model (split into individual wagons) ──
   const cars = [];
   const nightLights = [];
-  const carMaterials = [
-    new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.7, metalness: 0.3 }),
-    new THREE.MeshStandardMaterial({ color: 0x2244cc, roughness: 0.7, metalness: 0.2 }),
-    new THREE.MeshStandardMaterial({ color: 0xcccc22, roughness: 0.7, metalness: 0.2 }),
-    new THREE.MeshStandardMaterial({ color: 0x22aa44, roughness: 0.7, metalness: 0.2 }),
-  ];
 
-  for (let i = 0; i < TOTAL_CARS; i++) {
-    const carGroup = new THREE.Group();
-    const isLoco = i === 0;
+  try {
+    const gltf = await loadGLB('assets/models/WormCoaster/wacky_worm.glb');
+    const trainModel = gltf.scene;
 
-    if (isLoco && trainModel) {
-      const loco = trainModel.clone();
-      loco.position.y = 0.5; // sit on tracks
-      carGroup.add(loco);
-
-      // Headlight/Spotlight
-      const spotLight = new THREE.SpotLight(0xffffee, 0, 50, Math.PI / 5, 0.5, 1.5);
-      spotLight.position.set(0, 2.5, 3.0);
-      spotLight.castShadow = true;
-      spotLight.shadow.mapSize.width = 512;
-      spotLight.shadow.mapSize.height = 512;
-      spotLight.shadow.camera.near = 0.5;
-      spotLight.shadow.camera.far = 40;
-      spotLight.shadow.bias = -0.002;
-      const target = new THREE.Object3D();
-      target.position.set(0, 1.0, 15);
-      carGroup.add(spotLight);
-      carGroup.add(target);
-      spotLight.target = target;
-      
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), new THREE.MeshStandardMaterial({ emissive: 0xffffee, emissiveIntensity: 0 }));
-      bulb.position.copy(spotLight.position);
-      carGroup.add(bulb);
-
-      nightLights.push({ light: spotLight, mesh: bulb, type: 'spot' });
-
-    } else {
-      // Detailed Procedural Open Wagon
-      const color = carMaterials[i].color;
-      
-      const chassisMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
-      const woodMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.7, metalness: 0.1 });
-      const benchMat = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.9 });
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.3 });
-      const ironMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.4 });
-      
-      // 1. Chassis
-      const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.15, 4.4), chassisMat);
-      chassis.position.y = 0.4;
-      chassis.castShadow = true; chassis.receiveShadow = true;
-      carGroup.add(chassis);
-      
-      // 2. Axles
-      for (const z of [-1.5, 1.5]) {
-        const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 8), ironMat);
-        axle.rotation.z = Math.PI / 2;
-        axle.position.set(0, 0.4, z);
-        carGroup.add(axle);
+    // Remove track nodes (project has custom track)
+    const trackNodes = [];
+    trainModel.traverse((node) => {
+      if (node.name && node.name.startsWith('track')) {
+        trackNodes.push(node);
       }
-      
-      // 3. Wheels
-      for (const [wx, wz] of [[-1.1, 1.5], [1.1, 1.5], [-1.1, -1.5], [1.1, -1.5]]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.2, 16), wheelMat);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(wx, 0.4, wz);
-        wheel.castShadow = true;
-        carGroup.add(wheel);
+    });
+    trackNodes.forEach((node) => {
+      if (node.parent) {
+        node.parent.remove(node);
       }
-      
-      // 4. Open Tub / Body (5 panels)
-      const wallH = 1.0;
-      const wallT = 0.12; // thickness
-      
-      // Floor
-      const floor = new THREE.Mesh(new THREE.BoxGeometry(2.0, wallT, 4.2), woodMat);
-      floor.position.y = 0.4 + 0.075 + wallT/2;
-      floor.castShadow = true; floor.receiveShadow = true;
-      carGroup.add(floor);
-      
-      // Left Wall
-      const wallL = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, 4.2), woodMat);
-      wallL.position.set(-1.0 + wallT/2, 0.4 + 0.075 + wallH/2, 0);
-      wallL.castShadow = true; wallL.receiveShadow = true;
-      carGroup.add(wallL);
-      
-      // Right Wall
-      const wallR = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, 4.2), woodMat);
-      wallR.position.set(1.0 - wallT/2, 0.4 + 0.075 + wallH/2, 0);
-      wallR.castShadow = true; wallR.receiveShadow = true;
-      carGroup.add(wallR);
-      
-      // Front Wall
-      const wallF = new THREE.Mesh(new THREE.BoxGeometry(2.0, wallH, wallT), woodMat);
-      wallF.position.set(0, 0.4 + 0.075 + wallH/2, 2.1 - wallT/2);
-      wallF.castShadow = true; wallF.receiveShadow = true;
-      carGroup.add(wallF);
-      
-      // Back Wall
-      const wallB = new THREE.Mesh(new THREE.BoxGeometry(2.0, wallH, wallT), woodMat);
-      wallB.position.set(0, 0.4 + 0.075 + wallH/2, -2.1 + wallT/2);
-      wallB.castShadow = true; wallB.receiveShadow = true;
-      carGroup.add(wallB);
-      
-      // Metal corner brackets (iron/metallic accents for low-poly detail)
-      for (const cx of [-0.98, 0.98]) {
-        for (const cz of [-2.08, 2.08]) {
-          const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.15, wallH, 0.15), ironMat);
-          bracket.position.set(cx, 0.4 + 0.075 + wallH/2, cz);
-          carGroup.add(bracket);
+    });
+
+    // Reset pre-applied transforms on coaster nodes (scale=0.01, rotation quaternions)
+    // Keep translations (relative positions of carriages)
+    trainModel.traverse((node) => {
+      if (node.isMesh) return;
+      // Reset scale from 0.01 to 1.0
+      if (Math.abs(node.scale.x - 0.01) < 0.001) {
+        node.scale.set(1, 1, 1);
+      }
+      // Reset rotation to identity (clear quaternion)
+      node.quaternion.identity();
+      node.rotation.set(0, 0, 0);
+      // Reset matrix to force recalculation
+      node.matrix.identity();
+      node.matrixAutoUpdate = true;
+    });
+
+    // Replace materials with standard PBR (original uses KHR_materials_pbrSpecularGlossiness with white diffuse)
+    const carriageColors = {
+      'coaster front': 0xcc2222,    // head - red
+      'coaster back': 0x2244cc,     // first wagon - blue
+      'coaster back001': 0xcccc22,  // second wagon - yellow
+      'coaster back002': 0x22aa44,  // third wagon - green
+      'coaster back003': 0xcc6622,  // fourth wagon - orange
+    };
+
+    // ── 1. Identify wagon nodes (direct children of RootNode, exclude track) ──
+    const wagonNodes = [];
+    trainModel.traverse((node) => {
+      if (node.name && node.name.startsWith('coaster') && node.parent?.name === 'RootNode') {
+        wagonNodes.push(node);
+      }
+    });
+
+    // ── 2. Spatial sort by Z position (descending) ──
+    wagonNodes.sort((a, b) => b.position.z - a.position.z);
+
+    // ── 3. Deep-clone + zero-out transforms (fix flying wagons) ──
+    const SCALE = 0.030;
+    const CAR_SPACING = 4.0;
+    const wagonGroups = [];
+
+    for (const wn of wagonNodes) {
+      const subtree = wn.clone(true);
+      const wagonGroup = new THREE.Group();
+      const wnColor = carriageColors[wn.name] ?? 0xcccccc;
+
+      subtree.traverse((child) => {
+        if (child.isMesh) {
+          child.position.set(0, 0, 0);
+          child.rotation.set(0, 0, 0);
+          child.quaternion.identity();
+          child.scale.set(1, 1, 1);
+          child.matrix.identity();
+          child.matrixAutoUpdate = true;
+          child.castShadow = true;
+          child.receiveShadow = true;
+          child.material = new THREE.MeshStandardMaterial({
+            color: wnColor,
+            roughness: 0.7,
+            metalness: 0.1,
+            envMapIntensity: 0,
+          });
+          wagonGroup.add(child);
         }
-      }
-
-      // Benches (seats inside)
-      const bzVals = [-1.1, 1.1];
-      for (const bz of bzVals) {
-        const bench = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 0.6), benchMat);
-        bench.position.set(0, 0.4 + 0.075 + 0.125, bz);
-        bench.castShadow = true;
-        carGroup.add(bench);
-        
-        // Bench backrest
-        const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 0.08), benchMat);
-        backrest.position.set(0, 0.4 + 0.075 + 0.35, bz + (bz > 0 ? -0.26 : 0.26));
-        backrest.castShadow = true;
-        carGroup.add(backrest);
-        
-        // Add passengers seated correctly on the benches
-        if (templates && templates.length > 0) {
-          const tmpl1 = templates[Math.floor(Math.random() * templates.length)];
-          const p1 = makeRider(tmpl1, 1.2, { pool: ACTIONS_SEATED_GENERAL });
-          p1.pivot.position.set(-0.45, 0.4 + 0.075 + 0.15, bz); 
-          p1.pivot.rotation.y = bz > 0 ? 0 : Math.PI; 
-          carGroup.add(p1.pivot);
-          passengers.push(p1);
-
-          const tmpl2 = templates[Math.floor(Math.random() * templates.length)];
-          const p2 = makeRider(tmpl2, 1.2, { pool: ACTIONS_SEATED_GENERAL });
-          p2.pivot.position.set(0.45, 0.4 + 0.075 + 0.15, bz); 
-          p2.pivot.rotation.y = bz > 0 ? 0 : Math.PI; 
-          carGroup.add(p2.pivot);
-          passengers.push(p2);
-        }
-      }
-
-      // Decorative Light Bulbs along the top side walls of each wagon
-      const wagonBulbs = [];
-      const bulbGeom = new THREE.SphereGeometry(0.12, 8, 8);
-      const bulbColors = [0xff3333, 0x33ff33, 0x3333ff, 0xffff33];
-      const bulbColor = bulbColors[i % bulbColors.length];
-      const bulbMat = new THREE.MeshStandardMaterial({
-        color: bulbColor,
-        emissive: bulbColor,
-        emissiveIntensity: 0
       });
 
-      const bulbPositions = [
-        [-0.95, 0.4 + 0.075 + wallH, -2.0],
-        [0.95, 0.4 + 0.075 + wallH, -2.0],
-        [-0.95, 0.4 + 0.075 + wallH, 2.0],
-        [0.95, 0.4 + 0.075 + wallH, 2.0]
-      ];
+      // Restore upright orientation (model authored lying down, +Z is "up" in model)
+      wagonGroup.rotation.x = -Math.PI / 2;
+      wagonGroup.updateMatrixWorld(true);
 
-      for (const pos of bulbPositions) {
-        const bMesh = new THREE.Mesh(bulbGeom, bulbMat.clone());
-        bMesh.position.set(pos[0], pos[1], pos[2]);
-        carGroup.add(bMesh);
-        wagonBulbs.push(bMesh);
-      }
+      // Center: X/Z at geometric center, bottom at Y=0
+      const bbox = new THREE.Box3().setFromObject(wagonGroup);
+      const center = new THREE.Vector3();
+      bbox.getCenter(center);
+      wagonGroup.position.set(-center.x, -bbox.min.y, -center.z);
 
-      // Add a Central warm PointLight underneath/inside
-      const bulbCenter = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshStandardMaterial({ emissive: 0xffcc66, emissiveIntensity: 0 }));
-      bulbCenter.position.set(0, 0.4 + 0.075 + wallH + 0.1, 0);
-      carGroup.add(bulbCenter);
-      const pointLight = new THREE.PointLight(0xffcc66, 0, 10);
-      pointLight.position.copy(bulbCenter.position);
-      carGroup.add(pointLight);
-      
-      nightLights.push({ light: pointLight, mesh: bulbCenter, type: 'point', phase: i });
-      nightLights.push({ type: 'wagon-bulbs', meshes: wagonBulbs, color: new THREE.Color(bulbColor), phase: i });
+      const wrapper = new THREE.Group();
+      wrapper.scale.setScalar(SCALE);
+      wrapper.add(wagonGroup);
+      wrapper.updateMatrixWorld(true);
+
+      wagonGroups.push(wrapper);
     }
 
-    if (i > 0) {
-      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), new THREE.MeshStandardMaterial({ color: 0x555555 }));
-      coupling.rotation.x = Math.PI / 2;
-      coupling.position.set(0, 0.5, -2.8); // sit on chassis height
-      carGroup.add(coupling);
+    // ── 5. Populate cars array with progressive offsets ──
+    for (let i = 0; i < wagonGroups.length; i++) {
+      group.add(wagonGroups[i]);
+      cars.push({ mesh: wagonGroups[i], offset: i * CAR_SPACING });
     }
 
-    group.add(carGroup);
-    cars.push({ mesh: carGroup, offset: i * CAR_SPACING });
+  } catch (e) {
+    console.warn('Could not load wacky_worm.glb', e);
   }
 
   // ── Control Panel ──
@@ -392,6 +284,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     toggle() { panel.toggle(); },
     get speedMultiplier() { return speedScale; },
     set speedMultiplier(v) { speedScale = v; },
+    cars: cars,
   };
 
   eventBus.on('speed-scroll', ({ rideId, delta }) => {
@@ -415,6 +308,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
       if (uLead < 0) uLead += 1;
     }
 
+    // Position each wagon along curve
     for (let i = 0; i < cars.length; i++) {
       const carU = (uLead - (cars[i].offset / trackLength) + 1) % 1;
       const pos = curve.getPointAt(carU);
@@ -430,9 +324,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
       cars[i].mesh.rotateZ(cross.y * 2);
     }
 
-    for (const p of passengers) {
-      updateRider(p, time);
-    }
+    // No passenger updates needed (passengers are part of the model)
 
     for (const nl of nightLights) {
       if (nl.type === 'spot') {

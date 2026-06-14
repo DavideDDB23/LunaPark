@@ -336,11 +336,9 @@ export function buildFireworks() {
     group.add(b);
   }
 
-  let isNight = false;
   let nightFactor = 0;
   
   eventBus.on('time-phase-change', (data) => {
-    isNight = data.isNight;
     nightFactor = data.nightFactor;
   });
 
@@ -351,14 +349,10 @@ export function buildFireworks() {
   let nextSporadicTime = 0;
 
   eventBus.on('trigger-fireworks-show', () => {
-    if (isNight) {
-      showMode = true;
-      showPhase = 0;
-      showTimer = 0;
-      console.log("🎆 Fireworks Show Started!");
-    } else {
-      console.log("Fireworks show can only start at night.");
-    }
+    showMode = true;
+    showPhase = 0;
+    showTimer = 0;
+    console.log("🎆 Fireworks Show Started!");
   });
 
   function getFreeBurst() {
@@ -377,14 +371,12 @@ export function buildFireworks() {
     const t = performance.now() / 1000;
     
     // Update global opacity based on night
-    const opacity = isNight ? 0.7 + 0.3 * nightFactor : 0;
+    const opacity = 0.55 + 0.45 * nightFactor;
     for (const b of bursts) {
       b.mat.uniforms.uOpacity.value = opacity;
       b.rocketMat.opacity = opacity;
       b.update(t, delta);
     }
-
-    if (!isNight) return;
 
     if (showMode) {
       // --- Choreographed Show ---
