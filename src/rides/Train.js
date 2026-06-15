@@ -335,7 +335,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
 
       const sx = 0; // centered seating
       const sy = 78.0; // raised to sit on the seat cushion (profile minY = 77.7)
-      const sz = -38.0; // shifted slightly forward to prevent clipping into backrest (originally -50.0)
+      const sz = -14.0; // shifted forward so legs hang down in front of seat cushion (originally -35.0 / -50.0)
 
       rider.fig.updateMatrixWorld(true);
       const hipBone = rider.fig.getObjectByName('Hips');

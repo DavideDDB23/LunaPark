@@ -188,8 +188,10 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
       const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
       const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
-      const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
-      fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
+      const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
+      // After the flipZ correction, the passenger faces -Z in seat-local space (outward).
+      // Camera sits just behind the head, slightly outward (-Z).
+      fpvTmpVec.set(px, py + h * 0.82, pz - 0.15);
       const shake = tg.userData.controller.ease || 0;
       const tN = performance.now() * 0.001;
       fpvTmpVec.x += Math.sin(tN * 23.0) * 0.045 * shake;
@@ -203,10 +205,17 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
       const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
       const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
-      const pz = seat.rider ? seat.rider.pivot.position.z : 0.08;
-      fpvTmpVec.set(px, py + h * 0.82, pz + 10.0);
+      const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
+      // Look outward (-Z in seat-local space = away from disc centre).
+      fpvTmpVec.set(px, py + h * 0.82, pz - 10.0);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      // Use the seat's world Y axis as the camera up so the view stays
+      // right-side-up even when the disc tilts during the ride.
+      fpvTarget.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const co = environmentGroup.getObjectByName('coaster');
@@ -216,12 +225,12 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     getFpvOffset: () => new THREE.Vector3(0, 1.9, 0),
     getRiders: () => co.userData.controller.riders.slice(0, 2),
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0.17, 2.85, 0.5);
+      fpvTmpVec.set(0.17, 2.45, 0.5);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0.17, 2.35, 9.0);
+      fpvTmpVec.set(0.17, 1.9, 9.0);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
@@ -237,7 +246,7 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     getFpvOffset: () => new THREE.Vector3(0, 1.8, -0.3),
     getRiders: () => tr.userData.controller.riders ? tr.userData.controller.riders.slice(0, 1) : [],
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 136.0, -46.0); // unscaled eye height and cabin depth
+      fpvTmpVec.set(0, 136.0, -26.0); // unscaled eye height and cabin depth
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
