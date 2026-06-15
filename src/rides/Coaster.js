@@ -85,45 +85,87 @@ function extractCenterline(model) {
 
   const pos = railMesh.geometry.attributes.position;
   const nRings = Math.floor(pos.count / RAIL_RING);
-  const cen = new THREE.Vector3();
-  const raw = [];
+  const rawPts = [];
+  const rawUps = [];
+  
   for (let r = 0; r < nRings; r++) {
-    cen.set(0, 0, 0);
+    const cenLoc = new THREE.Vector3();
     for (let j = 0; j < RAIL_RING; j++) {
       const idx = r * RAIL_RING + j;
-      cen.x += pos.getX(idx); cen.y += pos.getY(idx); cen.z += pos.getZ(idx);
+      cenLoc.x += pos.getX(idx); cenLoc.y += pos.getY(idx); cenLoc.z += pos.getZ(idx);
     }
-    cen.multiplyScalar(1 / RAIL_RING);
-    railMesh.localToWorld(cen);           // ring centroid → world
-    raw.push(model.worldToLocal(cen.clone())); // → model-local (curve space)
+    cenLoc.multiplyScalar(1 / RAIL_RING);
+
+    railMesh.localToWorld(cenLoc);
+    const cenMod = model.worldToLocal(cenLoc.clone());
+
+    const prevU = rawUps.length > 0 ? rawUps[rawUps.length - 1] : null;
+    let bestU = null;
+    let bestDot = -Infinity;
+
+    for (let j = 0; j < RAIL_RING; j++) {
+      const idx = r * RAIL_RING + j;
+      const vLoc = new THREE.Vector3(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+      railMesh.localToWorld(vLoc);
+      const vMod = model.worldToLocal(vLoc);
+      const uDir = vMod.sub(cenMod).normalize();
+      
+      if (prevU) {
+        const dot = uDir.dot(prevU);
+        if (dot > bestDot) {
+          bestDot = dot;
+          bestU = uDir;
+        }
+      } else {
+        if (j === 0) bestU = uDir; // First ring fallback
+      }
+    }
+    
+    rawPts.push(cenMod);
+    rawUps.push(bestU);
   }
 
-  // Low-pass filter the raw centroids to remove high-frequency mesh vertex noise
-  const n = raw.length;
-  let current = raw.map(p => p.clone());
+  // Low-pass filter the points AND the ups to remove high-frequency mesh vertex noise
+  const n = rawPts.length;
+  let curPts = rawPts.map(p => p.clone());
+  let curUps = rawUps.map(p => p.clone());
+  
   const iterations = 8;
   for (let iter = 0; iter < iterations; iter++) {
-    const next = [];
+    const nxtPts = [], nxtUps = [];
     for (let i = 0; i < n; i++) {
-      const prev = current[(i - 1 + n) % n];
-      const curr = current[i];
-      const succ = current[(i + 1) % n];
-      next.push(new THREE.Vector3(
-        (prev.x + curr.x * 2 + succ.x) / 4,
-        (prev.y + curr.y * 2 + succ.y) / 4,
-        (prev.z + curr.z * 2 + succ.z) / 4
+      const prevP = curPts[(i - 1 + n) % n], currP = curPts[i], succP = curPts[(i + 1) % n];
+      nxtPts.push(new THREE.Vector3(
+        (prevP.x + currP.x * 2 + succP.x) / 4,
+        (prevP.y + currP.y * 2 + succP.y) / 4,
+        (prevP.z + currP.z * 2 + succP.z) / 4
       ));
+      
+      const prevU = curUps[(i - 1 + n) % n], currU = curUps[i], succU = curUps[(i + 1) % n];
+      nxtUps.push(new THREE.Vector3(
+        (prevU.x + currU.x * 2 + succU.x) / 4,
+        (prevU.y + currU.y * 2 + succU.y) / 4,
+        (prevU.z + currU.z * 2 + succU.z) / 4
+      ).normalize());
     }
-    current = next;
+    curPts = nxtPts;
+    curUps = nxtUps;
   }
 
   // Down-sample to a manageable control set; drop the closing point if it coincides with the start.
-  const stride = Math.max(1, Math.round(current.length / CURVE_SAMPLES));
-  const pts = [];
-  for (let i = 0; i < current.length; i += stride) pts.push(current[i]);
-  if (pts.length > 4 && pts[pts.length - 1].distanceTo(pts[0]) < 1e-3) pts.pop();
+  const stride = Math.max(1, Math.round(curPts.length / CURVE_SAMPLES));
+  const pts = [], ups = [];
+  for (let i = 0; i < curPts.length; i += stride) {
+    pts.push(curPts[i]);
+    ups.push(curUps[i]);
+  }
+  
+  if (pts.length > 4 && pts[pts.length - 1].distanceTo(pts[0]) < 1e-3) {
+    pts.pop();
+    ups.pop();
+  }
 
-  return pts;
+  return { pts, ups };
 }
 
 export async function buildCoaster({ position = [45, 0, 45], camera, renderer, anisotropy = 8 } = {}) {
@@ -147,55 +189,37 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   toRemove.forEach((o) => o.parent && o.parent.remove(o));
   model.updateMatrixWorld(true);
 
-  // ── Build the closed track curve from the rail geometry ──
-  const ctrlPts = extractCenterline(model);
+  // ── Build the closed track curve and twist curve from the rail geometry ──
+  const { pts: ctrlPts, ups: ctrlUps } = extractCenterline(model);
   const templateCartNode = model.getObjectByName('bumper_car_export_1001'); // dot stripped by loader
   if (!templateCartNode) throw new Error('Coaster: cart node "bumper_car_export_1001" not found');
   const curve = new THREE.CatmullRomCurve3(ctrlPts, true, 'catmullrom', 0.5);
   curve.arcLengthDivisions = 20000;
   const trackLen = curve.getLength();
+  
+  const upCurve = new THREE.CatmullRomCurve3(ctrlUps, true, 'catmullrom', 0.5);
 
-  // ── Precompute a rotation-minimizing (parallel-transport) frame field along the curve ──
-  const tangents = [];
-  for (let i = 0; i <= NUM_FRAMES; i++) tangents.push(curve.getTangentAt(i / NUM_FRAMES).normalize());
+  // ── Precompute the frame field capturing the physical banking of the mesh ──
+  const T0 = curve.getTangentAt(0).normalize();
+  const M0 = upCurve.getPointAt(0).normalize();
+  const U0 = new THREE.Vector3(0, 1, 0);
+  U0.projectOnPlane(T0).normalize();
+  if (U0.lengthSq() < 1e-6) U0.set(1, 0, 0).projectOnPlane(T0).normalize();
+  
+  const sinA = M0.clone().cross(U0).dot(T0);
+  const cosA = M0.dot(U0);
+  const twistOffset = Math.atan2(sinA, cosA);
 
-  const normals = [];
-  let ref = new THREE.Vector3(0, 1, 0);
-  if (Math.abs(tangents[0].dot(ref)) > 0.9) ref.set(1, 0, 0);
-  normals.push(new THREE.Vector3().crossVectors(tangents[0], ref).normalize());
-
-  const axis = new THREE.Vector3();
-  const q = new THREE.Quaternion();
-  for (let i = 1; i <= NUM_FRAMES; i++) {
-    const tPrev = tangents[i - 1], tCurr = tangents[i];
-    const nCurr = new THREE.Vector3();
-    axis.crossVectors(tPrev, tCurr);
-    if (axis.lengthSq() < 1e-9) {
-      nCurr.copy(normals[i - 1]).projectOnPlane(tCurr).normalize();
-    } else {
-      axis.normalize();
-      const angle = Math.acos(THREE.MathUtils.clamp(tPrev.dot(tCurr), -1, 1));
-      q.setFromAxisAngle(axis, angle);
-      nCurr.copy(normals[i - 1]).applyQuaternion(q).normalize();
-    }
-    normals.push(nCurr);
-  }
-
-  // Distribute the loop-closure mismatch (holonomy) evenly so the frame is seamless across the seam.
-  const n0 = normals[0], nN = normals[NUM_FRAMES], t0 = tangents[0];
-  const cosPhi = THREE.MathUtils.clamp(n0.dot(nN), -1, 1);
-  const sinPhi = new THREE.Vector3().crossVectors(n0, nN).dot(t0);
-  const phi = Math.atan2(sinPhi, cosPhi);
-  const binormals = [];
+  const upVectors = [];
   for (let i = 0; i <= NUM_FRAMES; i++) {
-    q.setFromAxisAngle(tangents[i], -phi * (i / NUM_FRAMES));
-    normals[i].applyQuaternion(q).normalize();
-    binormals.push(new THREE.Vector3().crossVectors(tangents[i], normals[i]).normalize());
+    const u = i / NUM_FRAMES;
+    const T = curve.getTangentAt(u).normalize();
+    const M = upCurve.getPointAt(u).normalize();
+    const M_rot = M.applyAxisAngle(T, twistOffset).normalize();
+    upVectors.push(M_rot);
   }
 
-  // Pick whichever frame vector is "most up" as the carriage up-axis, oriented to +Y.
-  let upVectors = binormals;
-  if (Math.abs(normals[0].y) > Math.abs(binormals[0].y)) upVectors = normals;
+  // Ensure consistent orientation direction globally (just in case the offset flipped us)
   let upDot = 0;
   for (const v of upVectors) upDot += v.y;
   if (upDot < 0) for (const v of upVectors) v.negate();
@@ -272,6 +296,13 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   // `rideScaled`, so it stays on the ground.
   rideScaled.position.y += RIDE_LIFT;
   group.updateMatrixWorld(true);
+
+  // Precompute direction matrix: model-local → group-local (rotation + non-uniform scale, no
+  // translation).  This captures Y_STRETCH so that carriage orientations follow the actual
+  // (vertically stretched) track rather than the original (unstretched) curve geometry.
+  const _dirMat = new THREE.Matrix3().setFromMatrix4(
+    new THREE.Matrix4().multiplyMatrices(rideScaled.matrix, model.matrix)
+  );
 
   // ── Seat the template cart on the curve, capture its on-rail local pose, remove all baked carts ──
   const cartCentroid = new THREE.Box3().setFromObject(templateCartNode).getCenter(new THREE.Vector3());
@@ -658,6 +689,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     // 3. Place every carriage as a SEGMENT spanning its two coupling points, spaced by uniform WORLD
     //    distance (carSpacing) so cars in a train stay coupled even where Y_STRETCH balloons the loops.
     //    Adjacent cars share a coupling, so they meet and articulate through curves instead of gapping.
+    //    Both POSITION and ORIENTATION are computed in GROUP space (after the non-uniform Y_STRETCH)
+    //    so the carriages follow the actual stretched rail rotation exactly.
     const sLead = uToWorldArc(controller.u);
     for (const c of cars) {
       const frontArc = sLead - c.arcOffset;     // front coupling, world arc-length
@@ -665,16 +698,23 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       const uf = worldArcToU(frontArc);
       const ub = worldArcToU(backArc);
 
-      // Position = midpoint of the two couplings, transformed model → rideScaled → group space.
-      _ptF.copy(curve.getPointAt(uf));
-      _ptB.copy(curve.getPointAt(ub));
-      _pt.copy(_ptF).add(_ptB).multiplyScalar(0.5).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+      // Transform coupling points to GROUP space (includes non-uniform Y_STRETCH).
+      _ptF.copy(curve.getPointAt(uf)).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+      _ptB.copy(curve.getPointAt(ub)).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
+
+      // Position = midpoint of the two couplings in group space.
+      _pt.copy(_ptF).add(_ptB).multiplyScalar(0.5);
       c.dolly.position.copy(_pt);
 
-      // Orientation = along the chord between the couplings (consecutive cars meet at shared couplings).
+      // Orientation in GROUP space: chord direction and up vector both account for Y_STRETCH,
+      // so the carriages follow the actual stretched rail rotation point-by-point.
       const muUp = worldArcToU(frontArc - carSpacing * 0.5);
-      chordQuat(_ptF, _ptB, muUp, _q);
-      c.dolly.quaternion.copy(rideScaled.quaternion).multiply(_q);
+      getUpVectorAt(muUp, _up);
+      _up.applyMatrix3(_dirMat).normalize();
+      _tan.subVectors(_ptF, _ptB).normalize();
+      _tan.negate();
+      _mtx.lookAt(_origin, _tan, _up);
+      c.dolly.quaternion.setFromRotationMatrix(_mtx);
     }
 
     // 4. Update riders dynamically (keeps idle breathing and head-turning active when stopped)
