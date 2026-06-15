@@ -193,6 +193,7 @@ export class CameraManager {
       }
       this._hiddenRiders = [];
     }
+    this.camera.up.set(0, 1, 0); // Restore default up vector
   }
 
   get isFPV() { return this.state === 'fpv'; }
@@ -232,6 +233,8 @@ export class CameraManager {
 
     this.controls.update();
     this.controls.saveState();
+
+    this.camera.up.set(0, 1, 0); // Restore default up vector
 
     this.controls.enabled = true;
     this.state = 'orbit';
@@ -288,6 +291,12 @@ export class CameraManager {
     } else {
       this._fpvTarget.getWorldPosition(this._tmpVec);
       this.camera.position.copy(this._tmpVec).add(this._fpvOffset);
+    }
+
+    if (this._fpvRide.getFpvUp) {
+      this._fpvRide.getFpvUp(this._fpvTarget, this.camera.up);
+    } else {
+      this.camera.up.set(0, 1, 0);
     }
 
     if (this._fpvRide.getFpvLookTarget) {

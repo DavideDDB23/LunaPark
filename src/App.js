@@ -216,12 +216,12 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     getFpvOffset: () => new THREE.Vector3(0, 1.9, 0),
     getRiders: () => co.userData.controller.riders.slice(0, 2),
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0.17, 2.05, 0.5);
+      fpvTmpVec.set(0.17, 2.85, 0.5);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0.17, 1.55, 9.0);
+      fpvTmpVec.set(0.17, 2.35, 9.0);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
@@ -235,14 +235,14 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     group: tr,
     getFpvTarget: () => tr.userData.controller.cars[0]?.mesh || null,
     getFpvOffset: () => new THREE.Vector3(0, 1.8, -0.3),
-    getRiders: () => [],
+    getRiders: () => tr.userData.controller.riders ? tr.userData.controller.riders.slice(0, 1) : [],
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 1.7, -0.4);
+      fpvTmpVec.set(0, 136.0, -46.0); // unscaled eye height and cabin depth
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 1.5, 8.0);
+      fpvTmpVec.set(0, 125.0, 150.0); // look forward along the track
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
