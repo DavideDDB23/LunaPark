@@ -2,29 +2,37 @@
 .DS_Store
 **/.DS_Store
 
-# Playwright CLI cache / runtime artifacts (screenshots, console logs, page snapshots)
-.playwright-cli/
-
-# IDE / editor
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Node (if a build is added later)
+# Node
 node_modules/
 npm-debug.log*
 yarn-error.log*
 
-# OS / misc
+# OS
 Thumbs.db
 
-# Local debug helpers — not part of the published app
-debug.js
+# AI tooling
 .antigravity/
 .claude/
+.opencode/
 
-# Blender / DCC source files shipped inside asset packs (the runtime only loads the GLB/OBJ/JPG/PNG/HDR)
+# Playwright
+.playwright-cli/
+.playwright-mcp/
+
+# Git worktrees (local dev only)
+.worktrees/
+
+# Local debug & scratch scripts
+debug.js
+scratch/
+
+# Blender / DCC source files (runtime uses only GLB/OBJ/JPG/PNG/HDR)
 *.blend
 *.blend1
 *.usdc
@@ -32,24 +40,10 @@ debug.js
 *.mtlx
 *.tres
 
-# Git worktrees (local dev only)
-.worktrees/
-
-# AI assistant plans / memory
-.opencode/
-
-# Playwright MCP runtime artifacts (screenshots, console logs, page snapshots)
-.playwright-mcp/
-
-# Scratch / debug scripts (not part of the published app)
-scratch/
-
-# TODO export artifacts
+# Generated artifacts
 TODO.html
 TODO_files/
-
-# Screenshots (ad-hoc captures, not committed)
-screenshot-*.png
-
-# Test output (runtime artifacts)
 tests/out/
+
+# Ad-hoc screenshots
+screenshot-*.png
