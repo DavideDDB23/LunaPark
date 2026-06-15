@@ -12,7 +12,7 @@ function deterministicSeed(i) {
   return i * 137 * Math.PI / 180 + 5.7;
 }
 
-async function buildOneBalloon(model, index) {
+function buildOneBalloon(model, index) {
   const node = model.getObjectByName('V1_HotAirBalloon_' + index);
   if (!node) {
     console.warn('[Balloon] GLB missing sub-root V1_HotAirBalloon_' + index);
@@ -45,14 +45,12 @@ async function buildOneBalloon(model, index) {
   b.add(node);
   b.userData.fpvTarget = node;
 
-  const seed = deterministicSeed(index);
-  const angle = seed;
+  const angle = deterministicSeed(index);
   const dist = ((index * 7.3) % 1) * SPAWN_RADIUS;
   const baseX = Math.cos(angle) * dist;
   const baseZ = Math.sin(angle) * dist;
   const baseY = SPAWN_Y_MIN + ((index * 3.1) % 1) * (SPAWN_Y_MAX - SPAWN_Y_MIN);
   b.position.set(baseX, baseY, baseZ);
-  b.userData.baseY = baseY;
 
   const balloonLight = new THREE.PointLight(0xff8844, 0, 25, 1.5);
   balloonLight.position.set(0, TARGET_HEIGHT * 0.5, 0);
@@ -107,7 +105,7 @@ export async function buildBalloon() {
 
   const balloons = [];
   for (let i = 1; i <= 3; i++) {
-    const b = await buildOneBalloon(model, i);
+    const b = buildOneBalloon(model, i);
     if (b) {
       group.add(b);
       balloons.push(b);
