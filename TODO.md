@@ -131,8 +131,8 @@ A heads-up display showing the current time of day. Already partially designed �
 
 ## 🔴 VISITOR PATHFINDING — NEW WAYPOINTS
 
-- [ ] **Train area waypoints**: add landmarks near train sign (`[76, -65]`) and control panel (`[68, -60]`) in `Visitors.js:465-469`
-- [ ] **Shooting gallery waypoints**: add landmarks near the booth (`[12, 24]`) and sign (`[11, 20]`)
+- [x] **Train area waypoints**: add landmarks near train sign (`[76, -65]`) and control panel (`[68, -60]`) in `Visitors.js:465-469`
+- [x] **Shooting gallery waypoints**: add landmarks near the booth (`[12, 24]`) and sign (`[11, 20]`)
 
 ---
 
@@ -213,9 +213,9 @@ The report is submitted alongside the code. Sections required:
 
 ## 🔴 TRAIN IMPROVEMENTS
 
-- [ ] **Front headlight**: implement a `SpotLight` + visible emissive bulb on the locomotive (currently no headlight exists — `nightLights[]` is empty). Reference: `Coaster.js:487-492`
-- [ ] **Train colour fix**: the train appears white in the browser — fix material cloning in `Train.js:216-242` (shared materials between cloned wagons are not being overridden by `carriageColors`)
-- [ ] **Train passengers**: add riders to the train wagons using `makeRider`/`updateRider` pattern. ~2 passengers per wagon, 5 wagons total.
+- [x] **Front headlight**: implement a `SpotLight` + visible emissive bulb on the locomotive (currently no headlight exists — `nightLights[]` is empty). Reference: `Coaster.js:487-492`
+- [x] **Train colour fix**: the train appears white in the browser — fix material cloning in `Train.js:216-242` (shared materials between cloned wagons are not being overridden by `carriageColors`)
+- [x] **Train passengers**: add riders to the train wagons using `makeRider`/`updateRider` pattern. ~2 passengers per wagon, 5 wagons total.
 - [x] **Wagons**: the 3 wagons are procedural (BoxGeometry) — find a better GLB model or improve the procedural geometry ✅ Replaced with wacky worm coaster model (locomotive + 3 wagons from single GLB, scale 0.013, auto-calibrated via Box3)
 
 ---
