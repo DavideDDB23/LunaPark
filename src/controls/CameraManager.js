@@ -174,6 +174,15 @@ export class CameraManager {
       return;
     }
 
+    // Save camera position and target so exitFPV() can fly back.
+    if (this.state === 'flying') {
+      this._preFpvPos = this._flyTo.clone();
+      this._preFpvTarget = this._lookTo.clone();
+    } else {
+      this._preFpvPos = this.camera.position.clone();
+      this._preFpvTarget = this.controls.target.clone();
+    }
+
     this._fpvTarget = target;
     this._fpvRide = ride;
     this._fpvOffset.copy(ride.getFpvOffset());
