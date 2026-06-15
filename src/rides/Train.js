@@ -5,29 +5,30 @@ import { eventBus } from '../utils/EventBus.js';
 import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { loadGLB } from '../utils/loaders.js';
-import { loadVisitorTemplates, makeRider, updateRider } from '../people/Passengers.js';
+import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
 
 // ── CatmullRom control points for the train ring ─
 const CONTROL_POINTS = [
-  new THREE.Vector3(0, 5.5, -58),     // North crossing (elevated over path, well south of stage)
-  new THREE.Vector3(45, 1.2, -80),    // NE inner curve (outside Carousel)
-  new THREE.Vector3(82, 1.2, -82),    // NE outer corner curve
-  new THREE.Vector3(92, 0.3, -40),    // East-North (near East fence)
-  new THREE.Vector3(88, 3.5, -12),    // NEW: East transition (descending from East-North)
-  new THREE.Vector3(72, 5.5, 12),     // NEW: East River crossing (elevated)
-  new THREE.Vector3(45, 8.5, 18),     // NEW: Curve north of coaster, elevated, climbing
-  new THREE.Vector3(22, 11.5, 26),    // NEW: High scenic bridge section, well north of coaster (y=11.5)
-  new THREE.Vector3(15, 11.5, 34),    // NEW: High flyover heading to path crossing (y=11.5)
-  new THREE.Vector3(0, 11.5, 39),     // NEW: High street crossing, elevated over central path at Z=39 (y=11.5)
-  new THREE.Vector3(-6.0, 11.5, 43.5), // Sostituisci il vecchio (-3, 11.5, 40)
-  new THREE.Vector3(-18, 11.5, 60),   // NEW: High curve between trees (first green circle) (y=11.5)
-  new THREE.Vector3(-50, 6.5, 78),    // NEW: South-West transition (descending after first green circle)
-  new THREE.Vector3(-85, 1.2, 92),    // SW outer corner curve (outside Tagada)
-  new THREE.Vector3(-92, 0.3, 40),    // West-South (near West fence)
-  new THREE.Vector3(-92, 5.5, 0),     // West River crossing (elevated)
-  new THREE.Vector3(-92, 0.3, -40),   // West-North (near West fence, outside Ferris Wheel)
-  new THREE.Vector3(-82, 1.2, -82),   // NW outer corner curve (outside Ferris Wheel)
-  new THREE.Vector3(-45, 1.2, -80),   // NW inner curve (outside Ferris Wheel)
+  new THREE.Vector3(0, 11.0, -58),    // Central north apex — panoramic height above stage
+  new THREE.Vector3(45, 11.0, -80),   // NE high — central section stays parallel to ground at apex height
+  new THREE.Vector3(60, 11.0, -82),   // NE approach — start of high section approaching the descent
+  new THREE.Vector3(82, 0.5, -82),    // NE corner — steep descent point, ground level (NE corner preserved)
+  new THREE.Vector3(92, 1.0, -40),    // East-North (curves south from the NE corner as before)
+  new THREE.Vector3(88, 3.5, -12),    // East transition
+  new THREE.Vector3(72, 5.5, 12),     // East River crossing
+  new THREE.Vector3(45, 8.5, 18),     // Curve north of coaster
+  new THREE.Vector3(22, 11.5, 26),    // High scenic bridge
+  new THREE.Vector3(15, 11.5, 34),    // High flyover
+  new THREE.Vector3(0, 11.5, 39),     // High street crossing
+  new THREE.Vector3(-6.0, 11.5, 43.5),
+  new THREE.Vector3(-18, 11.5, 60),   // High curve between trees
+  new THREE.Vector3(-50, 6.5, 78),    // South-West transition
+  new THREE.Vector3(-85, 1.2, 92),    // SW outer corner
+  new THREE.Vector3(-92, 0.3, 40),    // West-South
+  new THREE.Vector3(-92, 5.5, 0),     // West River crossing
+  new THREE.Vector3(-92, 3.0, -40),   // West-North lifted (smoother join to NW arc)
+  new THREE.Vector3(-82, 5.5, -82),   // NW outer — ascent toward apex
+  new THREE.Vector3(-45, 8.0, -80),   // NW shoulder — gentle ascent toward apex
 ];
 
 const TRAIN_SPEED = 6;
@@ -109,7 +110,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     // Skip if not elevated, or if over the main street (X centered at 0, width ~6) or the river (Z centered at 0, width ~20)
     // Also skip placing pillars inside the Roller Coaster area (X > 20, Z > 30) to avoid clipping with coaster structures,
     // and near the Shooting Gallery (around X=12, Z=24)
-    if (p.y > 0.6 && Math.abs(p.x) >= 4.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 30.0) && !(Math.abs(p.x - 12.0) < 5.0 && Math.abs(p.z - 24.0) < 5.0)) {
+    if (p.y > 1.5 && Math.abs(p.x) >= 4.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 30.0) && !(Math.abs(p.x - 12.0) < 5.0 && Math.abs(p.z - 24.0) < 5.0)) {
       pillarCount += 2;
     }
   }
@@ -129,7 +130,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     const t = i / sleeperCount;
     const p = curve.getPointAt(t);
     
-    if (p.y > 0.6 && Math.abs(p.x) >= 4.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 30.0) && !(Math.abs(p.x - 12.0) < 5.0 && Math.abs(p.z - 24.0) < 5.0)) {
+    if (p.y > 1.5 && Math.abs(p.x) >= 4.0 && Math.abs(p.z) >= 12.0 && !(p.x > 20.0 && p.z > 30.0) && !(Math.abs(p.x - 12.0) < 5.0 && Math.abs(p.z - 24.0) < 5.0)) {
       curve.getTangentAt(t, tempTangent);
       tempRight.crossVectors(tempTangent, upVec).normalize();
       
@@ -282,8 +283,8 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     if (cars.length > 0) {
       const loco = cars[0].mesh;
 
-      // Emissive bulb mesh
-      const bulbGeo = new THREE.SphereGeometry(0.15, 16, 16);
+      // Emissive bulb mesh (radius scaled up to fit the 1.0 -> 0.030 model space)
+      const bulbGeo = new THREE.SphereGeometry(5.0, 16, 16);
       const bulbMat = new THREE.MeshStandardMaterial({
         color: 0xffffff,
         emissive: 0xfff2d0,
@@ -293,20 +294,20 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
         toneMapped: false
       });
       const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-      bulb.position.set(0, 1.3, 2.6); // localized in front-center of worm head
+      bulb.position.set(0, 45.0, 86.0); // front-center of caterpillar face in local coordinates
       loco.add(bulb);
 
-      // Spotlight pointing forward
-      const spotLight = new THREE.SpotLight(0xfff2d0, 0, 45, Math.PI / 4, 0.6, 1.0);
-      spotLight.position.set(0, 1.3, 2.65);
+      // Spotlight pointing forward (range and position scaled)
+      const spotLight = new THREE.SpotLight(0xfff2d0, 0, 1500, Math.PI / 4, 0.6, 1.0);
+      spotLight.position.set(0, 45.0, 87.0);
       spotLight.castShadow = true;
       spotLight.shadow.mapSize.width = 512;
       spotLight.shadow.mapSize.height = 512;
-      spotLight.shadow.camera.near = 0.5;
-      spotLight.shadow.camera.far = 45;
+      spotLight.shadow.camera.near = 15.0;
+      spotLight.shadow.camera.far = 1500;
 
       const target = new THREE.Object3D();
-      target.position.set(0, 1.3, 10.0);
+      target.position.set(0, 45.0, 300.0);
       loco.add(spotLight);
       loco.add(target);
       spotLight.target = target;
@@ -322,35 +323,33 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     const templates = await loadVisitorTemplates(10);
     for (let i = 0; i < wagonGroups.length; i++) {
       const wrapper = wagonGroups[i];
-      for (let seatIdx = 0; seatIdx < 2; seatIdx++) {
-        const tmpl = templates[(i * 2 + seatIdx) % templates.length];
-        const riderHeight = 45 + Math.random() * 8; // scaled local units
+      const tmpl = templates[i % templates.length];
+      const riderHeight = (getPassengerWorldHeight() * 0.88) / 0.030;
 
-        const rider = makeRider(tmpl, riderHeight, {
-          pool: ['rest'],
-          facingY: 0,
-          phase: i * 1.7 + seatIdx * 0.9,
-          seatedStyle: 'chair'
-        });
+      const rider = makeRider(tmpl, riderHeight, {
+        pool: ['rest'],
+        facingY: 0,
+        phase: i * 1.7,
+        seatedStyle: 'chair'
+      });
 
-        const sx = seatIdx === 0 ? -12 : 12; // side-by-side seating
-        const sy = 12; // seat bottom height in local coordinates
-        const sz = -10; // seat back depth
+      const sx = 0; // centered seating
+      const sy = 78.0; // raised to sit on the seat cushion (profile minY = 77.7)
+      const sz = -38.0; // shifted slightly forward to prevent clipping into backrest (originally -50.0)
 
-        rider.fig.updateMatrixWorld(true);
-        const hipBone = rider.fig.getObjectByName('Hips');
-        if (hipBone) {
-          const hp = hipBone.getWorldPosition(new THREE.Vector3());
-          rider.fig.worldToLocal(hp);
-          hp.multiplyScalar(rider.scale);
-          rider.pivot.position.set(sx - hp.x, sy - hp.y, sz - hp.z);
-        } else {
-          rider.pivot.position.set(sx, sy - riderHeight * 0.28, sz);
-        }
-
-        wrapper.add(rider.pivot);
-        riders.push(rider);
+      rider.fig.updateMatrixWorld(true);
+      const hipBone = rider.fig.getObjectByName('Hips');
+      if (hipBone) {
+        const hp = hipBone.getWorldPosition(new THREE.Vector3());
+        rider.fig.worldToLocal(hp);
+        hp.multiplyScalar(rider.scale);
+        rider.pivot.position.set(sx - hp.x, sy - hp.y, sz - hp.z);
+      } else {
+        rider.pivot.position.set(sx, sy - riderHeight * 0.28, sz);
       }
+
+      wrapper.add(rider.pivot);
+      riders.push(rider);
     }
 
   } catch (e) {
@@ -376,6 +375,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     get speedMultiplier() { return speedScale; },
     set speedMultiplier(v) { speedScale = v; },
     cars: cars,
+    riders: riders,
   };
 
   eventBus.on('speed-scroll', ({ rideId, delta }) => {
