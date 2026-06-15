@@ -35,6 +35,7 @@ import { CameraManager } from './controls/CameraManager.js';
 import { eventBus } from './utils/EventBus.js';
 import { InteractionManager } from './controls/InteractionManager.js';
 import { getWindSpeed, drawTimeArc, setupTimeOfDayUI } from './ui/Hud.js';
+import { setupRideHotbar } from './ui/RideHotbar.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
@@ -260,6 +261,31 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
+  if (balloons && balloons[0]) {
+    const b1 = balloons[0];
+    rides.push({
+      group: b1,
+      getFpvTarget: () => b1.userData.fpvTarget,
+      getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+      getRiders: () => [],
+      getFpvCameraPos: (fpvTarget, targetVec) => {
+        fpvTmpVec.set(0, 1.8, 0);
+        fpvTarget.localToWorld(fpvTmpVec);
+        targetVec.copy(fpvTmpVec);
+      },
+      getFpvLookTarget: (fpvTarget, targetVec) => {
+        const driftAngle = b1.userData.driftAngle ?? 0;
+        const dist = 10;
+        fpvTmpVec.set(Math.cos(driftAngle) * dist, 1.8, Math.sin(driftAngle) * dist);
+        fpvTarget.localToWorld(fpvTmpVec);
+        targetVec.copy(fpvTmpVec);
+      },
+      getFpvUp: (fpvTarget, upVec) => {
+        fpvTarget.getWorldQuaternion(fpvTmpQuat);
+        upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+      }
+    });
+  }
   return rides;
 });
 
@@ -351,8 +377,8 @@ async function init() {
   const fireworks = buildFireworks();
   scene.add(fireworks);
 
-  const balloon = await buildBalloon();
-  environmentGroup.add(balloon);
+  const { group: balloonContainer, balloons } = await buildBalloon();
+  environmentGroup.add(balloonContainer);
 
   const shootingGallery = await buildShootingGallery({ camera, renderer, controls });
   shootingGallery.position.set(12, 0, 24);
@@ -370,6 +396,19 @@ async function init() {
   const tagada = await buildTagada({ position: [-40, 0, 40], camera, renderer, anisotropy: maxAniso });
   environmentGroup.add(tagada);
   window.__lp.tagada = tagada.userData.controller;
+
+  {
+    const fw = environmentGroup.getObjectByName('ferrisWheel');
+    if (fw) { fw.userData.rideId = 'ferris'; fw.userData.rideName = 'Ruota'; }
+    const cr = environmentGroup.getObjectByName('carousel');
+    if (cr) { cr.userData.rideId = 'carousel'; cr.userData.rideName = 'Carosello'; }
+    const tg = environmentGroup.getObjectByName('tagada');
+    if (tg) { tg.userData.rideId = 'tagada'; tg.userData.rideName = 'Tagada'; }
+    const co = environmentGroup.getObjectByName('coaster');
+    if (co) { co.userData.rideId = 'coaster'; co.userData.rideName = 'Montagne Russe'; }
+    const tr = environmentGroup.getObjectByName('train');
+    if (tr) { tr.userData.rideId = 'train'; tr.userData.rideName = 'Brucomela'; }
+  }
 
   rideSigns = FRONTAGES.map(({ title, theme, groupName, sign, panel }) => {
     const group = environmentGroup.getObjectByName(groupName);
@@ -433,6 +472,26 @@ async function init() {
 
   interactionManager.registerClickable(stage.userData.spotLight);
   cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
+
+  setupRideHotbar({
+    rides: [
+      { id: 'ferris',   name: 'Ruota',          icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7.05 5.05l9.9 9.9M7.05 14.95l9.9-9.9"/><circle cx="12" cy="10" r="1.2" fill="currentColor"/></svg>' },
+      { id: 'carousel', name: 'Carosello',      icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v4"/><path d="M3 9h18v2a9 9 0 0 1-18 0V9z"/><path d="M12 7v4"/></svg>' },
+      { id: 'coaster',  name: 'Montagne Russe', icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h4v-3a3 3 0 0 1 6 0v3h4v-3a3 3 0 0 1 6 0v3"/><circle cx="6" cy="14" r="1.5" fill="currentColor"/><circle cx="14" cy="14" r="1.5" fill="currentColor"/></svg>' },
+      { id: 'tagada',   name: 'Tagada',         icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>' },
+      { id: 'train',    name: 'Brucomela',      icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6" width="14" height="11" rx="2"/><circle cx="9" cy="20" r="1.5" fill="currentColor"/><circle cx="15" cy="20" r="1.5" fill="currentColor"/><path d="M5 12h14"/></svg>' },
+      { id: 'balloon',  name: 'Mongolfiera',    icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-3.5 0-6 2.5-6 6 0 4 3 8 6 8s6-4 6-8c0-3.5-2.5-6-6-6z"/><path d="M9 17l3 4 3-4"/><path d="M12 7v6"/></svg>' }
+    ],
+    onSelect: (id, opts) => {
+      if (opts && opts.toggle) {
+        cameraManager.exitFPV();
+      } else {
+        cameraManager.enterFPVById(id);
+      }
+    },
+    getActiveRideId: () =>
+      cameraManager.isFPV ? cameraManager._fpvRide?.group?.userData?.rideId ?? null : null
+  });
 
   eventBus.on('interact-click', ({ object }) => {
     let curr = object;
@@ -563,7 +622,7 @@ async function init() {
 
   Object.assign(world, {
     river, vegetation, visitors, stage, ferrisWheel, carousel, tagada, coaster,
-    lamps, stalls, fireworks, balloon, train, shootingGallery,
+    lamps, stalls, fireworks, balloons, train, shootingGallery,
     gate: environmentGroup.getObjectByName('entranceGate'),
     timeInput: document.getElementById('timeOfDay'),
     timeVal: document.getElementById('timeVal'),
@@ -619,7 +678,11 @@ function animate() {
   if (world.tagada?.userData.tick) world.tagada.userData.tick(delta, time);
   if (world.coaster?.userData.tick) world.coaster.userData.tick(delta, time);
   if (world.fireworks?.userData.tick) world.fireworks.userData.tick(delta, time);
-  if (world.balloon?.userData.tick) world.balloon.userData.tick(delta, time, wind);
+  if (world.balloons) {
+    for (const b of world.balloons) {
+      if (b.userData.tick) b.userData.tick(delta, time, wind);
+    }
+  }
   if (world.train?.userData.tick) world.train.userData.tick(delta, time);
   if (world.shootingGallery?.userData.tick) world.shootingGallery.userData.tick(delta, time);
 
