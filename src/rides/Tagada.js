@@ -655,7 +655,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
 
       rider.fig.updateMatrixWorld(true);
       const hipBone = rider.fig.getObjectByName('Hips');
-      const targetZ = 0.08;
+      const targetZ = 0.54; // hips at the front edge of the cushion so legs hang freely in front
       const scale = riderHeight / template.height;
 
       if (hipBone) {
@@ -667,6 +667,12 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
       } else {
         rider.pivot.position.set(0.0, seatSurfaceY - riderHeight * 0.28, targetZ);
       }
+
+      // The GLB model's root has an intrinsic rotation that places the head toward -Y of the
+      // seat's local frame (same issue as in Coaster.js). Flip 180° around the seat's Z axis so
+      // the head points +Y (up) while the forward-facing direction (+Z toward disc centre) is kept.
+      const flipZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+      rider.fig.quaternion.premultiply(flipZ);
 
       rider.restX = rider.pivot.position.x;
       rider.restY = rider.pivot.position.y;
