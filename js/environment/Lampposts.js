@@ -37,52 +37,10 @@ export async function buildLampposts() {
   const groundOffset = -bbox.min.y * scale;
   const lampHeadY = bbox.max.y * scale * 0.9;
 
-  // Collect all meshes from the source model — we will bucket them by material
-  // so each material can become one InstancedMesh (one draw call per material).
-  const sourceMeshes = [];
-  source.traverse((o) => {
-    if (o.isMesh) {
-      sourceMeshes.push({ geometry: o.geometry, material: o.material });
-    }
-  });
-
-  // De-duplicate materials to know how many InstancedMeshes we need.
-  const uniqueMaterials = [];
-  const meshToBucket = new Map();
-  for (const m of sourceMeshes) {
-    if (!meshToBucket.has(m.material)) {
-      meshToBucket.set(m.material, uniqueMaterials.length);
-      // Clone material so each InstancedMesh can be independently controlled
-      // (emissive intensity at night, etc.). The clone is shared by all 12
-      // instances of the same bucket, so we get per-material global control
-      // rather than per-lamp — visually identical, much cheaper.
-      uniqueMaterials.push(m.material.clone());
-    }
-  }
-
   const count = POSITIONS.length;
-  const _tmpMat = new THREE.Matrix4();
-  const _tmpPos = new THREE.Vector3();
-  const _tmpQuat = new THREE.Quaternion();
-  const _tmpScale = new THREE.Vector3(scale, scale, scale);
 
-  // Build one InstancedMesh per unique material.
-  const instancedMeshes = [];
-  for (let bucketIdx = 0; bucketIdx < uniqueMaterials.length; bucketIdx++) {
-    const mat = uniqueMaterials[bucketIdx];
-    // Pick a representative geometry for this bucket (the first mesh that uses it).
-    const repMesh = sourceMeshes.find(m => meshToBucket.get(m.material) === bucketIdx);
-    const instanced = new THREE.InstancedMesh(repMesh.geometry, mat, count);
-    instanced.castShadow = true;
-    instanced.receiveShadow = true;
-    instanced.layers.enable(LAMPPOST_LAYER);
-    instanced.name = `lamppost_instances_${bucketIdx}`;
-    group.add(instanced);
-    instancedMeshes.push({ mesh: instanced, material: mat });
-  }
-
-  // Set up lamp roots: each is a Group with lampId userData + a PointLight +
-  // an invisible "click hitbox" mesh so raycasts still work.
+  // Build individual lamp clones instead of using one InstancedMesh.
+  // This allows independent control over materials and light sources per lamp.
   for (let i = 0; i < count; i++) {
     const [id, x, z] = POSITIONS[i];
 
@@ -90,25 +48,36 @@ export async function buildLampposts() {
     lampRoot.name = id;
     lampRoot.position.set(x, groundOffset, z);
     lampRoot.userData.lampId = id;
-    lampRoot.userData.on = false;
-    lampRoot.userData.isManual = false;
+    lampRoot.userData.mode = 'auto'; // Explicit tracking state: 'auto' | 'on' | 'off'
     lampRoot.userData.targetOn = false;
     lampRoot.userData.nightFactor = 0.0;
     lampRoot.userData.instanceIndex = i;
     lampRoot.userData.blinkTime = 0.0;
     group.add(lampRoot);
 
-    // Fill the instance matrices for every bucket. Each instance sits at the
-    // lampRoot's world position (the InstancedMesh is a child of `group`, not
-    // of lampRoot, so we bake the position into the matrix).
-    for (let bucketIdx = 0; bucketIdx < instancedMeshes.length; bucketIdx++) {
-      _tmpPos.set(x, groundOffset, z);
-      _tmpMat.compose(_tmpPos, _tmpQuat, _tmpScale);
-      instancedMeshes[bucketIdx].mesh.setMatrixAt(i, _tmpMat);
-    }
+    // Clone model for this specific lamppost
+    const modelClone = source.clone();
+    modelClone.scale.set(scale, scale, scale);
+    lampRoot.add(modelClone);
 
-    // Invisible click hitbox — a tall slim box roughly matching the lamppost
-    // footprint. Raycasting against this is cheap (12 small boxes).
+    // Clone materials recursively so each lamp can control its emissive glowing independently
+    const emissiveMaterials = [];
+    modelClone.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.layers.enable(LAMPPOST_LAYER);
+        if (o.material) {
+          o.material = o.material.clone();
+          if (o.material.emissive) {
+            emissiveMaterials.push(o.material);
+          }
+        }
+      }
+    });
+    lampRoot.userData.emissiveMaterials = emissiveMaterials;
+
+    // Invisible click hitbox — a tall slim box roughly matching the lamppost footprint.
     const hitboxGeo = new THREE.BoxGeometry(1.2, targetHeight, 1.2);
     const hitboxMat = new THREE.MeshBasicMaterial({ visible: false });
     const hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
@@ -129,53 +98,53 @@ export async function buildLampposts() {
     lampRoot.userData.pointLight = pointLight;
   }
 
-  // Mark instance matrices as needing an upload (one-time).
-  for (const im of instancedMeshes) {
-    im.mesh.instanceMatrix.needsUpdate = true;
-  }
-
   // Listen for time phase changes to drive automated lighting
-  let lastGlobalIsNight = null;
   eventBus.on('time-phase-change', (data) => {
     const isNight = data.isNight;
     const nightFactor = data.nightFactor;
 
-    const phaseTransitioned = (lastGlobalIsNight !== null && lastGlobalIsNight !== isNight);
-    lastGlobalIsNight = isNight;
-
     for (const lampRoot of group.children) {
-      if (!lampRoot.userData.isManual) {
-        lampRoot.userData.targetOn = isNight;
-      }
+      lampRoot.userData.targetOn = isNight;
       lampRoot.userData.nightFactor = nightFactor;
     }
   });
 
-  // Smooth transition (0.8s) -> Rate = 120.0 / 0.8 = 150.0 units per second.
-  // Emissive materials are shared across all instances of a bucket, so we
-  // update the bucket material rather than per-lamp meshes.
+  // Tick update logic
   group.userData.tick = (delta, time) => {
+    const baseIntensity = 40.0; // Reduced from 120.0 to prevent reflection/bloom hotspots
+    const maxEmissive = 4.0;    // Reduced from 8.0 for a cleaner bulb glow
+
     for (const lampRoot of group.children) {
       const pl = lampRoot.userData.pointLight;
       if (!pl) continue;
 
+      const mode = lampRoot.userData.mode || 'auto';
+
       if (lampRoot.userData.blinkTime > 0) {
         lampRoot.userData.blinkTime -= delta;
         const step = Math.floor(lampRoot.userData.blinkTime / 0.10);
-        // During blink, alternate between Auto's target state and its opposite
-        const isNight = lampRoot.userData.targetOn; // targetOn is set to current isNight when resetting
+        const isNight = lampRoot.userData.targetOn;
         const isBlinkOn = (step % 2 === 0) ? isNight : !isNight;
-        pl.intensity = isBlinkOn ? 120.0 : 0.0;
+        pl.intensity = isBlinkOn ? baseIntensity : 0.0;
+
+        const emissiveStrength = (pl.intensity / baseIntensity) * maxEmissive;
+        const emissiveMats = lampRoot.userData.emissiveMaterials || [];
+        for (const mat of emissiveMats) {
+          mat.emissiveIntensity = emissiveStrength;
+          mat.emissive.setHex(0xfffaf0);
+        }
         continue;
       }
 
       let targetIntensity = 0;
-      if (lampRoot.userData.targetOn) {
-        if (lampRoot.userData.isManual) {
-          targetIntensity = 120.0;
-        } else {
+      if (mode === 'on') {
+        targetIntensity = baseIntensity;
+      } else if (mode === 'off') {
+        targetIntensity = 0;
+      } else { // 'auto'
+        if (lampRoot.userData.targetOn) {
           const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
-          targetIntensity = nf * 120.0;
+          targetIntensity = nf * baseIntensity;
         }
       }
 
@@ -186,28 +155,16 @@ export async function buildLampposts() {
       } else {
         pl.intensity = targetIntensity;
       }
-    }
 
-    // Drive emissive intensity on the shared instanced materials from the
-    // AVERAGE lamp intensity. (Sampling only lamp_0 meant manually switching
-    // that one lamp off at night blacked out the bulb glow of all 12 heads
-    // while their point lights stayed on.)
-    let sum = 0, n = 0;
-    for (const lampRoot of group.children) {
-      const pl = lampRoot.userData.pointLight;
-      if (pl) { sum += pl.intensity; n++; }
-    }
-    if (!n) return;
-    const emissiveStrength = (sum / n / 120.0) * 8.0;
-    for (const im of instancedMeshes) {
-      const mat = im.material;
-      if (mat.emissive) {
+      // Drive individual emissive intensity on the lamp's unique materials
+      const emissiveStrength = (pl.intensity / baseIntensity) * maxEmissive;
+      const emissiveMats = lampRoot.userData.emissiveMaterials || [];
+      for (const mat of emissiveMats) {
         mat.emissiveIntensity = emissiveStrength;
         mat.emissive.setHex(0xfffaf0);
       }
     }
   };
 
-  group.userData.instancedMeshes = instancedMeshes;
   return group;
 }

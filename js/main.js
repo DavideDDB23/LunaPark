@@ -488,20 +488,32 @@ async function init() {
     }
     if (curr && curr.userData.lampId) {
       const isNight = isNightNow(curr);
-      if (!curr.userData.isManual) {
-        // Auto -> Manual opposite state
-        curr.userData.isManual = true;
-        curr.userData.targetOn = !isNight;
-        curr.userData.blinkTime = 0;
-      } else if (curr.userData.targetOn === isNight) {
-        // Manual matching state -> Auto (triggers blink)
-        curr.userData.isManual = false;
-        curr.userData.targetOn = isNight;
-        curr.userData.blinkTime = 0.4;
+      if (!curr.userData.mode) curr.userData.mode = 'auto';
+
+      if (isNight) {
+        // Night cycle: auto -> off -> on -> auto
+        if (curr.userData.mode === 'auto') {
+          curr.userData.mode = 'off';
+          curr.userData.blinkTime = 0;
+        } else if (curr.userData.mode === 'off') {
+          curr.userData.mode = 'on';
+          curr.userData.blinkTime = 0;
+        } else {
+          curr.userData.mode = 'auto';
+          curr.userData.blinkTime = 0.4;
+        }
       } else {
-        // Manual opposite state -> Manual matching state
-        curr.userData.targetOn = isNight;
-        curr.userData.blinkTime = 0;
+        // Day cycle: auto -> on -> off -> auto
+        if (curr.userData.mode === 'auto') {
+          curr.userData.mode = 'on';
+          curr.userData.blinkTime = 0;
+        } else if (curr.userData.mode === 'on') {
+          curr.userData.mode = 'off';
+          curr.userData.blinkTime = 0;
+        } else {
+          curr.userData.mode = 'auto';
+          curr.userData.blinkTime = 0.4;
+        }
       }
       return;
     }
@@ -536,20 +548,32 @@ async function init() {
     }
     if (curr && curr.name === 'stage_spotlight') {
       const isNight = isNightNow(curr);
-      if (!curr.userData.isManual) {
-        // Auto -> Manual opposite state
-        curr.userData.isManual = true;
-        curr.userData.targetOn = !isNight;
-        curr.userData.blinkTime = 0;
-      } else if (curr.userData.targetOn === isNight) {
-        // Manual matching state -> Auto (triggers blink)
-        curr.userData.isManual = false;
-        curr.userData.targetOn = isNight;
-        curr.userData.blinkTime = 0.4;
+      if (!curr.userData.mode) curr.userData.mode = 'auto';
+
+      if (isNight) {
+        // Night cycle: auto -> off -> on -> auto
+        if (curr.userData.mode === 'auto') {
+          curr.userData.mode = 'off';
+          curr.userData.blinkTime = 0;
+        } else if (curr.userData.mode === 'off') {
+          curr.userData.mode = 'on';
+          curr.userData.blinkTime = 0;
+        } else {
+          curr.userData.mode = 'auto';
+          curr.userData.blinkTime = 0.4;
+        }
       } else {
-        // Manual opposite state -> Manual matching state
-        curr.userData.targetOn = isNight;
-        curr.userData.blinkTime = 0;
+        // Day cycle: auto -> on -> off -> auto
+        if (curr.userData.mode === 'auto') {
+          curr.userData.mode = 'on';
+          curr.userData.blinkTime = 0;
+        } else if (curr.userData.mode === 'on') {
+          curr.userData.mode = 'off';
+          curr.userData.blinkTime = 0;
+        } else {
+          curr.userData.mode = 'auto';
+          curr.userData.blinkTime = 0.4;
+        }
       }
     }
   });

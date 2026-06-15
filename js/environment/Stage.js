@@ -694,8 +694,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
   spot.shadow.mapSize.set(1024, 1024);
   spot.name = 'stage_spotlight';
   spot.layers.set(3);
-  spot.userData.isManual = false;
-  spot.userData.targetOn = false;
+  spot.userData.mode = 'auto';
   spot.userData.blinkTime = 0.0;
   group.add(spot);
   group.add(spot.target);
@@ -754,7 +753,14 @@ export function buildStage({ anisotropy = 8 } = {}) {
         u.intensity = targetUplightIntensity;
       }
     } else {
-      spotOn = spot.userData.isManual ? spot.userData.targetOn : isNight;
+      const mode = spot.userData.mode || 'auto';
+      if (mode === 'on') {
+        spotOn = true;
+      } else if (mode === 'off') {
+        spotOn = false;
+      } else {
+        spotOn = isNight;
+      }
       const targetSpotIntensity = spotOn ? 100.0 : 0.0;
       const targetUplightIntensity = spotOn ? 20.0 : 0.0;
 
