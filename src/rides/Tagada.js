@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from './Passengers.js';
+import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from '../people/Passengers.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';

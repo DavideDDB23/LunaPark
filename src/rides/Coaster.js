@@ -29,7 +29,7 @@ import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
-import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from './Passengers.js';
+import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
 
 const MODEL_URL = 'assets/models/rides/coaster_track.glb';
 const TARGET_LONG = 94;      // world units — longest horizontal extent after auto-fit. Enlarged so

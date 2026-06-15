@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { eventBus } from './EventBus.js';
+import { eventBus } from '../utils/EventBus.js';
 
 export class InteractionManager {
   constructor(camera, renderer, scene, controls) {

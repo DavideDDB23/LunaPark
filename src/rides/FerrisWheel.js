@@ -41,7 +41,7 @@ import {
   ACTIONS_SEATED_CHAT_R,
   ACTIONS_STANDING,
   setPassengerWorldHeight
-} from './Passengers.js';
+} from '../people/Passengers.js';
 
 const MODEL_URL = 'assets/models/rides/ferris_wheel.glb';
 

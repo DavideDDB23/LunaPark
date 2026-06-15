@@ -4,7 +4,7 @@ import { isNightNow } from '../lighting/DayNightCycle.js';
 import {
   loadVisitorTemplates, makeRider, pose,
   applyStandingLegs, placeFeet,
-} from './Passengers.js';
+} from '../people/Passengers.js';
 
 const WOOD_BASE = 'assets/textures/wood/';
 const STAGE_Z = -88;
