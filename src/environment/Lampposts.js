@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
+import { Easings } from '../utils/Easings.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
 
@@ -53,6 +55,8 @@ export async function buildLampposts() {
     lampRoot.userData.nightFactor = 0.0;
     lampRoot.userData.instanceIndex = i;
     lampRoot.userData.blinkTime = 0.0;
+    lampRoot.userData.targetIntensity = 0.0;
+    lampRoot.userData.intensityTween = null;
     group.add(lampRoot);
 
     // Clone model for this specific lamppost
@@ -121,6 +125,10 @@ export async function buildLampposts() {
       const mode = lampRoot.userData.mode || 'auto';
 
       if (lampRoot.userData.blinkTime > 0) {
+        if (lampRoot.userData.intensityTween) {
+          lampRoot.userData.intensityTween.stop();
+          lampRoot.userData.intensityTween = null;
+        }
         lampRoot.userData.blinkTime -= delta;
         const step = Math.floor(lampRoot.userData.blinkTime / 0.10);
         const isNight = lampRoot.userData.targetOn;
@@ -141,19 +149,22 @@ export async function buildLampposts() {
         targetIntensity = baseIntensity;
       } else if (mode === 'off') {
         targetIntensity = 0;
-      } else { // 'auto'
-        if (lampRoot.userData.targetOn) {
-          const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
-          targetIntensity = nf * baseIntensity;
-        }
+      } else if (lampRoot.userData.targetOn) {
+        const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
+        targetIntensity = nf * baseIntensity;
       }
 
-      const rate = 150.0 * delta;
-      const diff = targetIntensity - pl.intensity;
-      if (Math.abs(diff) > 0.01) {
-        pl.intensity += Math.sign(diff) * Math.min(rate, Math.abs(diff));
-      } else {
-        pl.intensity = targetIntensity;
+      const stored = lampRoot.userData.targetIntensity;
+      if (lampRoot.userData.blinkTime <= 0 && Math.abs(targetIntensity - stored) > 0.01) {
+        lampRoot.userData.targetIntensity = targetIntensity;
+        if (lampRoot.userData.intensityTween) {
+          lampRoot.userData.intensityTween.stop();
+          lampRoot.userData.intensityTween = null;
+        }
+        lampRoot.userData.intensityTween = new TWEEN.Tween(pl)
+          .to({ intensity: targetIntensity }, 300)
+          .easing(Easings.SMOOTH)
+          .start();
       }
 
       // Drive individual emissive intensity on the lamp's unique materials

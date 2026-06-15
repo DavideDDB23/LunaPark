@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 
 const HORSE_MODEL_URL = 'assets/models/rides/carousel_horse.glb';
@@ -211,10 +213,18 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     ridePointLights.push(pl);
   }
 
+  const mainColor = new THREE.Color(0xffdd88);
   eventBus.on('color-change', (hex) => {
-    bulbMat.color.set(hex);
-    bulbMat.emissive.set(hex);
-    ridePointLights.forEach(pl => pl.color.set(hex));
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(mainColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        bulbMat.color.copy(mainColor);
+        bulbMat.emissive.copy(mainColor);
+        ridePointLights.forEach(pl => pl.color.copy(mainColor));
+      })
+      .start();
   });
 
   // ── Extra night lighting: warm festoon swags + canopy-seam bulbs + column bulbs + platform neon ──
@@ -259,12 +269,20 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   rotatingAssembly.add(carouselCanopyLight);
 
   // The festoon/seam/column bulbs and the platform neon follow the picker too.
+  const warmColor = new THREE.Color(0xfff1c0);
   eventBus.on('color-change', (hex) => {
-    const tint = (m) => { m.color.set(hex); m.emissive.set(hex); };
-    cFestoon.forEach(b => tint(b.material));
-    cSeam.forEach(b => tint(b.material));
-    cColumn.forEach(b => tint(b.material));
-    tint(cNeonMat);
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(warmColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        const tint = (m) => { m.color.copy(warmColor); m.emissive.copy(warmColor); };
+        cFestoon.forEach(b => tint(b.material));
+        cSeam.forEach(b => tint(b.material));
+        cColumn.forEach(b => tint(b.material));
+        tint(cNeonMat);
+      })
+      .start();
   });
 
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)

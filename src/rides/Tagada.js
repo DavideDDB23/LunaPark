@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
 import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from '../people/Passengers.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 
 // Ride Animation Constants
@@ -720,18 +722,25 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     ridePointLights.push(pl);
   }
 
+  const tagadaColor = new THREE.Color(0xff00ff);
   eventBus.on('color-change', (hex) => {
-    // every decorative light group follows the picker, not just the rim bulbs
-    const tint = (m) => { m.color.set(hex); m.emissive.set(hex); };
-    bulbs.forEach(b => tint(b.material));
-    canopyBulbs.forEach(b => tint(b.material));
-    rimBulbs.forEach(b => tint(b.material));
-    ledRings.forEach(b => tint(b.material));
-    basePanels.forEach(b => tint(b.material));
-    festoonBulbs.forEach(b => tint(b.material));
-    seatLeds.forEach(b => tint(b.material));
-    armStrips.forEach(b => tint(b.material));
-    ridePointLights.forEach(pl => pl.color.set(hex));
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(tagadaColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        const tint = (m) => { m.color.copy(tagadaColor); m.emissive.copy(tagadaColor); };
+        bulbs.forEach(b => tint(b.material));
+        canopyBulbs.forEach(b => tint(b.material));
+        rimBulbs.forEach(b => tint(b.material));
+        ledRings.forEach(b => tint(b.material));
+        basePanels.forEach(b => tint(b.material));
+        festoonBulbs.forEach(b => tint(b.material));
+        seatLeds.forEach(b => tint(b.material));
+        armStrips.forEach(b => tint(b.material));
+        ridePointLights.forEach(pl => pl.color.copy(tagadaColor));
+      })
+      .start();
   });
 
   // 9. ── Control Panel ────────────────────────────────────────────────────────

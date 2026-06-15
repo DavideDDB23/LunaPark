@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
+import { Easings } from './utils/Easings.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -517,7 +519,8 @@ async function init() {
   eventBus.on('speed-scroll', ({ rideId, delta }) => {
     if (rideId === 'coaster') {
       const c = coaster.userData.controller;
-      c.speedScale = Math.max(0.2, Math.min(1.5, c.speedScale + delta));
+      const target = Math.max(0.2, Math.min(1.5, c.speedScale + delta));
+      new TWEEN.Tween(c).to({ speedScale: target }, 300).easing(Easings.SMOOTH).start();
       return;
     }
     let controller = null;
@@ -526,7 +529,8 @@ async function init() {
     if (rideId === 'tagada') controller = tagada.userData.controller;
 
     if (controller) {
-      controller.speedMultiplier = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
+      const target = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
+      new TWEEN.Tween(controller).to({ speedMultiplier: target }, 300).easing(Easings.SMOOTH).start();
     }
   });
 
@@ -598,6 +602,7 @@ function onResize() {
 window.addEventListener('resize', onResize);
 
 function animate() {
+  TWEEN.update();
   const delta = Math.min(clock.getDelta(), 0.05);
   const time = clock.getElapsedTime();
   const wind = getWindSpeed();

@@ -28,9 +28,11 @@
 //   3. Passenger sway — 2 figures per gondola, each leaning on a phase-offset sine.
 
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import {
   loadVisitorTemplates,
@@ -314,12 +316,20 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   const ferrisBeacon = new THREE.Mesh(new THREE.SphereGeometry(1.0, 18, 14), ferrisBeaconMat);
   bulbSpin.add(ferrisBeacon);
 
+  const ferrisColor = new THREE.Color(0xffe27a);
   eventBus.on('color-change', (hex) => {
-    ridePointLights.forEach(pl => pl.color.set(hex));
-    ferrisRimBulbs.forEach(b => { b.material.color.set(hex); b.material.emissive.set(hex); });
-    ferrisSpokeBulbs.forEach(b => { b.material.color.set(hex); b.material.emissive.set(hex); });
-    ferrisBeaconMat.color.set(hex);
-    ferrisBeaconMat.emissive.set(hex);
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(ferrisColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        ridePointLights.forEach(pl => pl.color.copy(ferrisColor));
+        ferrisRimBulbs.forEach(b => { b.material.color.copy(ferrisColor); b.material.emissive.copy(ferrisColor); });
+        ferrisSpokeBulbs.forEach(b => { b.material.color.copy(ferrisColor); b.material.emissive.copy(ferrisColor); });
+        ferrisBeaconMat.color.copy(ferrisColor);
+        ferrisBeaconMat.emissive.copy(ferrisColor);
+      })
+      .start();
   });
 
   // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
@@ -339,8 +349,6 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     speedMultiplier: 1.0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
-    get phase() { return controlPanel.phase; },
-    set phase(v) { controlPanel.phase = v; },
     angle: 0,
     maxSpeed: MAX_SPEED,
     nightMix: 0,

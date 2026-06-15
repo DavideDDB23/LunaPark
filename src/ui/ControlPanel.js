@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
+import { Easings } from '../utils/Easings.js';
 
 export class ControlPanel {
   constructor({ initialRunning = true, onToggle, rampUp = 0.5, rampDown = 0.5 } = {}) {
@@ -6,11 +8,11 @@ export class ControlPanel {
     this.group.name = 'controlPanel';
 
     this.running = initialRunning;
-    this.phase = initialRunning ? 1.0 : 0.0;
     this.ease = initialRunning ? 1.0 : 0.0;
     this.speedMultiplier = 1.0;
     this.onToggle = onToggle;
     this.eStopPressTime = 0.0;
+    this._rampTween = null;
 
     this.RAMP_UP = rampUp;
     this.RAMP_DOWN = rampDown;
@@ -230,16 +232,24 @@ export class ControlPanel {
   toggle() {
     this.running = !this.running;
     this.eStopPressTime = 0.3; // trigger 0.3s button press animation
+
+    if (this._rampTween) {
+      this._rampTween.stop();
+      this._rampTween = null;
+    }
+
+    const target = this.running ? 1.0 : 0.0;
+    const duration = (this.running ? this.RAMP_UP : this.RAMP_DOWN) * 1000;
+    this._rampTween = new TWEEN.Tween(this)
+      .to({ ease: target }, duration)
+      .easing(Easings.RAMP)
+      .start();
+
     if (this.onToggle) this.onToggle(this.running);
   }
 
   tick(delta, currentSpeed = 1.0) {
     this.speedMultiplier = currentSpeed;
-    const dur = this.running ? this.RAMP_UP : this.RAMP_DOWN;
-    this.phase = THREE.MathUtils.clamp(
-      this.phase + (this.running ? 1 : -1) * (delta / dur), 0, 1
-    );
-    this.ease = this.phase * this.phase * (3 - 2 * this.phase); // smoothstep
 
     // Decrement eStop button animation timer
     if (this.eStopPressTime > 0) {
@@ -334,5 +344,8 @@ export class ControlPanel {
     ctx.fillText(`DRIVE SPEED: ${speedPct}%`, W / 2, 165);
 
     this.screenTexture.needsUpdate = true;
+  }
+}
+e = true;
   }
 }

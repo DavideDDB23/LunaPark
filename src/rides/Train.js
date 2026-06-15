@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { loadGLB } from '../utils/loaders.js';
 
@@ -292,7 +294,13 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
   });
 
   let lightColor = new THREE.Color(0xffcc66);
-  eventBus.on('color-change', (hex) => { lightColor = new THREE.Color(hex); });
+  eventBus.on('color-change', (hex) => {
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(lightColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .start();
+  });
 
   const _lookTarget = new THREE.Vector3();
 

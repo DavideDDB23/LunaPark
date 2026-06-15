@@ -25,9 +25,11 @@
 //      coasting speed follows gravity (slow on crests, fast in dips). Gated by the ControlPanel ease.
 
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
 import { loadGLB } from '../utils/loaders.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
 
@@ -569,9 +571,17 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     railGlowMats.push(railMat);
     trackMesh.material = [railMat, orig];
   }
+  const coasterColor = new THREE.Color(0x3dd2ff);
   eventBus.on('color-change', (hex) => {
-    for (const m of railGlowMats) m.emissive.set(hex);
-    for (const l of cartUnderLights) l.color.set(hex); // the ground-pool under-glow follows the rail colour
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(coasterColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        for (const m of railGlowMats) m.emissive.copy(coasterColor);
+        for (const l of cartUnderLights) l.color.copy(coasterColor);
+      })
+      .start();
   });
 
   // ── Controller / station state-machine ──

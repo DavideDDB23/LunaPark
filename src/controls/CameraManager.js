@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import TWEEN from '@tweenjs/tween.js';
+import { Easings } from '../utils/Easings.js';
 
 const PRESETS = {
 
@@ -12,7 +14,6 @@ const PRESETS = {
 
 const FLY_DURATION = 1.2;
 const FPV_OFFSET = new THREE.Vector3(0, 1.5, 0);
-const smoothstep = (t) => t * t * (3 - 2 * t);
 
 export class CameraManager {
   constructor(camera, scene, controls, renderer, getRides, interactiveObjects = []) {
@@ -27,7 +28,7 @@ export class CameraManager {
     this._flyTo = new THREE.Vector3();
     this._lookFrom = new THREE.Vector3();
     this._lookTo = new THREE.Vector3();
-    this._flyProgress = 0;
+    this._flyTween = null;
     this._fpvTarget = null;
     this._fpvOffset = FPV_OFFSET.clone();
     this._fpvRide = null;
@@ -213,12 +214,39 @@ export class CameraManager {
     window.removeEventListener('pointerup', this._onPointerUp);
   }
 
+  _finishFlight() {
+    if (this._flyTween) {
+      this._flyTween.stop();
+      this._flyTween = null;
+    }
+
+    this.camera.position.copy(this._flyTo);
+    this.controls.target.copy(this._lookTo);
+
+    if (this.controls._sphericalDelta) {
+      this.controls._sphericalDelta.set(0, 0, 0);
+    }
+    if (this.controls._panOffset) {
+      this.controls._panOffset.set(0, 0, 0);
+    }
+
+    this.controls.update();
+    this.controls.saveState();
+
+    this.controls.enabled = true;
+    this.state = 'orbit';
+  }
+
   _startFlight(fromPos, toPos, fromLook, toLook) {
+    if (this._flyTween) {
+      this._flyTween.stop();
+      this._flyTween = null;
+    }
+
     this.state = 'flying';
     this.controls.enabled = false;
     this._cleanupFPV();
 
-    // Reset OrbitControls momentum/delta to prevent jumps upon landing
     if (this.controls._sphericalDelta) {
       this.controls._sphericalDelta.set(0, 0, 0);
     }
@@ -230,37 +258,26 @@ export class CameraManager {
     this._flyTo.copy(toPos);
     this._lookFrom.copy(fromLook);
     this._lookTo.copy(toLook);
-    this._flyProgress = 0;
+
+    const progress = { t: 0 };
+    this._flyTween = new TWEEN.Tween(progress)
+      .to({ t: 1 }, FLY_DURATION * 1000)
+      .easing(Easings.FLY)
+      .onUpdate(() => {
+        const t = progress.t;
+        this.camera.position.lerpVectors(this._flyFrom, this._flyTo, t);
+        this.controls.target.lerpVectors(this._lookFrom, this._lookTo, t);
+        this.camera.lookAt(this.controls.target);
+      })
+      .onComplete(() => this._finishFlight())
+      .start();
   }
 
   _tickFlight(delta) {
-    this._flyProgress += delta / FLY_DURATION;
-    if (this._flyProgress >= 1) {
-      this._flyProgress = 1;
-      this.camera.position.copy(this._flyTo);
-      this.controls.target.copy(this._lookTo);
-      
-      // Reset OrbitControls momentum/delta again to be absolutely sure
-      if (this.controls._sphericalDelta) {
-        this.controls._sphericalDelta.set(0, 0, 0);
-      }
-      if (this.controls._panOffset) {
-        this.controls._panOffset.set(0, 0, 0);
-      }
-
-      this.controls.update();
-
-      // Save the target state so future resets/restores refer to this stable landing pose
-      this.controls.saveState();
-
-      this.controls.enabled = true;
-      this.state = 'orbit';
-      return;
+    // TWEEN.update() in App.js drives the tween; this method keeps the tick branch alive.
+    if (this.state === 'flying' && !this._flyTween) {
+      this._finishFlight();
     }
-    const t = smoothstep(this._flyProgress);
-    this.camera.position.lerpVectors(this._flyFrom, this._flyTo, t);
-    this.controls.target.lerpVectors(this._lookFrom, this._lookTo, t);
-    this.camera.lookAt(this.controls.target);
   }
 
   _tickFPV() {
@@ -295,23 +312,7 @@ export class CameraManager {
       else if (this.state === 'orbit' || this.state === 'flying') { this.enterFPV(); }
     } else if (key === 'Escape') {
       if (this.state === 'fpv') this.exitFPV();
-      else if (this.state === 'flying') {
-        this.camera.position.copy(this._flyTo);
-        this.controls.target.copy(this._lookTo);
-
-        if (this.controls._sphericalDelta) {
-          this.controls._sphericalDelta.set(0, 0, 0);
-        }
-        if (this.controls._panOffset) {
-          this.controls._panOffset.set(0, 0, 0);
-        }
-
-        this.controls.update();
-        this.controls.saveState();
-
-        this.controls.enabled = true;
-        this.state = 'orbit';
-      }
+      else if (this.state === 'flying') this._finishFlight();
     }
   }
 
