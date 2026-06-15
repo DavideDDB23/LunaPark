@@ -346,6 +346,3 @@ export class ControlPanel {
     this.screenTexture.needsUpdate = true;
   }
 }
-e = true;
-  }
-}

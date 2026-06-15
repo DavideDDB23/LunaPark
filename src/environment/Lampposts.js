@@ -3,7 +3,7 @@ import TWEEN from '@tweenjs/tween.js';
 import { Easings } from '../utils/Easings.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
-import { isNightNow } from '../utils/dayNight.js';
+import { isNightNow } from '../lighting/DayNightCycle.js';
 
 const LAMP_URL = 'assets/models/environment/lamp.glb';
 export const LAMPPOST_LAYER = 1;

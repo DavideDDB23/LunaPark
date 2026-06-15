@@ -434,28 +434,15 @@ async function init() {
       const isNight = isNightNow(curr);
       if (!curr.userData.mode) curr.userData.mode = 'auto';
 
-      if (isNight) {
-        if (curr.userData.mode === 'auto') {
-          curr.userData.mode = 'off';
-          curr.userData.blinkTime = 0;
-        } else if (curr.userData.mode === 'off') {
-          curr.userData.mode = 'on';
-          curr.userData.blinkTime = 0;
-        } else {
-          curr.userData.mode = 'auto';
-          curr.userData.blinkTime = 0.4;
-        }
+      if (curr.userData.mode === 'auto') {
+        curr.userData.mode = 'on';
+        curr.userData.blinkTime = 0;
+      } else if (curr.userData.mode === 'on') {
+        curr.userData.mode = 'off';
+        curr.userData.blinkTime = 0;
       } else {
-        if (curr.userData.mode === 'auto') {
-          curr.userData.mode = 'on';
-          curr.userData.blinkTime = 0;
-        } else if (curr.userData.mode === 'on') {
-          curr.userData.mode = 'off';
-          curr.userData.blinkTime = 0;
-        } else {
-          curr.userData.mode = 'auto';
-          curr.userData.blinkTime = 0.4;
-        }
+        curr.userData.mode = 'auto';
+        curr.userData.blinkTime = 0.4;
       }
       return;
     }
@@ -490,28 +477,15 @@ async function init() {
       const isNight = isNightNow(curr);
       if (!curr.userData.mode) curr.userData.mode = 'auto';
 
-      if (isNight) {
-        if (curr.userData.mode === 'auto') {
-          curr.userData.mode = 'off';
-          curr.userData.blinkTime = 0;
-        } else if (curr.userData.mode === 'off') {
-          curr.userData.mode = 'on';
-          curr.userData.blinkTime = 0;
-        } else {
-          curr.userData.mode = 'auto';
-          curr.userData.blinkTime = 0.4;
-        }
+      if (curr.userData.mode === 'auto') {
+        curr.userData.mode = 'on';
+        curr.userData.blinkTime = 0;
+      } else if (curr.userData.mode === 'on') {
+        curr.userData.mode = 'off';
+        curr.userData.blinkTime = 0;
       } else {
-        if (curr.userData.mode === 'auto') {
-          curr.userData.mode = 'on';
-          curr.userData.blinkTime = 0;
-        } else if (curr.userData.mode === 'on') {
-          curr.userData.mode = 'off';
-          curr.userData.blinkTime = 0;
-        } else {
-          curr.userData.mode = 'auto';
-          curr.userData.blinkTime = 0.4;
-        }
+        curr.userData.mode = 'auto';
+        curr.userData.blinkTime = 0.4;
       }
     }
   });

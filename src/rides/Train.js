@@ -5,6 +5,7 @@ import { eventBus } from '../utils/EventBus.js';
 import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { loadGLB } from '../utils/loaders.js';
+import { loadVisitorTemplates, makeRider, updateRider } from '../people/Passengers.js';
 
 // ── CatmullRom control points for the train ring ─
 const CONTROL_POINTS = [
@@ -156,6 +157,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
   // ── Load Wacky Worm Coaster Model (split into individual wagons) ──
   const cars = [];
   const nightLights = [];
+  const riders = [];
 
   try {
     const gltf = await loadGLB('assets/models/rides/wacky_worm.glb');
@@ -192,11 +194,11 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
 
     // Replace materials with standard PBR (original uses KHR_materials_pbrSpecularGlossiness with white diffuse)
     const carriageColors = {
-      'coaster front': 0xcc2222,    // head - red
-      'coaster back': 0x2244cc,     // first wagon - blue
-      'coaster back001': 0xcccc22,  // second wagon - yellow
-      'coaster back002': 0x22aa44,  // third wagon - green
-      'coaster back003': 0xcc6622,  // fourth wagon - orange
+      'coaster_front': 0x22aa44,    // head - green
+      'coaster_back': 0x2244cc,     // first wagon - blue
+      'coaster_back001': 0xcc2222,  // second wagon - red
+      'coaster_back002': 0xcccc22,  // third wagon - yellow
+      'coaster_back003': 0xcc6622,  // fourth wagon - orange
     };
 
     // ── 1. Identify wagon nodes (direct children of RootNode, exclude track) ──
@@ -220,25 +222,37 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
       const wagonGroup = new THREE.Group();
       const wnColor = carriageColors[wn.name] ?? 0xcccccc;
 
+      // Avoid mutation-during-traverse by collecting meshes first
+      const meshes = [];
       subtree.traverse((child) => {
-        if (child.isMesh) {
-          child.position.set(0, 0, 0);
-          child.rotation.set(0, 0, 0);
-          child.quaternion.identity();
-          child.scale.set(1, 1, 1);
-          child.matrix.identity();
-          child.matrixAutoUpdate = true;
-          child.castShadow = true;
-          child.receiveShadow = true;
-          child.material = new THREE.MeshStandardMaterial({
-            color: wnColor,
-            roughness: 0.7,
-            metalness: 0.1,
-            envMapIntensity: 0,
-          });
-          wagonGroup.add(child);
-        }
+        if (child.isMesh) meshes.push(child);
       });
+
+      for (const child of meshes) {
+        child.position.set(0, 0, 0);
+        child.rotation.set(0, 0, 0);
+        child.quaternion.identity();
+        child.scale.set(1, 1, 1);
+        child.matrix.identity();
+        child.matrixAutoUpdate = true;
+        child.castShadow = true;
+        child.receiveShadow = true;
+        
+        // Preserve original texture maps while applying the custom wagon tint color
+        const origMat = child.material;
+        child.material = new THREE.MeshStandardMaterial({
+          color: wnColor,
+          map: origMat.map || null,
+          normalMap: origMat.normalMap || null,
+          roughnessMap: origMat.roughnessMap || null,
+          metalnessMap: origMat.metalnessMap || null,
+          roughness: 0.7,
+          metalness: 0.1,
+          envMapIntensity: 0,
+        });
+        
+        wagonGroup.add(child);
+      }
 
       // Restore upright orientation (model authored lying down, +Z is "up" in model)
       wagonGroup.rotation.x = -Math.PI / 2;
@@ -262,6 +276,81 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     for (let i = 0; i < wagonGroups.length; i++) {
       group.add(wagonGroups[i]);
       cars.push({ mesh: wagonGroups[i], offset: i * CAR_SPACING });
+    }
+
+    // ── 6. Front Headlight (Locomotive) ──
+    if (cars.length > 0) {
+      const loco = cars[0].mesh;
+
+      // Emissive bulb mesh
+      const bulbGeo = new THREE.SphereGeometry(0.15, 16, 16);
+      const bulbMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0xfff2d0,
+        emissiveIntensity: 0.0,
+        roughness: 0.2,
+        metalness: 0.8,
+        toneMapped: false
+      });
+      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+      bulb.position.set(0, 1.3, 2.6); // localized in front-center of worm head
+      loco.add(bulb);
+
+      // Spotlight pointing forward
+      const spotLight = new THREE.SpotLight(0xfff2d0, 0, 45, Math.PI / 4, 0.6, 1.0);
+      spotLight.position.set(0, 1.3, 2.65);
+      spotLight.castShadow = true;
+      spotLight.shadow.mapSize.width = 512;
+      spotLight.shadow.mapSize.height = 512;
+      spotLight.shadow.camera.near = 0.5;
+      spotLight.shadow.camera.far = 45;
+
+      const target = new THREE.Object3D();
+      target.position.set(0, 1.3, 10.0);
+      loco.add(spotLight);
+      loco.add(target);
+      spotLight.target = target;
+
+      nightLights.push({
+        type: 'spot',
+        light: spotLight,
+        mesh: bulb
+      });
+    }
+
+    // ── 7. Passengers ──
+    const templates = await loadVisitorTemplates(10);
+    for (let i = 0; i < wagonGroups.length; i++) {
+      const wrapper = wagonGroups[i];
+      for (let seatIdx = 0; seatIdx < 2; seatIdx++) {
+        const tmpl = templates[(i * 2 + seatIdx) % templates.length];
+        const riderHeight = 45 + Math.random() * 8; // scaled local units
+
+        const rider = makeRider(tmpl, riderHeight, {
+          pool: ['rest'],
+          facingY: 0,
+          phase: i * 1.7 + seatIdx * 0.9,
+          seatedStyle: 'chair'
+        });
+
+        const sx = seatIdx === 0 ? -12 : 12; // side-by-side seating
+        const sy = 12; // seat bottom height in local coordinates
+        const sz = -10; // seat back depth
+
+        rider.fig.updateMatrixWorld(true);
+        const hipBone = rider.fig.getObjectByName('Hips');
+        if (hipBone) {
+          const hp = hipBone.getWorldPosition(new THREE.Vector3());
+          rider.fig.worldToLocal(hp);
+          hp.multiplyScalar(rider.scale);
+          rider.pivot.position.set(sx - hp.x, sy - hp.y, sz - hp.z);
+        } else {
+          rider.pivot.position.set(sx, sy - riderHeight * 0.28, sz);
+        }
+
+        wrapper.add(rider.pivot);
+        riders.push(rider);
+      }
     }
 
   } catch (e) {
@@ -332,7 +421,10 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
       cars[i].mesh.rotateZ(cross.y * 2);
     }
 
-    // No passenger updates needed (passengers are part of the model)
+    // Update passengers animation
+    for (const r of riders) {
+      updateRider(r, time);
+    }
 
     for (const nl of nightLights) {
       if (nl.type === 'spot') {
