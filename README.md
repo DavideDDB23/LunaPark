@@ -52,7 +52,7 @@ Open `http://localhost:8080` in a modern browser (Chrome/Firefox/Edge).
 | Left-click on stage spotlight | Toggle spotlight on/off |
 | Scroll wheel on ride | Adjust ride speed (0.2x – 1.5x) |
 | `1` – `6` | Fly to preset viewpoints |
-| `C` near a ride | Enter FPV ride camera |
+| Click ride button (bottom bar) | Enter FPV ride camera |
 | `Space` | Pause / resume auto time |
 | `ESC` | Exit FPV / active view |
 | Drag (left mouse) | Orbit camera |
