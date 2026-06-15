@@ -3,6 +3,7 @@ import TWEEN from '@tweenjs/tween.js';
 import { Easings } from '../utils/Easings.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
+import { isNightNow } from '../utils/dayNight.js';
 
 const LAMP_URL = 'assets/models/environment/lamp.glb';
 export const LAMPPOST_LAYER = 1;
@@ -102,13 +103,13 @@ export async function buildLampposts() {
     lampRoot.userData.pointLight = pointLight;
   }
 
-  // Listen for time phase changes to drive automated lighting
+  // Listen for time phase changes to update nightFactor (used for dimming).
+  // Day/night state itself is read via isNightNow() in the tick so that the
+  // click handler and the auto-mode logic always agree.
   eventBus.on('time-phase-change', (data) => {
-    const isNight = data.isNight;
     const nightFactor = data.nightFactor;
 
     for (const lampRoot of group.children) {
-      lampRoot.userData.targetOn = isNight;
       lampRoot.userData.nightFactor = nightFactor;
     }
   });
@@ -131,7 +132,7 @@ export async function buildLampposts() {
         }
         lampRoot.userData.blinkTime -= delta;
         const step = Math.floor(lampRoot.userData.blinkTime / 0.10);
-        const isNight = lampRoot.userData.targetOn;
+        const isNight = isNightNow(lampRoot);
         const isBlinkOn = (step % 2 === 0) ? isNight : !isNight;
         pl.intensity = isBlinkOn ? baseIntensity : 0.0;
 
@@ -149,7 +150,7 @@ export async function buildLampposts() {
         targetIntensity = baseIntensity;
       } else if (mode === 'off') {
         targetIntensity = 0;
-      } else if (lampRoot.userData.targetOn) {
+      } else if (isNightNow(lampRoot)) {
         const nf = lampRoot.userData.nightFactor !== undefined ? lampRoot.userData.nightFactor : 1.0;
         targetIntensity = nf * baseIntensity;
       }
