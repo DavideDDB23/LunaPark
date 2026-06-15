@@ -3,96 +3,121 @@ import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
 
 const BALLOON_URL = 'assets/models/rides/balloon.glb';
+const TARGET_HEIGHT = 14;
+const SPAWN_RADIUS = 30;
+const SPAWN_Y_MIN = 35;
+const SPAWN_Y_MAX = 45;
 
-export async function buildBalloon() {
-  const group = new THREE.Group();
-  group.name = 'balloon';
+function deterministicSeed(i) {
+  return i * 137 * Math.PI / 180 + 5.7;
+}
 
-  const gltf = await loadGLB(BALLOON_URL);
-  const model = gltf.scene;
-  sanitizeMaterials(model);
+async function buildOneBalloon(model, index) {
+  const node = model.getObjectByName('V1_HotAirBalloon_' + index);
+  if (!node) {
+    console.warn('[Balloon] GLB missing sub-root V1_HotAirBalloon_' + index);
+    return null;
+  }
 
-  // Auto-fit: scale to ~14m total height
-  const bbox = new THREE.Box3().setFromObject(model);
+  const bbox = new THREE.Box3().setFromObject(node);
   const size = new THREE.Vector3();
   bbox.getSize(size);
-  const targetHeight = 14;
-  const scale = size.y > 0 ? targetHeight / size.y : 1;
-  model.scale.setScalar(scale);
+  const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
+  node.scale.setScalar(scale);
 
-  // Center horizontally
-  const scaledBbox = new THREE.Box3().setFromObject(model);
+  const scaledBbox = new THREE.Box3().setFromObject(node);
   const center = new THREE.Vector3();
   scaledBbox.getCenter(center);
-  model.position.x -= center.x;
-  model.position.z -= center.z;
+  node.position.x -= center.x;
+  node.position.z -= center.z;
+  node.position.y -= scaledBbox.min.y;
 
-  // Lift so bottom is at y=0
-  const scaledBbox2 = new THREE.Box3().setFromObject(model);
-  model.position.y -= scaledBbox2.min.y;
-
-  model.traverse((o) => {
+  node.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = true;
     }
   });
 
-  group.add(model);
+  const b = new THREE.Group();
+  b.name = 'balloon_' + index;
 
-  // Random initial position within r=30 from center, height 35-45
-  const angle = Math.random() * Math.PI * 2;
-  const dist = Math.random() * 30;
+  b.add(node);
+  b.userData.fpvTarget = node;
+
+  const seed = deterministicSeed(index);
+  const angle = seed;
+  const dist = ((index * 7.3) % 1) * SPAWN_RADIUS;
   const baseX = Math.cos(angle) * dist;
   const baseZ = Math.sin(angle) * dist;
-  const baseY = 35 + Math.random() * 10;
+  const baseY = SPAWN_Y_MIN + ((index * 3.1) % 1) * (SPAWN_Y_MAX - SPAWN_Y_MIN);
+  b.position.set(baseX, baseY, baseZ);
+  b.userData.baseY = baseY;
 
-  group.position.set(baseX, baseY, baseZ);
-
-
-
-  // Night light inside balloon
   const balloonLight = new THREE.PointLight(0xff8844, 0, 25, 1.5);
-  balloonLight.position.set(0, targetHeight * 0.5, 0);
-  group.add(balloonLight);
+  balloonLight.position.set(0, TARGET_HEIGHT * 0.5, 0);
+  b.add(balloonLight);
 
-  // State
-  let driftAngle = Math.random() * Math.PI * 2;
+  let driftAngle = angle;
   let nightFactor = 0;
-  let isNight = false;
+  b.userData.driftAngle = driftAngle;
 
   eventBus.on('time-phase-change', (data) => {
-    isNight = data.isNight;
     nightFactor = data.nightFactor;
   });
 
-  group.userData.tick = (delta, time, windSpeed = 1) => {
+  b.userData.tick = (delta, time, windSpeed = 1) => {
     const dt = Math.min(delta, 0.05);
 
-    // Drift
-    driftAngle += Math.sin(time * 0.02) * 0.001 * windSpeed;
+    driftAngle += Math.sin(time * 0.02 + index) * 0.001 * windSpeed;
+    b.userData.driftAngle = driftAngle;
     const driftSpeed = windSpeed * 1.5;
-    group.position.x += Math.cos(driftAngle) * driftSpeed * dt;
-    group.position.z += Math.sin(driftAngle) * driftSpeed * dt;
+    b.position.x += Math.cos(driftAngle) * driftSpeed * dt;
+    b.position.z += Math.sin(driftAngle) * driftSpeed * dt;
 
-    // Boundary: soft return if beyond r=70
-    const distFromCenter = Math.sqrt(group.position.x ** 2 + group.position.z ** 2);
+    const distFromCenter = Math.sqrt(b.position.x ** 2 + b.position.z ** 2);
     if (distFromCenter > 70) {
-      // Steer back toward center
-      const toCenterAngle = Math.atan2(-group.position.z, -group.position.x);
+      const toCenterAngle = Math.atan2(-b.position.z, -b.position.x);
       driftAngle += (toCenterAngle - driftAngle) * 0.05;
     }
 
-    // Sway
-    group.position.y = baseY + Math.sin(time * 0.3) * 1.5;
-    group.rotation.z = Math.sin(time * 0.5 + windSpeed) * 0.08;
-    group.rotation.x = Math.sin(time * 0.4 + windSpeed * 0.7) * 0.05;
+    b.position.y = baseY + Math.sin(time * 0.3 + index) * 1.5;
+    b.rotation.z = Math.sin(time * 0.5 + windSpeed + index) * 0.08;
+    b.rotation.x = Math.sin(time * 0.4 + windSpeed * 0.7 + index) * 0.05;
 
-
-
-    // Night light
     balloonLight.intensity = nightFactor * 40;
   };
 
-  return group;
+  return b;
+}
+
+export async function buildBalloon() {
+  const group = new THREE.Group();
+  group.name = 'balloon';
+
+  let gltf;
+  try {
+    gltf = await loadGLB(BALLOON_URL);
+  } catch (err) {
+    console.error('[Balloon] Failed to load GLB:', err);
+    return { group, balloons: [] };
+  }
+  const model = gltf.scene;
+  sanitizeMaterials(model);
+
+  const balloons = [];
+  for (let i = 1; i <= 3; i++) {
+    const b = await buildOneBalloon(model, i);
+    if (b) {
+      group.add(b);
+      balloons.push(b);
+    }
+  }
+
+  if (balloons[0]) {
+    balloons[0].userData.rideId = 'balloon';
+    balloons[0].userData.rideName = 'Mongolfiera';
+  }
+
+  return { group, balloons };
 }
