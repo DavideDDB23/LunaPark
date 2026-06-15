@@ -149,6 +149,52 @@ export class CameraManager {
     this.controls.enabled = false;
   }
 
+  enterFPVById(rideId) {
+    const rides = this.getRides();
+    if (!rides || rides.length === 0) return;
+
+    const ride = rides.find(r => r.group?.userData?.rideId === rideId);
+    if (!ride) {
+      console.warn('[CameraManager] No ride with id', rideId);
+      return;
+    }
+
+    if (this.state === 'fpv' && this._fpvRide === ride) {
+      this.exitFPV();
+      return;
+    }
+
+    if (this.state === 'fpv') {
+      this._cleanupFPV();
+    }
+
+    const target = ride.getFpvTarget();
+    if (!target) {
+      console.warn('[CameraManager] Ride', rideId, 'has no FPV target');
+      return;
+    }
+
+    this._fpvTarget = target;
+    this._fpvRide = ride;
+    this._fpvOffset.copy(ride.getFpvOffset());
+
+    this._hiddenRiders = [];
+    if (ride.getRiders) {
+      const riders = ride.getRiders();
+      if (riders && riders.length > 0) {
+        for (const rider of riders) {
+          if (rider && rider.pivot) {
+            rider.pivot.visible = false;
+            this._hiddenRiders.push(rider);
+          }
+        }
+      }
+    }
+
+    this.state = 'fpv';
+    this.controls.enabled = false;
+  }
+
   exitFPV() {
     if (this.state !== 'fpv') return;
 
@@ -316,9 +362,6 @@ export class CameraManager {
     const key = ev.key;
     if (key >= '1' && key <= '6') {
       this.flyToPreset(parseInt(key));
-    } else if (key === 'c' || key === 'C') {
-      if (this.state === 'fpv') { this.exitFPV(); }
-      else if (this.state === 'orbit' || this.state === 'flying') { this.enterFPV(); }
     } else if (key === 'Escape') {
       if (this.state === 'fpv') this.exitFPV();
       else if (this.state === 'flying') this._finishFlight();
