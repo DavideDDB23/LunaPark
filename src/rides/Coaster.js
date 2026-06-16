@@ -86,8 +86,9 @@ function extractCenterline(model) {
   const pos = railMesh.geometry.attributes.position;
   const nRings = Math.floor(pos.count / RAIL_RING);
   const rawPts = [];
-  const rawUps = [];
-  
+  const ringVerts = [];
+
+  // ── Phase 1: collect centroids and all ring-vertex directions in model-local space ──
   for (let r = 0; r < nRings; r++) {
     const cenLoc = new THREE.Vector3();
     for (let j = 0; j < RAIL_RING; j++) {
@@ -98,39 +99,59 @@ function extractCenterline(model) {
 
     railMesh.localToWorld(cenLoc);
     const cenMod = model.worldToLocal(cenLoc.clone());
+    rawPts.push(cenMod);
 
-    const prevU = rawUps.length > 0 ? rawUps[rawUps.length - 1] : null;
-    let bestU = null;
-    let bestDot = -Infinity;
-
+    const dirs = [];
     for (let j = 0; j < RAIL_RING; j++) {
       const idx = r * RAIL_RING + j;
       const vLoc = new THREE.Vector3(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
       railMesh.localToWorld(vLoc);
       const vMod = model.worldToLocal(vLoc);
-      const uDir = vMod.sub(cenMod).normalize();
-      
-      if (prevU) {
-        const dot = uDir.dot(prevU);
-        if (dot > bestDot) {
-          bestDot = dot;
-          bestU = uDir;
-        }
-      } else {
-        if (j === 0) bestU = uDir; // First ring fallback
-      }
+      dirs.push(vMod.sub(cenMod).normalize());
     }
-    
-    rawPts.push(cenMod);
+    ringVerts.push(dirs);
+  }
+
+  // ── Phase 2: Parallel Transport to extract up vectors without parasitic twist ──
+  const n = rawPts.length;
+  const rawUps = [];
+
+  // Ring 0: pick the spoke closest to world-up for a stable initial frame
+  {
+    let bestU = null;
+    let bestDot = -Infinity;
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    for (const uDir of ringVerts[0]) {
+      const uWorld = uDir.clone().applyMatrix4(model.matrixWorld).sub(
+        rawPts[0].clone().applyMatrix4(model.matrixWorld)
+      ).normalize();
+      const dot = uWorld.dot(worldUp);
+      if (dot > bestDot) { bestDot = dot; bestU = uDir; }
+    }
+    rawUps.push(bestU);
+  }
+
+  // Rings 1..n-1: parallel-transport previous up, then pick closest spoke
+  for (let r = 1; r < n; r++) {
+    const prevT = rawPts[r].clone().sub(rawPts[r - 2 < 0 ? n + (r - 2) : r - 2]).normalize();
+    const currT = rawPts[(r + 1) % n].clone().sub(rawPts[r - 1]).normalize();
+    const qTrans = new THREE.Quaternion().setFromUnitVectors(prevT, currT);
+    const projectedPrevU = rawUps[r - 1].clone().applyQuaternion(qTrans);
+
+    let bestU = null;
+    let bestDot = -Infinity;
+    for (const uDir of ringVerts[r]) {
+      const dot = uDir.dot(projectedPrevU);
+      if (dot > bestDot) { bestDot = dot; bestU = uDir; }
+    }
     rawUps.push(bestU);
   }
 
   // Low-pass filter the points AND the ups to remove high-frequency mesh vertex noise
-  const n = rawPts.length;
   let curPts = rawPts.map(p => p.clone());
   let curUps = rawUps.map(p => p.clone());
   
-  const iterations = 8;
+  const iterations = 3;
   for (let iter = 0; iter < iterations; iter++) {
     const nxtPts = [], nxtUps = [];
     for (let i = 0; i < n; i++) {
@@ -200,26 +221,17 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const upCurve = new THREE.CatmullRomCurve3(ctrlUps, true, 'catmullrom', 0.5);
 
   // ── Precompute the frame field capturing the physical banking of the mesh ──
-  const T0 = curve.getTangentAt(0).normalize();
-  const M0 = upCurve.getPointAt(0).normalize();
-  const U0 = new THREE.Vector3(0, 1, 0);
-  U0.projectOnPlane(T0).normalize();
-  if (U0.lengthSq() < 1e-6) U0.set(1, 0, 0).projectOnPlane(T0).normalize();
-  
-  const sinA = M0.clone().cross(U0).dot(T0);
-  const cosA = M0.dot(U0);
-  const twistOffset = Math.atan2(sinA, cosA);
-
+  // Use the filtered up vectors from the geometry directly; the rail artist already modelled
+  // the correct banking. No twist offset is applied — that would inject parasitic roll because
+  // the correction axis (the tangent) changes direction along the track.
   const upVectors = [];
   for (let i = 0; i <= NUM_FRAMES; i++) {
     const u = i / NUM_FRAMES;
-    const T = curve.getTangentAt(u).normalize();
     const M = upCurve.getPointAt(u).normalize();
-    const M_rot = M.applyAxisAngle(T, twistOffset).normalize();
-    upVectors.push(M_rot);
+    upVectors.push(M);
   }
 
-  // Ensure consistent orientation direction globally (just in case the offset flipped us)
+  // Ensure consistent orientation direction globally
   let upDot = 0;
   for (const v of upVectors) upDot += v.y;
   if (upDot < 0) for (const v of upVectors) v.negate();
@@ -720,6 +732,10 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       _up.applyMatrix3(_dirMat).normalize();
       _tan.subVectors(_ptF, _ptB).normalize();
       _tan.negate();
+      // Ensure up is perpendicular to tangent (non-uniform Y_STRETCH may have skewed it).
+      // This produces a clean lookAt frame so passengers stay upright relative to the car.
+      const upDotTan = _up.dot(_tan);
+      _up.addScaledVector(_tan, -upDotTan).normalize();
       _mtx.lookAt(_origin, _tan, _up);
       c.dolly.quaternion.setFromRotationMatrix(_mtx);
     }
