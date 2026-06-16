@@ -8,9 +8,9 @@ const TARGET_HEIGHT = 48;
 const PASSENGER_COUNTS = [2, 3, 3];
 
 const BALLOON_ZONES = [
-  { cx: -40, cz: 40, hw: 20, hd: 15, baseY: 42, minY: 36 },
-  { cx: 40, cz: -40, hw: 15, hd: 20, baseY: 38, minY: 32 },
-  { cx: 0, cz: -30, hw: 18, hd: 12, baseY: 50, minY: 44 },
+  { cx: -40, cz: 42, hw: 20, hd: 14, baseY: 42, minY: 36 },
+  { cx: 42, cz: -42, hw: 14, hd: 20, baseY: 38, minY: 32 },
+  { cx: 0, cz: -32, hw: 14, hd: 10, baseY: 50, minY: 44 },
 ];
 
 // 2D value noise: hash deterministico + interpolazione smoothstep.
@@ -132,33 +132,58 @@ function buildOneBalloon(model, index) {
 
   let nightFactor = 0;
 
+  // Stato waypoint per il movimento casuale
+  b.userData.target = { x: zone.cx, z: zone.cz };
+  b.userData.nextTargetTime = 0;
+
   eventBus.on('time-phase-change', (data) => {
     nightFactor = data.nightFactor;
   });
 
   b.userData.tick = (delta, time, windSpeed = 1) => {
-    // Fattore vento: wind=0 → 0.4 (movimento minimo), wind=1 → 1.2, wind=3 → 2.8
+    // Velocità di crociera scalata dal vento: 1.5 unità/s a wind=1
     const ws = 0.4 + windSpeed * 0.8;
-    // Velocità di "attraversamento" del campo di rumore
-    const t = time * 0.12 * ws;
-    // Fasi diverse per ogni pallone → non si muovono all'unisono
-    const phaseX = index * 17.3;
-    const phaseZ = index * 31.7;
-    // Due offset di noise per X e Z, lenti e indipendenti
-    const ox = t + phaseX;
-    const oz = t * 0.87 + phaseZ;
-    const nx = noise2D(ox, 0);
-    const nz = noise2D(oz, 100);
-    // Secondo strato di rumore per variabilità fine (breve)
-    const jx = noise2D(ox * 3.7, 50) * 0.3;
-    const jz = noise2D(oz * 3.3, 75) * 0.3;
-    // Posizione = centro zona + (rumore principale + jitter) * semi-area
-    // Clamp ai bordi per garantire che il pallone resti dentro l'area
-    b.position.x = zone.cx + Math.max(-1, Math.min(1, nx + jx)) * zone.hw;
-    b.position.z = zone.cz + Math.max(-1, Math.min(1, nz + jz)) * zone.hd;
+    const speed = 1.5 * ws;
+    // Cambio target ogni 4-8 secondi (in base al vento)
+    const baseInterval = 6 / (0.5 + windSpeed * 0.7);
 
-    // Y: oscillazione base fissa + leggera influenza del vento
-    const yJitter = noise2D(t * 0.5, 200 + index * 10) * 0.8 * ws;
+    const target = b.userData.target;
+    const dx = target.x - b.position.x;
+    const dz = target.z - b.position.z;
+    const distToTarget = Math.hypot(dx, dz);
+
+    // Soft confine: se il pallone è oltre l'85% del semi-asse, forza nuovo target verso l'interno
+    const fromCenter = Math.hypot(b.position.x - zone.cx, b.position.z - zone.cz);
+    const maxR = Math.max(zone.hw, zone.hd);
+
+    const targetReached = distToTarget < 1.5;
+    const timeout = time >= b.userData.nextTargetTime;
+    const nearEdge = fromCenter > maxR * 0.85;
+
+    if (targetReached || timeout || nearEdge) {
+      // Nuovo target casuale nell'85% interno del rettangolo
+      target.x = zone.cx + (Math.random() * 2 - 1) * zone.hw * 0.85;
+      target.z = zone.cz + (Math.random() * 2 - 1) * zone.hd * 0.85;
+      // Se eravamo oltre l'85%, forza target verso il centro
+      if (nearEdge) {
+        target.x = zone.cx + (target.x - zone.cx) * 0.5;
+        target.z = zone.cz + (target.z - zone.cz) * 0.5;
+      }
+      b.userData.nextTargetTime = time + baseInterval * (0.7 + Math.random() * 0.6);
+    }
+
+    // Muovi verso il target con velocità costante, fermandoti a destinazione
+    const newDx = target.x - b.position.x;
+    const newDz = target.z - b.position.z;
+    const newDist = Math.hypot(newDx, newDz);
+    if (newDist > 0.001) {
+      const step = Math.min(speed * delta, newDist);
+      b.position.x += (newDx / newDist) * step;
+      b.position.z += (newDz / newDist) * step;
+    }
+
+    // Y: oscillazione lenta fissa + jitter leggero scalato dal vento
+    const yJitter = noise2D(time * 0.2, index * 50) * 0.5 * ws;
     b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5 + yJitter);
     b.rotation.z = Math.sin(time * 0.5 + windSpeed + index) * 0.08;
     b.rotation.x = Math.sin(time * 0.4 + windSpeed * 0.7 + index) * 0.05;
