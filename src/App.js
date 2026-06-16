@@ -105,6 +105,7 @@ let cameraManager = null;
 const fpvTmpVec = new THREE.Vector3();
 const fpvTmpQuat = new THREE.Quaternion();
 const world = {};
+let balloons = []; // populated in init(), referenced by the CameraManager rides callback
 
 cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const rides = [];
@@ -190,9 +191,11 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
       const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
       const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
-      // After the flipZ correction, the passenger faces -Z in seat-local space (outward).
-      // Camera sits just behind the head, slightly outward (-Z).
-      fpvTmpVec.set(px, py + h * 0.82, pz - 0.15);
+      // Seat-local +Z is the rider's forward direction (toward disc centre), per the convention
+      // established in Tagada.js (backrest at -Z, grab bar / cushion front at +Z). The camera
+      // sits just in front of the head, slightly inward (+Z), so the FPV looks toward the centre
+      // of the ride — the same direction the rider is facing.
+      fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
       const shake = tg.userData.controller.ease || 0;
       const tN = performance.now() * 0.001;
       fpvTmpVec.x += Math.sin(tN * 23.0) * 0.045 * shake;
@@ -207,8 +210,8 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
       const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
       const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
-      // Look outward (-Z in seat-local space = away from disc centre).
-      fpvTmpVec.set(px, py + h * 0.82, pz - 10.0);
+      // Look inward (+Z in seat-local space = toward disc centre), matching the rider's facing.
+      fpvTmpVec.set(px, py + h * 0.82, pz + 10.0);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
@@ -377,7 +380,9 @@ async function init() {
   const fireworks = buildFireworks();
   scene.add(fireworks);
 
-  const { group: balloonContainer, balloons } = await buildBalloon();
+  const balloonData = await buildBalloon();
+  const balloonContainer = balloonData.group;
+  balloons = balloonData.balloons;
   environmentGroup.add(balloonContainer);
 
   const shootingGallery = await buildShootingGallery({ camera, renderer, controls });

@@ -49,14 +49,13 @@ const CAR_GAP = 1.0;         // centre-to-centre spacing in car-lengths (1 = nos
 const TRAIN_SPACING = 1.0 / NUM_TRAINS; // 0.5 — second train half a circuit ahead
 const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at park scale
 
-// Passenger seating, in DOLLY-LOCAL space.
-// Dolly frame: +Z = travel direction (forward), +Y = rail up, +X = right.
-// (Set by Matrix4.lookAt(origin, -tangent, up) at lines 320-331, so the dolly's -Z aligns
-// with the negated tangent, leaving +Z pointing along the travel direction.)
+// Passenger seating, in DOLLY-LOCAL space (the dolly is unit-scaled; +Z = travel direction,
+// +Y = up). Riders are seated exactly like the Tagada: upright, facing forward, hip-centred.
 const SEAT_HALF_SEP = 0.5;   // lateral half-separation between the two seats (local X)
-const SEAT_SURFACE_Y = 0.75; // seat-cushion height relative to the rail centre (local Y)
+const SEAT_SURFACE_Y = 0.75; // seat-cushion height relative to the rail centre (local Y); the
+                             // cart's seat sits ABOVE the rail, so hips land here, not below
 const SEAT_FWD_Z = -0.05;    // fore/aft offset of the hips from the rail centre (local Z)
-const SEAT_FACING_Y = 0;     // base facing; the 180° flip is applied post-makeRider via quaternion
+const SEAT_FACING_Y = 0;     // rider yaw — riders face the seat's open side (like the Tagada)
 const G_EFF = 9.8;           // gravity for the energy model (world-units/s²)
 const CURVE_SAMPLES = 80;    // control points kept for the CatmullRom
 const NUM_FRAMES = 4000;     // resolution of the rotation-minimizing frame field
@@ -323,20 +322,16 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   _pt0.applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
   dolly0.position.copy(_pt0);
 
-  const _ptF0 = curve.getPointAt((uCar + 0.001) % 1).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
-  const _ptB0 = curve.getPointAt((uCar - 0.001 + 1) % 1).applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
-  _tan.subVectors(_ptF0, _ptB0).normalize();
-  getUpVectorAt(uCar, _up);
-  _up.applyMatrix3(_dirMat).normalize();
-  _tan.negate();
-  _mtx.lookAt(_origin, _tan, _up);
-  dolly0.quaternion.setFromRotationMatrix(_mtx);
+  const _q0 = new THREE.Quaternion();
+  frameQuat(uCar, _q0);
+  dolly0.quaternion.copy(rideScaled.quaternion).multiply(_q0);
   dolly0.updateMatrixWorld(true);
 
   // Attach cart template
   dolly0.attach(templateCartNode);
-
-  // Rotate the cart mesh 180° around the dolly local Z so the visual front faces the travel direction
+  
+  // Rotate the cart template by 180 degrees (Math.PI) around its local Z axis (vertical dolly Y)
+  // so that the carriages and the passengers face forward in the direction of movement.
   templateCartNode.rotateOnAxis(new THREE.Vector3(0, 0, 1), Math.PI);
   
   // Force uniform scale based on horizontal scale * CART_SCALE to prevent non-uniform scale skewing on carriages and riders
@@ -468,16 +463,16 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
         rider.pivot.position.set(sx, SEAT_SURFACE_Y - riderHeight * 0.28, SEAT_FWD_Z);
       }
 
+      rider.restX = rider.pivot.position.x;
+      rider.restY = rider.pivot.position.y;
+      rider.restZ = rider.pivot.position.z;
+
       // Riders appear upside-down in the dolly frame: the GLB model's root has an intrinsic
       // rotation that puts the head toward -Y of the dolly. Flip 180° around the dolly Z axis:
       //   • Z-rotation π  →  Y flips (head↔feet) ✓  and  X flips (left↔right, cosmetically fine)
       //   • Z direction unchanged  →  forward/backward facing is preserved ✓
       const _flipZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
       rider.fig.quaternion.premultiply(_flipZ);
-
-      rider.restX = rider.pivot.position.x;
-      rider.restY = rider.pivot.position.y;
-      rider.restZ = rider.pivot.position.z;
 
       car.dolly.add(rider.pivot); // child of the unit-scale dolly — no cart-scale counteraction
       riders.push(rider);
@@ -705,17 +700,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     //    so the carriages follow the actual stretched rail rotation exactly.
     const sLead = uToWorldArc(controller.u);
     for (const c of cars) {
-      const frontArc = sLead - c.arcOffset;
-      const backArc = frontArc - carSpacing;
-
-      // If the back coupling wrapped around the loop closure (backArc < 0) the modulo in
-      // worldArcToU will place it "ahead" of the front coupling in travel direction. The
-      // chord would then point opposite to travel and _tan.negate() flips the carriage
-      // (and the FPV camera) upside-down. When the train is compacted around the station
-      // junction, keep the last valid position/orientation for this car. Re-engagement is
-      // smooth once sLead grows past carSpacing.
-      if (backArc < 0) continue;
-
+      const frontArc = sLead - c.arcOffset;     // front coupling, world arc-length
+      const backArc = frontArc - carSpacing;    // back coupling (one car behind)
       const uf = worldArcToU(frontArc);
       const ub = worldArcToU(backArc);
 
