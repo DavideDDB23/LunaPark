@@ -8,9 +8,9 @@ const TARGET_HEIGHT = 48;
 const PASSENGER_COUNTS = [2, 3, 3];
 
 const BALLOON_ZONES = [
-  { cx: -40, cz: 40, hw: 16, hd: 12, baseY: 38, minY: 32 },
-  { cx: 40, cz: -40, hw: 12, hd: 16, baseY: 30, minY: 24 },
-  { cx: 0, cz: -30, hw: 16, hd: 12, baseY: 36, minY: 30 },
+  { cx: -40, cz: 40, hw: 20, hd: 15, baseY: 42, minY: 36 },
+  { cx: 40, cz: -40, hw: 15, hd: 20, baseY: 38, minY: 32 },
+  { cx: 0, cz: -30, hw: 18, hd: 12, baseY: 50, minY: 44 },
 ];
 
 // 2D value noise: hash deterministico + interpolazione smoothstep.
@@ -153,8 +153,9 @@ function buildOneBalloon(model, index) {
     const jx = noise2D(ox * 3.7, 50) * 0.3;
     const jz = noise2D(oz * 3.3, 75) * 0.3;
     // Posizione = centro zona + (rumore principale + jitter) * semi-area
-    b.position.x = zone.cx + (nx + jx) * zone.hw;
-    b.position.z = zone.cz + (nz + jz) * zone.hd;
+    // Clamp ai bordi per garantire che il pallone resti dentro l'area
+    b.position.x = zone.cx + Math.max(-1, Math.min(1, nx + jx)) * zone.hw;
+    b.position.z = zone.cz + Math.max(-1, Math.min(1, nz + jz)) * zone.hd;
 
     // Y: oscillazione base fissa + leggera influenza del vento
     const yJitter = noise2D(t * 0.5, 200 + index * 10) * 0.8 * ws;
