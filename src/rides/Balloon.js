@@ -172,14 +172,27 @@ function buildOneBalloon(model, index) {
       b.userData.nextTargetTime = time + baseInterval * (0.7 + Math.random() * 0.6);
     }
 
-    // Muovi verso il target con velocità costante, fermandoti a destinazione
+    // Muovi verso il target con velocità costante, ma con curvatura "sinuosa":
+    // la direzione viene deviata di un angolo che oscilla nel tempo, dando
+    // una traiettoria a spirale dolce invece di un segmento retto.
     const newDx = target.x - b.position.x;
     const newDz = target.z - b.position.z;
     const newDist = Math.hypot(newDx, newDz);
     if (newDist > 0.001) {
+      const dirX = newDx / newDist;
+      const dirZ = newDz / newDist;
+      // Perpendicolare a (dirX, dirZ) nel piano XZ: (-dirZ, dirX)
+      // Angolo di curvatura oscillante (±0.4 rad ≈ ±23°), frequenze diverse per index
+      const curveAngle = Math.sin(time * 0.35 + index * 2.7) * 0.4
+                        + Math.sin(time * 0.13 + index * 1.3) * 0.2;
+      const cosA = Math.cos(curveAngle);
+      const sinA = Math.sin(curveAngle);
+      // Direzione curvata: rotazione di curveAngle nel piano (dir, perp)
+      const cdirX = dirX * cosA + (-dirZ) * sinA;
+      const cdirZ = dirZ * cosA + dirX * sinA;
       const step = Math.min(speed * delta, newDist);
-      b.position.x += (newDx / newDist) * step;
-      b.position.z += (newDz / newDist) * step;
+      b.position.x += cdirX * step;
+      b.position.z += cdirZ * step;
     }
 
     // Y: oscillazione lenta fissa + jitter leggero scalato dal vento
