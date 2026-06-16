@@ -8,9 +8,9 @@ const TARGET_HEIGHT = 48;
 const PASSENGER_COUNTS = [2, 3, 3];
 
 const BALLOON_ZONES = [
-  { cx: -40, cz: 40, radius: 6, baseY: 28, minY: 22 },
-  { cx: 40, cz: -40, radius: 6, baseY: 20, minY: 14 },
-  { cx: 0, cz: -30, radius: 6, baseY: 26, minY: 16 },
+  { cx: -40, cz: 40, hw: 8, hd: 6, baseY: 38, minY: 32 },
+  { cx: 40, cz: -40, hw: 6, hd: 8, baseY: 30, minY: 24 },
+  { cx: 0, cz: -30, hw: 8, hd: 6, baseY: 36, minY: 30 },
 ];
 
 function buildOneBalloon(model, index) {
@@ -109,22 +109,20 @@ function buildOneBalloon(model, index) {
   balloonLight.position.set(0, TARGET_HEIGHT * 0.5, 0);
   b.add(balloonLight);
 
-  let driftAngle = index * 2.094;
   let nightFactor = 0;
-  b.userData.driftAngle = driftAngle;
 
   eventBus.on('time-phase-change', (data) => {
     nightFactor = data.nightFactor;
   });
 
   b.userData.tick = (delta, time, windSpeed = 1) => {
-    const dt = Math.min(delta, 0.05);
-
-    driftAngle += dt * (0.06 + 0.06 * Math.sin(time * 0.04 + index)) * windSpeed;
-    b.userData.driftAngle = driftAngle;
-    const driftRadius = 1 + Math.abs(Math.sin(time * 0.02 + index * 1.7)) * (zone.radius - 1);
-    b.position.x = zone.cx + Math.cos(driftAngle) * driftRadius;
-    b.position.z = zone.cz + Math.sin(driftAngle) * driftRadius;
+    const ws = windSpeed;
+    const tx = time * 0.03 * ws + index * 1.7;
+    const tz = time * 0.025 * ws + index * 2.1;
+    const ax = 1 + Math.abs(Math.sin(time * 0.015 * ws + index * 3.1)) * (zone.hw - 1);
+    const az = 1 + Math.abs(Math.sin(time * 0.018 * ws + index * 2.7)) * (zone.hd - 1);
+    b.position.x = zone.cx + Math.sin(tx) * ax;
+    b.position.z = zone.cz + Math.cos(tz) * az;
 
     b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5);
     b.rotation.z = Math.sin(time * 0.5 + windSpeed + index) * 0.08;
