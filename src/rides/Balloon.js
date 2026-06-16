@@ -8,10 +8,31 @@ const TARGET_HEIGHT = 48;
 const PASSENGER_COUNTS = [2, 3, 3];
 
 const BALLOON_ZONES = [
-  { cx: -40, cz: 40, hw: 8, hd: 6, baseY: 38, minY: 32 },
-  { cx: 40, cz: -40, hw: 6, hd: 8, baseY: 30, minY: 24 },
-  { cx: 0, cz: -30, hw: 8, hd: 6, baseY: 36, minY: 30 },
+  { cx: -40, cz: 40, hw: 16, hd: 12, baseY: 38, minY: 32 },
+  { cx: 40, cz: -40, hw: 12, hd: 16, baseY: 30, minY: 24 },
+  { cx: 0, cz: -30, hw: 16, hd: 12, baseY: 36, minY: 30 },
 ];
+
+// 2D value noise: hash deterministico + interpolazione smoothstep.
+// Restituisce valori in [-1, 1], continuo nello spazio (x,y).
+function hash2D(ix, iy) {
+  let h = ix * 374761393 + iy * 668265263;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  h = h ^ (h >>> 16);
+  return ((h >>> 0) / 4294967295) * 2 - 1;
+}
+function smooth(t) { return t * t * (3 - 2 * t); }
+function noise2D(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const a = hash2D(ix, iy);
+  const b = hash2D(ix + 1, iy);
+  const c = hash2D(ix, iy + 1);
+  const d = hash2D(ix + 1, iy + 1);
+  const u = smooth(fx), v = smooth(fy);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
 
 function buildOneBalloon(model, index) {
   const srcNode = model.getObjectByName('V1_HotAirBalloon_' + index);
@@ -116,15 +137,28 @@ function buildOneBalloon(model, index) {
   });
 
   b.userData.tick = (delta, time, windSpeed = 1) => {
-    const ws = windSpeed;
-    const tx = time * 0.03 * ws + index * 1.7;
-    const tz = time * 0.025 * ws + index * 2.1;
-    const ax = 1 + Math.abs(Math.sin(time * 0.015 * ws + index * 3.1)) * (zone.hw - 1);
-    const az = 1 + Math.abs(Math.sin(time * 0.018 * ws + index * 2.7)) * (zone.hd - 1);
-    b.position.x = zone.cx + Math.sin(tx) * ax;
-    b.position.z = zone.cz + Math.cos(tz) * az;
+    // Fattore vento: wind=0 → 0.4 (movimento minimo), wind=1 → 1.2, wind=3 → 2.8
+    const ws = 0.4 + windSpeed * 0.8;
+    // Velocità di "attraversamento" del campo di rumore
+    const t = time * 0.12 * ws;
+    // Fasi diverse per ogni pallone → non si muovono all'unisono
+    const phaseX = index * 17.3;
+    const phaseZ = index * 31.7;
+    // Due offset di noise per X e Z, lenti e indipendenti
+    const ox = t + phaseX;
+    const oz = t * 0.87 + phaseZ;
+    const nx = noise2D(ox, 0);
+    const nz = noise2D(oz, 100);
+    // Secondo strato di rumore per variabilità fine (breve)
+    const jx = noise2D(ox * 3.7, 50) * 0.3;
+    const jz = noise2D(oz * 3.3, 75) * 0.3;
+    // Posizione = centro zona + (rumore principale + jitter) * semi-area
+    b.position.x = zone.cx + (nx + jx) * zone.hw;
+    b.position.z = zone.cz + (nz + jz) * zone.hd;
 
-    b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5);
+    // Y: oscillazione base fissa + leggera influenza del vento
+    const yJitter = noise2D(t * 0.5, 200 + index * 10) * 0.8 * ws;
+    b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5 + yJitter);
     b.rotation.z = Math.sin(time * 0.5 + windSpeed + index) * 0.08;
     b.rotation.x = Math.sin(time * 0.4 + windSpeed * 0.7 + index) * 0.05;
 
