@@ -280,6 +280,10 @@ P1  →  Shooting gallery: performance (yaw clamp + culling)
 P1  →  Visitor waypoints: train area + shooting gallery
 P1  →  Camera presets: improve roller coaster framing
 P1  →  Deploy GitHub Pages + test live URL
+P1  →  Shooting gallery: fix bugs/visual issues
+P1  →  Balloon: fix initial positions
+P1  →  Balloon FPV: raise camera height so it looks out from above the basket
+P2  →  Add external landscape / scenery around the park perimeter
 P2  →  People model animation refinement
 P2  →  Submission formalities (email, tag, check)
 P2  →  Oral exam prep + backup video
