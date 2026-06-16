@@ -437,8 +437,15 @@ async function init() {
       ctrl.panel.rotation.set(0, faceYaw(panel[0]), 0);
     }
 
-    const hintPos = panel ? [panel[0], 9.2, panel[2]] : [sign[0], 9.2, sign[2]];
-    const hint = buildRideHint({ position: hintPos });
+    // For the shooting gallery there is no panel — put the hint above the
+    // sign itself so it floats clearly above it.
+    const hintPos = groupName === 'shootingGallery'
+      ? [sign[0], 10.8, sign[2]]
+      : panel ? [panel[0], 9.2, panel[2]] : [sign[0], 9.2, sign[2]];
+    const hintLines = groupName === 'shootingGallery'
+      ? ['🎯  Click to Play', 'Press ESC to Exit  •  T to aim']
+      : ['Click Panel to Turn On/Off', 'Scroll on Panel: Speed'];
+    const hint = buildRideHint({ position: hintPos, lines: hintLines });
     hint.name = 'rideHint_' + groupName;
     environmentGroup.add(hint);
     rideHints.push(hint);

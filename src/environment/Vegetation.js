@@ -19,7 +19,7 @@ const BASE_URL = 'assets/models/environment/';
 
 const BOOTH_RADIUS = 11.0; // booths are larger now → wider tree-free skirt around them
 const LAMP_RADIUS = 5.5;  // larger exclusion zone to prevent tree canopies from clipping/overlapping lampposts
-const BOOTHS = [[14, -22], [-14, 22]];
+const BOOTHS = [[-14, 23]];
 const LAMPS = [
   [-5, -25], [-5, -50], [-5, -75], [5, -25], [5, -50], [5, -75],
   [-5, 25], [-5, 50], [-5, 75], [5, 25], [5, 50], [5, 75],

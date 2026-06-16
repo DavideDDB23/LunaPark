@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 
