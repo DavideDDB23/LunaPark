@@ -24,6 +24,10 @@
 - [x] Rocks
 - [x] Ferris Wheel (counter-rotating gondolas, 8 gondolas, 2 passengers each, passenger sway)
 - [x] Carousel (rotating platform, cone canopy, 8 horses with phase-offset bobbing, jockeys, control panel)
+- [x] Night fireworks (particle burst system synced with day/night cycle — 3 burst types: spherical, corona, willow)
+- [x] Hot air balloon (drifts with wind, 3 tether cables, night glow, random initial position)
+- [x] Panoramic train (CatmullRom ring track, locomotive + 3 wagons, control panel, night bulbs)
+- [x] Shooting gallery (10 targets, FPV aim mode with pointer lock, score + timer, camera shake on hit)
 
 ---
 
@@ -62,6 +66,7 @@ No imported animations — all motion is JavaScript math.
  - [x] Fix position of some passenger models (some are clipped into the chair)
  - [x] Fix arm override (hands-up animation) when the ride is on
  - [x] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
+ - [x] Remove the two pistons that cross the central mast ("albero") of the Tagada
 
 ---
 
@@ -82,6 +87,9 @@ Each ride has a small 3D control panel placed next to it.
  - [x] **Click-to-fly**: click anywhere in the scene (ground, ride, stall) and the camera smoothly flies to that point over ~1.2 seconds with easing
  - [x] **6 preset viewpoints**: pressing keys 1–6 flies instantly to preset camera positions (overview, Ferris Wheel close-up, Carousel, Roller Coaster, Tagada, Stage)
  - [x] **FPV Gondola Camera**: press C when close to the Ferris Wheel → camera enters a gondola and you ride it from the inside. Press ESC to exit back to normal view.
+ - [x] **FPV Train Camera**: press C when close to the train → camera enters the locomotive cabin. Press ESC to exit.
+ - [x] **FPV Roller Coaster Camera**: press C when close to the roller coaster → FPV view from the front car.
+ - [x] **FPV Tagada Camera**: press C when close to the Tagada → FPV view from a seat.
 
 ---
 
@@ -91,8 +99,8 @@ Each ride has a small 3D control panel placed next to it.
 - [x] **Scroll wheel near a ride**: hovering the mouse over a ride and scrolling changes that ride's speed (up = faster, down = slower)
 - [x] **Ride decoration light colour picker**: an HTML colour picker that changes the colour of all the decorative lights on the rides
 - [x] **Space bar**: toggles the time-of-day auto-advance on/off (time automatically moves forward)
-- [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
- - [ ] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message)
+ - [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
+ - [x] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message) — implemented via `RideHints.js`, 4 sprite billboards with proximity fade
 
 ---
 
@@ -101,8 +109,8 @@ Each ride has a small 3D control panel placed next to it.
 A heads-up display showing the current time of day. Already partially designed — needs to be wired in.
 
  - [x] Digital clock showing the current hour:minute (e.g. "14:30")
- - [ ] Semicircular arc with a sun/moon icon tracking its position across the sky
- - [ ] Day / Dusk / Night phase label
+ - [x] Semicircular arc with a sun/moon icon tracking its position across the sky (`drawTimeArc()` in `main.js:498`)
+ - [x] Day / Dusk / Night phase label (inside `drawTimeArc()`, lines 558–564)
  - [x] Manual time slider (drag to change time of day)
  - [x] Auto-advance toggle button
  - [x] Slow down auto-advance speed (reduce rate of time progression)
@@ -111,12 +119,20 @@ A heads-up display showing the current time of day. Already partially designed �
 
 ## 🔴 NPC VISITORS
 
-- [ ] 8–12 human visitors walking around the park between waypoints
-- [ ] Each visitor is a simple human figure (body, head, two arms)
-- [ ] They walk toward a destination, stop and wait 1–5 seconds, then pick a new destination
-- [ ] While walking, arms swing back and forth (walk animation in JS)
-- [ ] Various body colours / outfits so they look different from each other
-- [ ] They follow the paths — waypoints placed at path intersections and near each ride
+- [x] 8–12 human visitors walking around the park between waypoints (10 NPCs in `Visitors.js`, 864 lines)
+- [x] Each visitor is a simple human figure (body, head, two arms) (procedural gait + analytic leg IK)
+- [x] They walk toward a destination, stop and wait 1–5 seconds, then pick a new destination (state machine: wait ↔ walk)
+- [x] While walking, arms swing back and forth (walk animation in JS) (speed-scaled arm swing with elbow flex)
+- [x] Various body colours / outfits so they look different from each other (14 outfits + HSL shift per NPC)
+- [x] They follow the paths — waypoints placed at path intersections and near each ride (A* pathfinding with cost-weighted grid)
+- [-] People model animation still needs refinement (arms and walking)
+
+---
+
+## 🔴 VISITOR PATHFINDING — NEW WAYPOINTS
+
+- [x] **Train area waypoints**: add landmarks near train sign (`[76, -65]`) and control panel (`[68, -60]`) in `Visitors.js:465-469`
+- [x] **Shooting gallery waypoints**: add landmarks near the booth (`[12, 24]`) and sign (`[11, 20]`)
 
 ---
 
@@ -126,7 +142,8 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] During the day: off
 - [x] During the night: blinking/pulsing with a sine wave, each light slightly out of phase with the others so they don't all blink at the same time
 - [x] Colour controlled by the HTML colour picker
-- [ ] Apply the colour-picker colour to **Tagada** and **Carousel** decoration lights as well (currently only Ferris Wheel and Roller Coaster update)
+- [x] Apply the colour-picker colour to **Tagada** and **Carousel** decoration lights as well (currently only Ferris Wheel and Roller Coaster update)
+  ✅ Both now fully update. **Fixed**: `FerrisWheel.js` — `ferrisRimBulbs[]`, `ferrisSpokeBulbs[]`, `ferrisBeaconMat` are now updated by the colour picker too.
 
 ---
 
@@ -134,15 +151,15 @@ A heads-up display showing the current time of day. Already partially designed �
 
 The night scene is too dark between attractions — needs ambient fill and moonlight.
 
-- [ ] **Moonlight**: add blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity ~0.05–0.1
-- [ ] **Night hemisphere fill**: raise hemisphere intensity 0.22 → ~0.35 at night
-- [ ] **Exposure**: raise night tone-mapping 0.36 → ~0.45–0.50
-- [ ] **Background/environment intensity**: raise at night for sky/reflections
-- [ ] **Path spotlights**: add 2–4 spotlights at key path intersections
-- [ ] **Lamppost radius**: increase 70 → ~90 for better coverage overlap
-- [ ] **Water night tint**: brighten river shader night color so it's visible after dark
-- [ ] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist.
-- [ ] **Prova**: aggiungere layer 0 alle luci delle giostre (`.enable(0)` o `.set(0+2)`) così illuminano anche ground/vegetazione, e controllare impatto sulle performance (FPS/draw call)
+- [x] **Moonlight**: add blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity ~0.05–0.1 ✅ (intensity 0.40, `DayNightCycle.js:96-99`)
+- [x] **Night hemisphere fill**: raise hemisphere intensity 0.22 → ~0.35 at night ✅ (`DayNightCycle.js:102`, night = 0.35)
+- [x] **Exposure**: raise night tone-mapping 0.36 → ~0.45–0.50 ✅ (night = 0.48, `DayNightCycle.js:117`)
+- [x] **Background/environment intensity**: raise at night for sky/reflections ✅ (bg=0.34, env=0.42)
+- [x] **Path spotlights**: add 2–4 spotlights at key path intersections ✅ (6 spotlights in `PathLights.js`)
+- [x] **Lamppost radius**: increase 70 → ~90 for better coverage overlap ✅ (distance=90 in `Lampposts.js:120`)
+- [x] **Water night tint**: brighten river shader night color so it's visible after dark ✅ (`uNight` uniform in `Water.js`)
+- [x] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist. (Implemented via 3-state click cycle: Auto -> Manual opposite state -> Manual matching state -> Auto, with confirmation blink)
+- [x] ~~**Test**: add layer 0 to ride lights — already tried, too much lag~~ ❌ Discarded
 
 ---
 
@@ -154,7 +171,7 @@ A small HUD panel overlaid on the scene with:
  - [x] Ride light colour picker
  - [x] "?" help button that opens a list of all keyboard/mouse controls
  - [x] Auto day/night toggle button
- - [ ] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency)
+ - [x] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency) ✅
 
 ---
 
@@ -194,6 +211,31 @@ The report is submitted alongside the code. Sections required:
 
 ---
 
+## 🔴 TRAIN IMPROVEMENTS
+
+- [x] **Front headlight**: implement a `SpotLight` + visible emissive bulb on the locomotive (currently no headlight exists — `nightLights[]` is empty). Reference: `Coaster.js:487-492`
+- [x] **Train colour fix**: the train appears white in the browser — fix material cloning in `Train.js:216-242` (shared materials between cloned wagons are not being overridden by `carriageColors`)
+- [x] **Train passengers**: add riders to the train wagons using `makeRider`/`updateRider` pattern. ~2 passengers per wagon, 5 wagons total.
+- [x] **Wagons**: the 3 wagons are procedural (BoxGeometry) — find a better GLB model or improve the procedural geometry ✅ Replaced with wacky worm coaster model (locomotive + 3 wagons from single GLB, scale 0.013, auto-calibrated via Box3)
+
+---
+
+## 🔴 CAMERA PRESETS
+
+- [ ] **Roller Coaster preset (key 4)**: currently `pos: [0, 30, -5], target: [52, 10, 54]` — review framing, may need a more distant/angled position to show the entire loop
+
+---
+
+## 🔴 SHOOTING GALLERY IMPROVEMENTS
+
+- [x] **Move position**: currently at `(30, 0, 25)` — move to a more appropriate location (moved to X=12)
+- [x] **Improve structure**: currently all procedural (BoxGeometry/CylinderGeometry) — find a GLB model of a carnival shooting booth (loaded stylized booth GLB and programmatically hid sign text)
+- [x] **Implement shooting mode**: the pointer-lock aim system already exists (`ShootingGallery.js`) — verify it works correctly and improve the experience (implemented smooth FPV flight transition, pointer lock camera rotation, custom HUD overlays, Option A moving targets with distance multipliers, and physical pendulum spin damping animation)
+- [ ] **Replace booth GLB**: find/import a different carnival booth model to replace `stylized_carnival_booth.glb`
+- [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). Optionally reduce `camera.far` in aim mode.
+
+---
+
 ## 🔴 SUBMISSION
 
 - [ ] Register on Infostud for the **June 24** exam session
@@ -221,20 +263,28 @@ The examiner will ask you to demo the project live and then ask technical questi
 
 ---
 
-## 📋 Order to Build Things
+## 📋 Remaining Tasks (prioritised)
+
+- [-] People model animation (needs refinement: arms and walking)
 
 ```
-1st  →  AnimationManager + Ferris Wheel (counter-rotation is the key graded feature)
-2nd  →  Carousel (horses bobbing)
-3rd  →  Roller Coaster (track curve + Frenet cart)
-4th  →  Tagada (compound arm)
-5th  →  Control panels for all 4 rides
-6th  →  Click-to-fly camera + raycasting interactions
-7th  →  FPV gondola camera
-8th  →  NPC visitors
-9th  →  Time HUD + UI overlay fully wired
-10th →  Emissive blink lights on rides
-11th →  Performance check + GitHub Pages
-12th →  Technical report
-13th →  Submit
+P0  →  Technical report PDF (luna_park_report.pdf)
+P0  →  Roller coaster: fix animation (360° roll before stop / after launch) and FPV camera underground at stop
+P1  →  Fix GLTFLoader warning "Unknown extension KHR_materials_pbrSpecularGlossiness" (called from App.js:346, Train.js:154) — replace specular-glossiness materials with standard PBR or register the extension
+P1  →  Roller coaster: evaluate moving the stop to the short straight low-to-ground track section
+P1  →  Train: front headlight
+P1  →  Train: colour fix (white appearance)
+P1  →  Train: passengers
+P1  →  Shooting gallery: replace booth GLB
+P1  →  Shooting gallery: performance (yaw clamp + culling)
+P1  →  Visitor waypoints: train area + shooting gallery
+P1  →  Camera presets: improve roller coaster framing
+P1  →  Deploy GitHub Pages + test live URL
+P1  →  Shooting gallery: fix bugs/visual issues
+P1  →  Balloon: fix initial positions (ensure balloons fly higher than all rides)
+P1  →  Balloon FPV: raise camera height so it looks out from above the basket
+P2  →  Add external landscape / scenery around the park perimeter
+P2  →  People model animation refinement
+P2  →  Submission formalities (email, tag, check)
+P2  →  Oral exam prep + backup video
 ```
