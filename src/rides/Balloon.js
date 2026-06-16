@@ -132,9 +132,14 @@ function buildOneBalloon(model, index) {
 
   let nightFactor = 0;
 
-  // Stato waypoint per il movimento casuale
-  b.userData.target = { x: zone.cx, z: zone.cz };
-  b.userData.nextTargetTime = 0;
+  // Stato per il movimento "random walk con heading": la mongolfiera ha una
+  // direzione (heading) e una velocità angolare (ω) che variano dolcemente.
+  // Non si ferma mai: il target serve solo come bias verso il centro.
+  const initialAngle = (index * 2.094) % (Math.PI * 2);
+  b.userData.headingX = Math.cos(initialAngle);
+  b.userData.headingZ = Math.sin(initialAngle);
+  b.userData.omega = 0;
+  b.userData.omegaJitterTime = 0;
 
   eventBus.on('time-phase-change', (data) => {
     nightFactor = data.nightFactor;
@@ -144,56 +149,59 @@ function buildOneBalloon(model, index) {
     // Velocità di crociera scalata dal vento: 1.5 unità/s a wind=1
     const ws = 0.4 + windSpeed * 0.8;
     const speed = 1.5 * ws;
-    // Cambio target ogni 4-8 secondi (in base al vento)
-    const baseInterval = 6 / (0.5 + windSpeed * 0.7);
+    const MAX_OMEGA = 0.5; // rad/s — raggio di curvatura minimo = speed/MAX_OMEGA ≈ 3 unità
 
-    const target = b.userData.target;
-    const dx = target.x - b.position.x;
-    const dz = target.z - b.position.z;
-    const distToTarget = Math.hypot(dx, dz);
-
-    // Soft confine: se il pallone è oltre l'85% del semi-asse, forza nuovo target verso l'interno
-    const fromCenter = Math.hypot(b.position.x - zone.cx, b.position.z - zone.cz);
+    // Distanza dal centro della zona (per il bias verso casa)
+    const fromCenterX = b.position.x - zone.cx;
+    const fromCenterZ = b.position.z - zone.cz;
+    const fromCenter = Math.hypot(fromCenterX, fromCenterZ);
     const maxR = Math.max(zone.hw, zone.hd);
+    const ratio = fromCenter / maxR;
 
-    const targetReached = distToTarget < 1.5;
-    const timeout = time >= b.userData.nextTargetTime;
-    const nearEdge = fromCenter > maxR * 0.85;
+    // Jitter periodico sulla velocità angolare per variare la direzione
+    // (~ogni 3-6 secondi, più frequente con più vento)
+    const jitterInterval = 4.5 / (0.5 + windSpeed * 0.6);
+    if (time >= b.userData.omegaJitterTime) {
+      // Aggiungi una coppia casuale: cambia direzione di sterzata
+      b.userData.omega += (Math.random() * 2 - 1) * 0.6;
+      b.userData.omegaJitterTime = time + jitterInterval * (0.7 + Math.random() * 0.6);
+    }
 
-    if (targetReached || timeout || nearEdge) {
-      // Nuovo target casuale nell'85% interno del rettangolo
-      target.x = zone.cx + (Math.random() * 2 - 1) * zone.hw * 0.85;
-      target.z = zone.cz + (Math.random() * 2 - 1) * zone.hd * 0.85;
-      // Se eravamo oltre l'85%, forza target verso il centro
-      if (nearEdge) {
-        target.x = zone.cx + (target.x - zone.cx) * 0.5;
-        target.z = zone.cz + (target.z - zone.cz) * 0.5;
+    // Bias verso il centro quando siamo oltre il 65% del raggio:
+    // se ci stiamo allontanando dal centro, sterza per curvare verso casa
+    if (ratio > 0.65 && fromCenter > 0.001) {
+      const tdx = -fromCenterX / fromCenter; // direzione "verso il centro"
+      const tdz = -fromCenterZ / fromCenter;
+      // Prodotto scalare heading · toward_center: < 0 = ci stiamo allontanando
+      const dot = b.userData.headingX * tdx + b.userData.headingZ * tdz;
+      if (dot < 0.4) {
+        // Cross product (heading × toward_center) per determinare se girare
+        // a destra o sinistra. cross = hx*tz - hz*tx
+        const cross = b.userData.headingX * tdz - b.userData.headingZ * tdx;
+        // cross < 0 → sterzare a destra; cross > 0 → sterzare a sinistra
+        const steerSign = cross > 0 ? 1 : -1;
+        b.userData.omega += steerSign * 1.2 * delta;
       }
-      b.userData.nextTargetTime = time + baseInterval * (0.7 + Math.random() * 0.6);
     }
 
-    // Muovi verso il target con velocità costante, ma con curvatura "sinuosa":
-    // la direzione viene deviata di un angolo che oscilla nel tempo, dando
-    // una traiettoria a spirale dolce invece di un segmento retto.
-    const newDx = target.x - b.position.x;
-    const newDz = target.z - b.position.z;
-    const newDist = Math.hypot(newDx, newDz);
-    if (newDist > 0.001) {
-      const dirX = newDx / newDist;
-      const dirZ = newDz / newDist;
-      // Perpendicolare a (dirX, dirZ) nel piano XZ: (-dirZ, dirX)
-      // Angolo di curvatura oscillante (±0.4 rad ≈ ±23°), frequenze diverse per index
-      const curveAngle = Math.sin(time * 0.35 + index * 2.7) * 0.4
-                        + Math.sin(time * 0.13 + index * 1.3) * 0.2;
-      const cosA = Math.cos(curveAngle);
-      const sinA = Math.sin(curveAngle);
-      // Direzione curvata: rotazione di curveAngle nel piano (dir, perp)
-      const cdirX = dirX * cosA + (-dirZ) * sinA;
-      const cdirZ = dirZ * cosA + dirX * sinA;
-      const step = Math.min(speed * delta, newDist);
-      b.position.x += cdirX * step;
-      b.position.z += cdirZ * step;
-    }
+    // Smorzamento della velocità angolare (evita che diverga)
+    b.userData.omega *= 0.94;
+    // Clamp
+    if (b.userData.omega > MAX_OMEGA) b.userData.omega = MAX_OMEGA;
+    if (b.userData.omega < -MAX_OMEGA) b.userData.omega = -MAX_OMEGA;
+
+    // Ruota heading dell'angolo ω * delta (passo di integrazione)
+    const dTheta = b.userData.omega * delta;
+    const cosT = Math.cos(dTheta);
+    const sinT = Math.sin(dTheta);
+    const newHx = b.userData.headingX * cosT - b.userData.headingZ * sinT;
+    const newHz = b.userData.headingX * sinT + b.userData.headingZ * cosT;
+    b.userData.headingX = newHx;
+    b.userData.headingZ = newHz;
+
+    // Avanza nella direzione del heading
+    b.position.x += b.userData.headingX * speed * delta;
+    b.position.z += b.userData.headingZ * speed * delta;
 
     // Y: oscillazione lenta fissa + jitter leggero scalato dal vento
     const yJitter = noise2D(time * 0.2, index * 50) * 0.5 * ws;
