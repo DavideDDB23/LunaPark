@@ -270,18 +270,25 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       group: b1,
       getFpvTarget: () => b1.userData.fpvTarget,
       getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
-      getRiders: () => [],
+      getRiders: () => (b1.userData.riders || []).map(r => ({ pivot: r.pivot })),
       getFpvCameraPos: (fpvTarget, targetVec) => {
-        fpvTmpVec.set(0, 1.8, 0);
+        const camY = b1.userData.cameraLocalY ?? 1.8;
+        fpvTmpVec.set(0, camY, 0);
         fpvTarget.localToWorld(fpvTmpVec);
         targetVec.copy(fpvTmpVec);
       },
       getFpvLookTarget: (fpvTarget, targetVec) => {
         const driftAngle = b1.userData.driftAngle ?? 0;
-        const dist = 10;
-        fpvTmpVec.set(Math.cos(driftAngle) * dist, 1.8, Math.sin(driftAngle) * dist);
+        const lookDist = 25;
+        const lookDrop = 8;
+        const camY = b1.userData.cameraLocalY ?? 1.8;
+        fpvTmpVec.set(0, camY, 0);
         fpvTarget.localToWorld(fpvTmpVec);
-        targetVec.copy(fpvTmpVec);
+        targetVec.set(
+          fpvTmpVec.x + Math.cos(driftAngle) * lookDist,
+          fpvTmpVec.y - lookDrop,
+          fpvTmpVec.z + Math.sin(driftAngle) * lookDist
+        );
       },
       getFpvUp: (fpvTarget, upVec) => {
         fpvTarget.getWorldQuaternion(fpvTmpQuat);
