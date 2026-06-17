@@ -1,22 +1,26 @@
 import * as THREE from 'three';
 import { eventBus } from '../utils/EventBus.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
+import { makeRider, updateRider, pose } from '../people/Passengers.js';
 
 export async function buildShootingGallery({ camera, renderer, controls }) {
   const group = new THREE.Group();
   group.name = 'shootingGallery';
 
-  // ── Load prize models asynchronously ──
-  let duckGltf, bearGltf, bunnyGltf, rabbitGltf;
+  // ── Load prize and character models asynchronously ──
+  let duckGltf, bearGltf, bunnyGltf, rabbitGltf, workerGltf, gunGltf, bulletGltf;
   try {
-    [duckGltf, bearGltf, bunnyGltf, rabbitGltf] = await Promise.all([
+    [duckGltf, bearGltf, bunnyGltf, rabbitGltf, workerGltf, gunGltf, bulletGltf] = await Promise.all([
       loadGLB('assets/models/prizes/duck_plush.glb'),
       loadGLB('assets/models/prizes/low_poly_asset_teddy_bear.glb'),
       loadGLB('assets/models/prizes/low_poly_bunny_plush_toy.glb'),
-      loadGLB('assets/models/prizes/rabbit_plush__conejo_peluche.glb')
+      loadGLB('assets/models/prizes/rabbit_plush__conejo_peluche.glb'),
+      loadGLB('assets/models/people/Cowboy_Male.gltf'),
+      loadGLB('assets/models/9mm_pistol_low_poly_gun.glb'),
+      loadGLB('assets/models/9mm_bullet_low_poly.glb')
     ]);
   } catch (err) {
-    console.warn("Failed to load prize models", err);
+    console.warn("Failed to load models", err);
   }
 
   // ── Helper to create customized prize versions ──
@@ -353,12 +357,13 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     for (let i = 0; i < 2; i++) {
       const nx = neonXPositions[i];
       const nc = neonColors[i];
+      const isRed = (i === 0);
       
       const tubeGeo = new THREE.CylinderGeometry(0.04, 0.04, 3.2, 8);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: nc,
         emissive: nc,
-        emissiveIntensity: 5.0,
+        emissiveIntensity: isRed ? 12.0 : 5.0,
         roughness: 0.1,
         transparent: true,
         opacity: 0.9,
@@ -367,13 +372,156 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       // Attached to the side walls, midway into the stall
       tube.position.set(nx, 2.0, -1.2);
       group.add(tube);
-      galleryLights.push({ mesh: tube, baseIntensity: 5.0, phase: i * Math.PI });
+      galleryLights.push({ mesh: tube, baseIntensity: isRed ? 12.0 : 5.0, phase: i * Math.PI });
 
-      const neonPL = new THREE.PointLight(nc, 2.5, 5.0, 1.5);
+      const neonPL = new THREE.PointLight(nc, isRed ? 4.0 : 2.5, 5.0, 1.5);
       neonPL.position.set(nx > 0 ? nx - 0.2 : nx + 0.2, 2.0, -1.2);
       group.add(neonPL);
-      galleryLights.push({ light: neonPL, baseIntensity: 2.5, phase: i * Math.PI });
+      galleryLights.push({ light: neonPL, baseIntensity: isRed ? 4.0 : 2.5, phase: i * Math.PI });
     }
+  }
+
+  // ── Add Operator Character ──
+  let operator = null;
+  if (workerGltf) {
+    const root = workerGltf.scene;
+    root.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = false;
+        o.frustumCulled = false;
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((mat) => {
+            if (mat.name === 'Skin') {
+              mat.color.setRGB(1.0, 0.88, 0.82);
+              mat.roughness = 0.6;
+              mat.metalness = 0.0;
+            }
+          });
+        }
+      }
+    });
+    
+    const h = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y || 3.3;
+    const template = { root, height: h, name: 'Cowboy_Male' };
+    
+    operator = makeRider(template, 3.28, {
+      pool: ['standRest'], 
+      facingY: 0,
+      phase: Math.random() * 6,
+      standing: true,
+    });
+    
+    // Attach gun to hand of the CLONED operator scene
+    if (gunGltf) {
+      const gunWrapper = new THREE.Group();
+      const gunModel = gunGltf.scene.clone();
+      
+      // Sanitize materials so they render correctly with standard shaders
+      sanitizeMaterials(gunModel);
+      gunModel.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+          o.frustumCulled = false;
+          // Hide the floating bullet mesh that comes in front of the gun model
+          if (o.name === 'defaultMaterial') {
+            o.visible = false;
+          }
+        }
+      });
+      
+      const boxRaw = new THREE.Box3().setFromObject(gunModel);
+      const sizeRaw = new THREE.Vector3();
+      boxRaw.getSize(sizeRaw);
+      const centerRaw = boxRaw.getCenter(new THREE.Vector3());
+      console.log("RAW GUN MODEL SIZE:", sizeRaw.x, sizeRaw.y, sizeRaw.z, "CENTER:", centerRaw.x, centerRaw.y, centerRaw.z);
+      
+      // Scale gun model to be realistic (~20cm length in world space, accounting for internal GLTF scaling and character scale)
+      gunModel.scale.setScalar(3.8);
+      
+      // Let the gun's natural local origin (grip/trigger area) align with the hand bone
+      gunModel.position.set(0, 0, 0);
+      
+      // Rotate gunModel to map barrel (+X) to hand's forward (+Y) and grip (-Y) to hand's down (+Z),
+      // then apply a -90 degree rotation around local X (barrel axis) to point the grip straight down in world space.
+      const m = new THREE.Matrix4().set(
+        0,  0, -1,  0,
+        1,  0,  0,  0,
+        0, -1,  0,  0,
+        0,  0,  0,  1
+      );
+      const baseQ = new THREE.Quaternion().setFromRotationMatrix(m);
+      const extraQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+      gunModel.quaternion.copy(baseQ).multiply(extraQ);
+      gunWrapper.add(gunModel);
+      
+      const fig = operator.fig;
+      let hand = fig.getObjectByName('Fist.R') || fig.getObjectByName('Fist_R') || fig.getObjectByName('FistR') ||
+                 fig.getObjectByName('HandR') || fig.getObjectByName('Hand.R') || fig.getObjectByName('Hand_R');
+      if (hand) {
+        // Fist.R position offset (adjust so it sits nicely in the palm)
+        // Hand's local X points UP (world +Y) and Y points FORWARD (world -Z).
+        // Since the gun is scaled by 3.8x, we set X to -0.18 and Y to 0.15 to align the grip inside the palm.
+        gunWrapper.position.set(-0.18, 0.15, 0.01);
+      } else {
+        hand = fig.getObjectByName('LowerArmR') || fig.getObjectByName('LowerArm.R') || fig.getObjectByName('LowerArm_R');
+        gunWrapper.position.set(0, 0.35, 0.05); // move down the arm to the hand position
+      }
+      if (hand) hand.add(gunWrapper);
+    }
+    
+    const wrapper = new THREE.Group();
+    wrapper.name = 'shooting_operator';
+    // Position operator further back from the counter, completely clearing the building
+    wrapper.position.set(-1.2, 0, 5.0);
+    wrapper.rotation.y = Math.PI - 0.29;
+    
+    wrapper.add(operator.pivot);
+    operator.pivot.position.set(0, 0, 0);
+    updateRider(operator, 0);
+    wrapper.updateMatrixWorld(true);
+    operator.fig.traverse((o) => {
+      if (o.isSkinnedMesh) o.skeleton.update();
+    });
+    const bbox = new THREE.Box3().setFromObject(operator.fig, true);
+    if (isFinite(bbox.min.y)) {
+      const fix = Math.max(-0.5, Math.min(0.5, bbox.min.y));
+      operator.pivot.position.y -= fix;
+    }
+    
+    // Expose cowboy to window for easy debugging in console
+    if (!window.__lp) window.__lp = {};
+    window.__lp.cowboy = wrapper;
+    
+    group.add(wrapper);
+  }
+
+  // ── FPS Gun (standalone gun model placed in the scene for aim mode) ──
+  let fpsGun = null;
+  const cowboyWrapper = group.getObjectByName('shooting_operator');
+  if (gunGltf) {
+    fpsGun = new THREE.Group();
+    fpsGun.name = 'fpsGun';
+    const fpsGunModel = gunGltf.scene.clone();
+    sanitizeMaterials(fpsGunModel);
+    fpsGunModel.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.frustumCulled = false;
+        if (o.name === 'defaultMaterial') o.visible = false;
+      }
+    });
+    fpsGunModel.scale.setScalar(6.0);
+    // Rotate so barrel points forward (-Z in local, toward targets)
+    fpsGunModel.rotation.set(0, -Math.PI / 2, 0);
+    fpsGun.add(fpsGunModel);
+    // Place centered, at counter height, forward toward targets
+    fpsGun.position.set(0, 1.5, 4.5);
+    fpsGun.visible = false;
+    group.add(fpsGun);
   }
 
   // ─ State ──
@@ -385,6 +533,20 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   let aimPitch = 0;
   let preAimPos = null;
   let preAimTarget = null;
+
+  // Game effects state
+  const activeBullets = [];
+  const activeParticles = [];
+  const cameraShake = new THREE.Vector3();
+  let recoilX = 0;
+  let recoilY = 0;
+  let recoilTimer = 0;
+  let muzzleFlashIntensity = 0;
+  const particleGeo = new THREE.BoxGeometry(0.04, 0.04, 0.04);
+
+  // Muzzle flash point light
+  const muzzleLight = new THREE.PointLight(0xff9922, 0.0, 4.0, 1.5);
+  group.add(muzzleLight);
 
   // Score display element
   const scoreEl = document.getElementById('shootScore');
@@ -402,9 +564,10 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       preAimPos = camera.position.clone();
       preAimTarget = controls ? controls.target.clone() : new THREE.Vector3();
 
-      const camPos = new THREE.Vector3(0, 2.5, 5.0);
+      // Position camera above the gun barrel, slightly tilted down
+      const camPos = new THREE.Vector3(0, 2.7, 5.5);
       group.localToWorld(camPos);
-      const lookPos = new THREE.Vector3(0, 2.0, -3.0);
+      const lookPos = new THREE.Vector3(0, 1.3, -2.0);
       group.localToWorld(lookPos);
 
       if (window.__lp && window.__lp.cameraManager) {
@@ -431,12 +594,26 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
         t.hitTime = 0;
         t.omega = 0;
         t.group.rotation.x = 0;
-        for (const m of t.meshes) m.material.emissiveIntensity = 0;
+        for (const m of t.meshes) {
+          const mats = Array.isArray(m.material) ? m.material : [m.material];
+          mats.forEach(mat => {
+            if (mat && 'emissiveIntensity' in mat) mat.emissiveIntensity = 0;
+          });
+        }
       }
 
       const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
       aimYaw = euler.y;
       aimPitch = euler.x;
+      group.userData.controller.centerYaw = aimYaw;
+
+      // Hide cowboy, show FPS gun
+      if (cowboyWrapper) cowboyWrapper.visible = false;
+      if (fpsGun) {
+        fpsGun.visible = true;
+        // Reset rotation to face targets
+        fpsGun.rotation.set(0, Math.PI, 0);
+      }
 
       if (scoreEl) scoreEl.style.display = 'block';
       if (timerEl) timerEl.style.display = 'block';
@@ -449,6 +626,25 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       if (!aimMode) return;
       aimMode = false;
       isTransitioning = false;
+
+      // Clean up active bullets
+      for (const b of activeBullets) {
+        group.remove(b.mesh);
+      }
+      activeBullets.length = 0;
+
+      // Clean up active particles
+      for (const p of activeParticles) {
+        group.remove(p.mesh);
+      }
+      activeParticles.length = 0;
+
+      // Show cowboy, hide FPS gun
+      if (cowboyWrapper) cowboyWrapper.visible = true;
+      if (fpsGun) fpsGun.visible = false;
+      
+      // Reset muzzle light
+      if (muzzleLight) muzzleLight.intensity = 0.0;
 
       // Release pointer lock
       document.exitPointerLock();
@@ -479,10 +675,19 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   // Mouse move for aim
   const onMouseMove = (e) => {
     if (!aimMode) return;
-    const sensitivity = 0.002;
+    const sensitivity = 0.0025;
     aimYaw -= e.movementX * sensitivity;
     aimPitch -= e.movementY * sensitivity;
-    aimPitch = Math.max(-0.3, Math.min(0.3, aimPitch)); // ±17° pitch limit
+    
+    // Clamp pitch (vertical rotation)
+    aimPitch = Math.max(-0.2, Math.min(0.25, aimPitch));
+
+    // Clamp yaw (horizontal rotation) relative to gallery center direction
+    const centerYaw = group.userData.controller.centerYaw !== undefined ? group.userData.controller.centerYaw : (group.rotation.y + Math.PI);
+    let diffYaw = aimYaw - centerYaw;
+    diffYaw = Math.atan2(Math.sin(diffYaw), Math.cos(diffYaw));
+    diffYaw = Math.max(-0.55, Math.min(0.55, diffYaw));
+    aimYaw = centerYaw + diffYaw;
   };
   document.addEventListener('mousemove', onMouseMove);
 
@@ -493,11 +698,34 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   const onClick = (e) => {
     if (!aimMode || e.button !== 0) return;
 
-    // Raycast from camera center
+    // Recoil and muzzle flash parameters
+    recoilX = 0.22;
+    recoilY = (Math.random() - 0.5) * 0.08;
+    recoilTimer = 0.12;
+    muzzleFlashIntensity = 12.0;
+
+    cameraShake.set(
+      (Math.random() - 0.5) * 0.06,
+      (Math.random() * 0.03 + 0.03), // recoil kick upwards
+      (Math.random() - 0.5) * 0.06
+    );
+
+    // Locate gun muzzle position
+    const muzzleWorld = new THREE.Vector3();
+    if (aimMode && fpsGun) {
+      // Muzzle is at the tip of the FPS gun barrel (local -Z after rotation)
+      muzzleWorld.set(0, 0, -0.5);
+      fpsGun.localToWorld(muzzleWorld);
+      group.worldToLocal(muzzleWorld);
+      group.localToWorld(muzzleWorld);
+    } else {
+      muzzleWorld.copy(camera.position).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), 0.5);
+    }
+
+    // Raycast from camera center to find target impact point
     _shootDir.set(0, 0, -1).applyQuaternion(camera.quaternion);
     raycaster.set(camera.position, _shootDir);
 
-    // Check target hits
     const targetMeshes = [];
     for (const t of targets) {
       if (!t.hit) {
@@ -505,32 +733,114 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       }
     }
 
-    const hits = raycaster.intersectObjects(targetMeshes, false);
+    const intersectObjects = [...targetMeshes];
+    if (boothModel) {
+      intersectObjects.push(boothModel);
+    }
+
+    const hits = raycaster.intersectObjects(intersectObjects, true);
+    const impactPoint = new THREE.Vector3();
+    let hitObject = null;
+
     if (hits.length > 0) {
-      // Find which target was hit
-      const hitMesh = hits[0].object;
+      impactPoint.copy(hits[0].point);
+      hitObject = hits[0].object;
+    } else {
+      // Default fallback plane
+      const localDest = new THREE.Vector3(0, 1.8, -2.0);
+      group.localToWorld(localDest);
+      impactPoint.copy(localDest);
+    }
+
+    // Spawn tracer mesh
+    let tracer;
+    if (bulletGltf) {
+      tracer = bulletGltf.scene.clone();
+      tracer.scale.set(0.015, 0.015, 0.015);
+      // Ensure bullet matches original tracer's oriention if needed
+      // (The update loop handles pointing it at the velocity direction)
+    } else {
+      const tracerGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.45, 6);
+      tracerGeo.rotateX(Math.PI / 2);
+      const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffbb22, transparent: true, opacity: 0.95 });
+      tracer = new THREE.Mesh(tracerGeo, tracerMat);
+    }
+    tracer.position.copy(muzzleWorld);
+    group.add(tracer);
+
+    // Store bullet
+    const speed = 75.0;
+    const velocity = new THREE.Vector3().subVectors(impactPoint, muzzleWorld).normalize().multiplyScalar(speed);
+    const distanceToTarget = muzzleWorld.distanceTo(impactPoint);
+
+    activeBullets.push({
+      mesh: tracer,
+      startPos: muzzleWorld.clone(),
+      endPos: impactPoint.clone(),
+      velocity,
+      distanceTravelled: 0,
+      totalDistance: distanceToTarget,
+      hitObject
+    });
+  };
+  document.addEventListener('mousedown', onClick);
+
+  // Bullet impact handling
+  const handleBulletImpact = (bullet) => {
+    const impactPoint = bullet.endPos;
+    const hitObject = bullet.hitObject;
+
+    // Spark splash particles
+    const particleCount = 18;
+    for (let i = 0; i < particleCount; i++) {
+      const pMat = new THREE.MeshBasicMaterial({ color: 0xff8822, transparent: true, opacity: 1.0 });
+      const pMesh = new THREE.Mesh(particleGeo, pMat);
+      pMesh.position.copy(impactPoint);
+      group.add(pMesh);
+
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 4.5,
+        (Math.random() * 3.5 + 1.2),
+        (Math.random() - 0.5) * 4.5
+      );
+
+      activeParticles.push({
+        mesh: pMesh,
+        mat: pMat,
+        velocity: vel,
+        age: 0,
+        lifetime: 0.25 + Math.random() * 0.35
+      });
+    }
+
+    // Check hit target
+    if (hitObject) {
       for (const t of targets) {
-        if (t.meshes.includes(hitMesh)) {
-          const meshIdx = t.meshes.indexOf(hitMesh);
+        if (t.meshes.includes(hitObject)) {
+          const meshIdx = t.meshes.indexOf(hitObject);
           const points = t.points[meshIdx] * t.multiplier;
           score += points;
           t.hit = true;
           t.hitTime = performance.now() / 1000;
-          t.omega = -45.0; // Spin velocity (radians/sec)
+          t.omega = -45.0;
 
-          // Flash effect
-          hitMesh.material.emissiveIntensity = 5;
+          // Flash target
+          const mats = Array.isArray(hitObject.material) ? hitObject.material : [hitObject.material];
+          mats.forEach(mat => {
+            if (mat && 'emissiveIntensity' in mat) mat.emissiveIntensity = 8.0;
+          });
 
-          // Camera shake
-          camera.position.x += (Math.random() - 0.5) * 0.1;
-          camera.position.y += (Math.random() - 0.5) * 0.05;
-
+          // Camera hit punch
+          cameraShake.set(
+            (Math.random() - 0.5) * 0.12,
+            (Math.random() - 0.5) * 0.12,
+            (Math.random() - 0.5) * 0.12
+          );
           break;
         }
       }
     }
   };
-  document.addEventListener('mousedown', onClick);
 
   // ESC to exit
   const onKeyDown = (e) => {
@@ -540,19 +850,103 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   };
   document.addEventListener('keydown', onKeyDown);
 
-  // Cleanup on dispose (if needed)
+  // Cleanup on dispose
   group.userData.dispose = () => {
     document.removeEventListener('pointerlockchange', onPointerLockChange);
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mousedown', onClick);
     document.removeEventListener('keydown', onKeyDown);
+
+    for (const b of activeBullets) group.remove(b.mesh);
+    for (const p of activeParticles) group.remove(p.mesh);
+    if (muzzleLight) group.remove(muzzleLight);
+    particleGeo.dispose();
   };
 
   // Tick
   group.userData.tick = (delta, time) => {
     const dt = Math.min(delta, 0.05);
 
-    // Animate gallery lights – gentle pulsing
+    // 1. Muzzle light & recoil updates
+    if (aimMode) {
+      muzzleFlashIntensity = Math.max(0, muzzleFlashIntensity - dt * 65);
+      if (muzzleLight) {
+        muzzleLight.intensity = muzzleFlashIntensity;
+        let gunModel = null;
+        if (operator) {
+          gunModel = operator.fig.getObjectByName('Sketchfab_Scene');
+        }
+        if (gunModel) {
+          const mPos = new THREE.Vector3(0.18, 0.13, 0);
+          gunModel.localToWorld(mPos);
+          group.worldToLocal(mPos);
+          muzzleLight.position.copy(mPos);
+        }
+      }
+
+      cameraShake.multiplyScalar(Math.max(0, 1 - dt * 10));
+
+      if (recoilTimer > 0) {
+        recoilTimer -= dt;
+      } else {
+        recoilX = THREE.MathUtils.lerp(recoilX, 0, dt * 8);
+        recoilY = THREE.MathUtils.lerp(recoilY, 0, dt * 8);
+      }
+    }
+
+    // 2. Update Bullets
+    for (let i = activeBullets.length - 1; i >= 0; i--) {
+      const b = activeBullets[i];
+      b.distanceTravelled += b.velocity.length() * dt;
+      b.mesh.position.addScaledVector(b.velocity, dt);
+
+      // Rotate tracer to face flight direction
+      const lookAtTarget = b.mesh.position.clone().add(b.velocity);
+      b.mesh.lookAt(lookAtTarget);
+
+      if (b.distanceTravelled >= b.totalDistance) {
+        handleBulletImpact(b);
+        group.remove(b.mesh);
+        activeBullets.splice(i, 1);
+      }
+    }
+
+    // 3. Update Particles
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+      const p = activeParticles[i];
+      p.age += dt;
+      if (p.age >= p.lifetime) {
+        group.remove(p.mesh);
+        activeParticles.splice(i, 1);
+      } else {
+        p.velocity.y -= 9.8 * dt; // gravity
+        p.mesh.position.addScaledVector(p.velocity, dt);
+        p.mat.opacity = 1.0 - (p.age / p.lifetime);
+        p.mesh.scale.setScalar(1.0 - (p.age / p.lifetime));
+      }
+    }
+
+    // 4. Operator animation
+    if (operator) {
+      updateRider(operator, time);
+      const B = operator.bones;
+      if (B && B.UpperArmR && B.LowerArmR && B.Torso && B.Head) {
+        // Normal idle animation
+        const cycle = time * 0.7 + operator.phase;
+        const sweep = Math.sin(cycle);
+        pose(B, 'Torso', 0.15 + Math.sin(time * 2.0) * 0.02, 0.35 + sweep * 0.15, 0);
+        pose(B, 'Head', 0.1, -0.3, 0);
+        pose(B, 'UpperArmR', 0.1 + Math.sin(time * 4.0) * 0.02, 1.45 + sweep * 0.05, -0.15);
+        pose(B, 'LowerArmR', 0.2, 0, 0);
+
+        if (B.UpperArmL && B.LowerArmL) {
+          pose(B, 'UpperArmL', 0.2, -0.3, 0.3);
+          pose(B, 'LowerArmL', 1.1, 0, 0);
+        }
+      }
+    }
+
+    // 5. Animate gallery lights – gentle pulsing
     for (const gl of galleryLights) {
       const pulse = 1.0 + 0.18 * Math.sin(time * 2.5 + gl.phase);
       if (gl.mesh && gl.mesh.material) {
@@ -563,15 +957,12 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       }
     }
 
-    // Always update target movement and animations (so targets move in/out of aimMode)
+    // 6. Update target movement and animations
     const now = performance.now() / 1000;
     const bound = 2.8;
 
     for (const t of targets) {
-      // Horizontal movement
       t.group.position.x += t.speed * dt * t.direction;
-
-      // Wrap-around checking
       let wrapped = false;
       if (t.direction > 0 && t.group.position.x > bound) {
         t.group.position.x = -bound;
@@ -580,24 +971,24 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
         t.group.position.x = bound;
         wrapped = true;
       }
-
       if (wrapped) {
-        // Reset hit state strictly on wrap-around
         t.hit = false;
         t.hitTime = 0;
         t.omega = 0;
         t.group.rotation.x = 0;
         for (const m of t.meshes) {
-          m.material.emissiveIntensity = 0;
+          const mats = Array.isArray(m.material) ? m.material : [m.material];
+          mats.forEach(mat => {
+            if (mat && 'emissiveIntensity' in mat) mat.emissiveIntensity = 0;
+          });
         }
       }
 
-      // Tip/spin animation when hit
       if (t.hit) {
         const substeps = 4;
         const subDt = dt / substeps;
-        const g = 15.0; // gravity force pulling it upright (0)
-        const damping = 2.0; // air resistance
+        const g = 15.0;
+        const damping = 2.0;
 
         for (let step = 0; step < substeps; step++) {
           const theta = t.group.rotation.x;
@@ -607,12 +998,15 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
         }
 
         const elapsed = now - t.hitTime;
-        // Fade emissive flash
         for (const m of t.meshes) {
-          m.material.emissiveIntensity = Math.max(0, 5 - elapsed * 25);
+          const mats = Array.isArray(m.material) ? m.material : [m.material];
+          mats.forEach(mat => {
+            if (mat && 'emissiveIntensity' in mat) {
+              mat.emissiveIntensity = Math.max(0, 8.0 - elapsed * 25);
+            }
+          });
         }
 
-        // Check if it has come to rest near upright (multiple of 2PI)
         const angleFromUpright = Math.abs(Math.atan2(Math.sin(t.group.rotation.x), Math.cos(t.group.rotation.x)));
         if (Math.abs(t.omega) < 0.2 && angleFromUpright < 0.05) {
           t.hit = false;
@@ -620,7 +1014,10 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
           t.omega = 0;
           t.group.rotation.x = 0;
           for (const m of t.meshes) {
-            m.material.emissiveIntensity = 0;
+            const mats = Array.isArray(m.material) ? m.material : [m.material];
+            mats.forEach(mat => {
+              if (mat && 'emissiveIntensity' in mat) mat.emissiveIntensity = 0;
+            });
           }
         }
       }
@@ -636,7 +1033,23 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       return;
     }
 
-    // Update camera rotation from aim
+    // 7. Update FPS gun rotation to follow aim direction
+    if (fpsGun) {
+      // The gun base rotation is PI (facing -Z toward targets).
+      // We add relative yaw/pitch from mouse movement.
+      const baseYaw = Math.PI;
+      const relYaw = aimYaw - group.userData.controller.centerYaw;
+      fpsGun.rotation.set(-aimPitch, baseYaw + relYaw, 0, 'YXZ');
+
+      // Apply recoil kick
+      fpsGun.rotation.x += recoilX;
+    }
+
+    // 8. Update camera position: above the gun barrel, slightly tilted down
+    const camPos = new THREE.Vector3(0, 2.7, 5.5);
+    group.localToWorld(camPos);
+    camPos.add(cameraShake);
+    camera.position.copy(camPos);
     camera.quaternion.setFromEuler(new THREE.Euler(aimPitch, aimYaw, 0, 'YXZ'));
 
     // Update UI
