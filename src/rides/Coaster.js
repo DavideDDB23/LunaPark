@@ -342,10 +342,6 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   // Attach cart template
   dolly0.attach(templateCartNode);
   
-  // Rotate the cart template by 180 degrees (Math.PI) around its local Z axis (vertical dolly Y)
-  // so that the carriages and the passengers face forward in the direction of movement.
-  templateCartNode.rotateOnAxis(new THREE.Vector3(0, 0, 1), Math.PI);
-  
   // Force uniform scale based on horizontal scale * CART_SCALE to prevent non-uniform scale skewing on carriages and riders
   const baseScale = templateCartNode.scale.x * CART_SCALE;
   templateCartNode.scale.set(baseScale, baseScale, baseScale);
@@ -461,9 +457,17 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
         phase: carIdx * 1.7 + seatIdx * 0.9,
       });
 
+      // Riders appear upside-down in the dolly frame: the GLB model's root has an intrinsic
+      // rotation that puts the head toward -Y of the dolly and faces -X. Flip 180° around Z
+      // (head↔feet), then -90° around Y to rotate from +X to +Z (forward travel direction).
+      const _flipZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+      rider.fig.quaternion.premultiply(_flipZ);
+      const _turnFwd = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+      rider.fig.quaternion.premultiply(_turnFwd);
+      rider.fig.updateMatrixWorld(true);
+
       // Hip-bone centring (identical method to the Tagada): drop the figure so the hip bone lands
       // exactly on the seat surface, centred laterally on its own seat.
-      rider.fig.updateMatrixWorld(true);
       const hipBone = rider.fig.getObjectByName('Hips');
       const sx = seatIdx === 0 ? -SEAT_HALF_SEP : SEAT_HALF_SEP;
       if (hipBone) {
@@ -478,13 +482,6 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       rider.restX = rider.pivot.position.x;
       rider.restY = rider.pivot.position.y;
       rider.restZ = rider.pivot.position.z;
-
-      // Riders appear upside-down in the dolly frame: the GLB model's root has an intrinsic
-      // rotation that puts the head toward -Y of the dolly. Flip 180° around the dolly Z axis:
-      //   • Z-rotation π  →  Y flips (head↔feet) ✓  and  X flips (left↔right, cosmetically fine)
-      //   • Z direction unchanged  →  forward/backward facing is preserved ✓
-      const _flipZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
-      rider.fig.quaternion.premultiply(_flipZ);
 
       car.dolly.add(rider.pivot); // child of the unit-scale dolly — no cart-scale counteraction
       riders.push(rider);
