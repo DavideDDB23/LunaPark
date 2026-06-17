@@ -393,7 +393,10 @@ async function init() {
   environmentGroup.add(balloonContainer);
 
   const shootingGallery = await buildShootingGallery({ camera, renderer, controls });
-  shootingGallery.position.set(12, 0, 24);
+  const sgYaw = faceYaw(11);
+  const sgOffset = new THREE.Vector3(0, 0, 1.6).applyAxisAngle(new THREE.Vector3(0, 1, 0), sgYaw);
+  shootingGallery.position.set(11 + sgOffset.x, 0, 20 + sgOffset.z);
+  shootingGallery.rotation.y = sgYaw;
   environmentGroup.add(shootingGallery);
   window.__lp.shootingGallery = shootingGallery.userData.controller;
 

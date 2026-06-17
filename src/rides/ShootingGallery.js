@@ -6,6 +6,164 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   const group = new THREE.Group();
   group.name = 'shootingGallery';
 
+  // ── Load prize models asynchronously ──
+  let duckGltf, bearGltf, bunnyGltf, rabbitGltf;
+  try {
+    [duckGltf, bearGltf, bunnyGltf, rabbitGltf] = await Promise.all([
+      loadGLB('assets/models/prizes/duck_plush.glb'),
+      loadGLB('assets/models/prizes/low_poly_asset_teddy_bear.glb'),
+      loadGLB('assets/models/prizes/low_poly_bunny_plush_toy.glb'),
+      loadGLB('assets/models/prizes/rabbit_plush__conejo_peluche.glb')
+    ]);
+  } catch (err) {
+    console.warn("Failed to load prize models", err);
+  }
+
+  // ── Helper to create customized prize versions ──
+  function createPrize(type, { tint, scale = 1.0, position, rotation }) {
+    let baseScene;
+    if (type === 'duck') baseScene = duckGltf?.scene;
+    else if (type === 'bear') baseScene = bearGltf?.scene;
+    else if (type === 'bunny') baseScene = bunnyGltf?.scene;
+    else if (type === 'rabbit') baseScene = rabbitGltf?.scene;
+    
+    if (!baseScene) return null;
+    
+    const clone = baseScene.clone();
+    
+    clone.traverse((o) => {
+      if (o.isMesh && o.material) {
+        if (Array.isArray(o.material)) {
+          o.material = o.material.map(m => m.clone());
+        } else {
+          o.material = o.material.clone();
+        }
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    
+    const bbox = new THREE.Box3().setFromObject(clone);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    const rawHeight = size.y;
+    
+    const targetHeight = 0.8;
+    const baseScale = rawHeight > 0 ? targetHeight / rawHeight : 1.0;
+    
+    const center = new THREE.Vector3();
+    bbox.getCenter(center);
+    
+    const wrapper = new THREE.Group();
+    wrapper.add(clone);
+    
+    clone.scale.setScalar(baseScale);
+    clone.position.set(-center.x * baseScale, -bbox.min.y * baseScale, -center.z * baseScale);
+    
+    wrapper.scale.setScalar(scale);
+    if (position) wrapper.position.fromArray(position);
+    if (rotation) wrapper.rotation.fromArray(rotation);
+    
+    if (tint) {
+      const colors = {
+        red: 0xdd3b3b,
+        blue: 0x3b6ddd,
+        yellow: 0xddb63b
+      };
+      const tintColor = new THREE.Color(colors[tint] || tint);
+      wrapper.traverse((o) => {
+        if (o.isMesh && o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((mat) => {
+            const name = (mat.name || '').toLowerCase();
+            if (name.includes('eye') || name.includes('nose') || name.includes('teeth') || name.includes('blush')) {
+              return;
+            }
+            if (mat.color.r < 0.05 && mat.color.g < 0.05 && mat.color.b < 0.05) {
+              return;
+            }
+            mat.color.copy(tintColor);
+          });
+        }
+      });
+    }
+    
+    return wrapper;
+  }
+
+  function createHangingString(x, y, z, length) {
+    const stringGeo = new THREE.CylinderGeometry(0.008, 0.008, length, 4);
+    const stringMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+    const stringMesh = new THREE.Mesh(stringGeo, stringMat);
+    stringMesh.position.set(x, y - length / 2, z);
+    stringMesh.castShadow = true;
+    return stringMesh;
+  }
+
+  // ── Shelf geometry: plushies sitting on the shelf and hung on the back wall ──
+  const SHELF_Y = 1.75;      // shelf surface height
+  const SHELF_Z = -1.5;      // pushed back onto the counter
+  const WALL_HANG_Y = 2.65;  // hung row above shelf
+  const WALL_HANG_Z = -2.2;  // against the face of the back wall
+
+  const SHELF_Z_BACK = -2;
+  const SHELF_Z_FRONT = -1.4;
+
+  const prizeSpecs = [
+    // ── ROW 1: Plush toys sitting ON the shelf (Back Row) ──
+    { type: 'duck',   tint: 'red',    scale: 1.2, position: [-2.4, SHELF_Y, SHELF_Z_BACK], rotation: [0, 0.2, 0] },
+    { type: 'bear',                    scale: 1.2, position: [-1.4, SHELF_Y, SHELF_Z_BACK], rotation: [0, -0.15, 0] },
+    { type: 'rabbit', tint: 'yellow',  scale: 1.2, position: [-0.4, SHELF_Y, SHELF_Z_BACK], rotation: [0, 0.1, 0] },
+    { type: 'bunny',                   scale: 1.2, position: [0.4,  SHELF_Y, SHELF_Z_BACK], rotation: [0, -0.1, 0] },
+    { type: 'duck',                    scale: 1.2, position: [1.4,  SHELF_Y, SHELF_Z_BACK], rotation: [0, 0.15, 0] },
+    { type: 'bear',   tint: 'blue',    scale: 1.2, position: [2.4,  SHELF_Y, SHELF_Z_BACK], rotation: [0, -0.2, 0] },
+
+    // ── ROW 2: Plush toys sitting ON the shelf (Front Row) ──
+    { type: 'bunny',  tint: 'blue',    scale: 1.1, position: [-1.8, SHELF_Y, SHELF_Z_FRONT], rotation: [0, 0.1, 0] },
+    { type: 'duck',   tint: 'yellow',  scale: 1.1, position: [-0.9, SHELF_Y, SHELF_Z_FRONT], rotation: [0, -0.05, 0] },
+    { type: 'bear',   tint: 'red',     scale: 1.1, position: [0.0,  SHELF_Y, SHELF_Z_FRONT], rotation: [0, 0.05, 0] },
+    { type: 'rabbit',                  scale: 1.1, position: [0.9,  SHELF_Y, SHELF_Z_FRONT], rotation: [0, -0.1, 0] },
+    { type: 'duck',                    scale: 1.1, position: [1.8,  SHELF_Y, SHELF_Z_FRONT], rotation: [0, 0.12, 0] },
+
+    // ── ROW 2: Plush toys hanging on the wall above the shelf ──
+    { type: 'bear',   tint: 'red',     scale: 0.7, position: [-2.0, WALL_HANG_Y, WALL_HANG_Z], rotation: [0, 0.1, 0], hang: true },
+    { type: 'bunny',  tint: 'yellow',  scale: 0.7, position: [-1.0, WALL_HANG_Y, WALL_HANG_Z], rotation: [0, -0.08, 0], hang: true },
+    { type: 'duck',                    scale: 0.7, position: [0.0,  WALL_HANG_Y, WALL_HANG_Z], rotation: [0, 0.05, 0], hang: true },
+    { type: 'rabbit', tint: 'blue',    scale: 0.7, position: [1.0,  WALL_HANG_Y, WALL_HANG_Z], rotation: [0, -0.05, 0], hang: true },
+    { type: 'bear',                    scale: 0.7, position: [2.0,  WALL_HANG_Y, WALL_HANG_Z], rotation: [0, 0.12, 0], hang: true },
+
+    // Giant versions sitting on the floor flanking the booth outside
+    { type: 'bear', scale: 1.8, position: [-3.6, 0.0, 1.5], rotation: [0, 0.5, 0] },
+    { type: 'duck', scale: 1.8, position: [3.6, 0.0, 1.5], rotation: [0, -0.5, 0] },
+  ];
+
+  if (duckGltf && bearGltf && bunnyGltf && rabbitGltf) {
+    const CEILING_Y = 3.6;
+    prizeSpecs.forEach(spec => {
+      const prize = createPrize(spec.type, {
+        tint: spec.tint,
+        scale: spec.scale,
+        position: spec.position,
+        rotation: spec.rotation
+      });
+      if (prize) {
+        group.add(prize);
+        if (spec.hang) {
+          const px = spec.position[0];
+          const py = spec.position[1];
+          const pz = spec.position[2];
+          const prizeHeight = 0.8 * spec.scale;
+          const topY = py + prizeHeight;
+          const stringLength = CEILING_Y - topY;
+          if (stringLength > 0) {
+            const stringMesh = createHangingString(px, CEILING_Y, pz, stringLength);
+            group.add(stringMesh);
+          }
+        }
+      }
+    });
+  }
+
   // ── Build booth structure ──
   let boothModel;
   try {
@@ -20,15 +178,21 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     
     const targetHeight = 4.5;
     const scale = size.y > 0 ? targetHeight / size.y : 1;
+    
+    // Rotate 90 degrees (-Math.PI / 2) so it opens towards +Z (the player)
     boothModel.scale.setScalar(scale);
+    boothModel.rotation.y = -Math.PI / 2;
     
-    // Rotate 180 degrees so it opens towards +Z (the player)
-    boothModel.rotation.y = Math.PI;
+    // Compute local matrix to get accurate bounding box and center of the rotated model
+    boothModel.updateMatrix();
+    boothModel.matrixWorld.copy(boothModel.matrix);
     
-    // Center the booth at (0, 0, 0)
-    const center = new THREE.Vector3();
-    bbox.getCenter(center);
-    boothModel.position.set(center.x * scale, -bbox.min.y * scale, center.z * scale);
+    const bboxRotated = new THREE.Box3().setFromObject(boothModel);
+    const centerRotated = new THREE.Vector3();
+    bboxRotated.getCenter(centerRotated);
+    
+    // Position the rotated booth so it is centered on X and Z, and sits on the ground at Y=0
+    boothModel.position.set(-centerRotated.x, -bboxRotated.min.y, -centerRotated.z);
     
     boothModel.traverse((o) => {
       if (o.isMesh) {
@@ -84,12 +248,12 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     }
   }
 
-  // ── Targets (Option A: Moving Targets) ──
+  // ── Targets – raised well above the counter so they’re fully visible ──
   const targets = [];
   const rows = [
-    { z: 1.0, y: 1.0, speed: 0.8, direction: 1, multiplier: 1, count: 3 },  // Front row (left-to-right)
-    { z: 0.5, y: 1.4, speed: 1.4, direction: -1, multiplier: 2, count: 4 }, // Middle row (right-to-left)
-    { z: 0.0, y: 1.8, speed: 2.0, direction: 1, multiplier: 3, count: 4 }   // Back row (left-to-right)
+    { z: 0.2,   y: 2.05, speed: 0.8, direction: 1, multiplier: 1, count: 3 },  // Front row
+    { z: -0.2,  y: 2.50, speed: 1.4, direction: -1, multiplier: 2, count: 4 }, // Middle row
+    { z: -0.5,  y: 2.95, speed: 2.0, direction: 1, multiplier: 3, count: 4 }   // Back row
   ];
 
   const bound = 2.8;
@@ -146,6 +310,72 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     }
   }
 
+  // ── Sophisticated interior lighting ──
+  const galleryLights = [];  // track animated lights for tick()
+  {
+    // ─── 1. Warm overhead spots directed precisely at the shelves ───
+    const shelfSpotPositions = [-1.5, 0.0, 1.5];
+    for (const sx of shelfSpotPositions) {
+      const sp = new THREE.SpotLight(0xfff0d0, 8);
+      sp.position.set(sx, 3.5, 0.0);
+      sp.target.position.set(sx, SHELF_Y, SHELF_Z);
+      sp.angle = Math.PI / 6;
+      sp.penumbra = 0.5;
+      sp.decay = 1.5;
+      sp.distance = 6;
+      sp.castShadow = true;
+      group.add(sp);
+      group.add(sp.target);
+    }
+
+    // ─── 2. Target backlights for sophisticated glowing silhouette ───
+    const targetGlow1 = new THREE.PointLight(0x2288ff, 3.0, 4, 1.2);
+    targetGlow1.position.set(-1.0, 2.5, -0.65);
+    group.add(targetGlow1);
+    
+    const targetGlow2 = new THREE.PointLight(0xff2288, 3.0, 4, 1.2);
+    targetGlow2.position.set(1.0, 2.5, -0.65);
+    group.add(targetGlow2);
+
+    // ─── 3. Shelf under-glow (subtle neon strip effect under the plushies) ───
+    const underGlow = new THREE.PointLight(0xffaa44, 4.0, 5, 1.5);
+    underGlow.position.set(0, SHELF_Y - 0.2, SHELF_Z + 0.2);
+    group.add(underGlow);
+
+    // ─── 4. Front counter fill (soft warm light for the player area) ───
+    const frontFill = new THREE.PointLight(0xffeebb, 2.0, 5, 1.5);
+    frontFill.position.set(0, 1.5, 1.0);
+    group.add(frontFill);
+    
+    // ─── 5. Mesh-attached light bars (neon tubes on side walls) ───
+    const neonColors = [0xff2266, 0x22aaff];
+    const neonXPositions = [-3.05, 3.05]; // attached to the inner face of the side walls
+    for (let i = 0; i < 2; i++) {
+      const nx = neonXPositions[i];
+      const nc = neonColors[i];
+      
+      const tubeGeo = new THREE.CylinderGeometry(0.04, 0.04, 3.2, 8);
+      const tubeMat = new THREE.MeshStandardMaterial({
+        color: nc,
+        emissive: nc,
+        emissiveIntensity: 5.0,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const tube = new THREE.Mesh(tubeGeo, tubeMat);
+      // Attached to the side walls, midway into the stall
+      tube.position.set(nx, 2.0, -1.2);
+      group.add(tube);
+      galleryLights.push({ mesh: tube, baseIntensity: 5.0, phase: i * Math.PI });
+
+      const neonPL = new THREE.PointLight(nc, 2.5, 5.0, 1.5);
+      neonPL.position.set(nx > 0 ? nx - 0.2 : nx + 0.2, 2.0, -1.2);
+      group.add(neonPL);
+      galleryLights.push({ light: neonPL, baseIntensity: 2.5, phase: i * Math.PI });
+    }
+  }
+
   // ─ State ──
   let score = 0;
   let timer = 30;
@@ -172,10 +402,10 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       preAimPos = camera.position.clone();
       preAimTarget = controls ? controls.target.clone() : new THREE.Vector3();
 
-      const worldPos = new THREE.Vector3();
-      group.getWorldPosition(worldPos);
-      const camPos = new THREE.Vector3(worldPos.x, worldPos.y + 2.5, worldPos.z + 5.0);
-      const lookPos = new THREE.Vector3(worldPos.x, worldPos.y + 2.0, worldPos.z - 3.0);
+      const camPos = new THREE.Vector3(0, 2.5, 5.0);
+      group.localToWorld(camPos);
+      const lookPos = new THREE.Vector3(0, 2.0, -3.0);
+      group.localToWorld(lookPos);
 
       if (window.__lp && window.__lp.cameraManager) {
         window.__lp.cameraManager.flyToPosition(camPos, lookPos, () => {
@@ -321,6 +551,17 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   // Tick
   group.userData.tick = (delta, time) => {
     const dt = Math.min(delta, 0.05);
+
+    // Animate gallery lights – gentle pulsing
+    for (const gl of galleryLights) {
+      const pulse = 1.0 + 0.18 * Math.sin(time * 2.5 + gl.phase);
+      if (gl.mesh && gl.mesh.material) {
+        gl.mesh.material.emissiveIntensity = gl.baseIntensity * pulse;
+      }
+      if (gl.light) {
+        gl.light.intensity = gl.baseIntensity * pulse;
+      }
+    }
 
     // Always update target movement and animations (so targets move in/out of aimMode)
     const now = performance.now() / 1000;
