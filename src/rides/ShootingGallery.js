@@ -23,11 +23,6 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     console.warn("Failed to load models", err);
   }
 
-  if (bulletGltf) {
-    const box = new THREE.Box3().setFromObject(bulletGltf.scene);
-    const size = box.getSize(new THREE.Vector3());
-    console.log("BULLET MODEL SIZE:", size.x, size.y, size.z);
-  }
 
   // ── Helper to create customized prize versions ──
   function createPrize(type, { tint, scale = 1.0, position, rotation }) {
@@ -468,12 +463,11 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
                  fig.getObjectByName('HandR') || fig.getObjectByName('Hand.R') || fig.getObjectByName('Hand_R');
       if (hand) {
         // Fist.R position offset (adjust so it sits nicely in the palm)
-        // Hand's local X points UP (world +Y) and Y points FORWARD (world -Z).
-        // Since the gun is scaled by 3.8x, we set X to -0.18 and Y to 0.15 to align the grip inside the palm.
-        gunWrapper.position.set(-0.18, 0.15, 0.01);
+        // Lowered and moved left to sit between the hands properly, pushed forward
+        gunWrapper.position.set(-0.25, 0.35, 0.20);
       } else {
         hand = fig.getObjectByName('LowerArmR') || fig.getObjectByName('LowerArm.R') || fig.getObjectByName('LowerArm_R');
-        gunWrapper.position.set(0, 0.35, 0.05); // move down the arm to the hand position
+        gunWrapper.position.set(-0.1, 0.35, 0.1); // move down the arm to the hand position
       }
       if (hand) hand.add(gunWrapper);
     }
@@ -529,34 +523,53 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     fpsGunModel.updateMatrix();
     const muzzleLocal = new THREE.Vector3(0.18, 0.13, 0).applyMatrix4(fpsGunModel.matrix);
 
-    // Create visual muzzle flash mesh (a stylized bright flash effect)
+    // Sophisticated Canvas-based Muzzle Flash Sprite
+    const flashCanvas = document.createElement('canvas');
+    flashCanvas.width = 128;
+    flashCanvas.height = 128;
+    const ctx = flashCanvas.getContext('2d');
+    
+    const flashGradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    flashGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    flashGradient.addColorStop(0.15, 'rgba(255, 240, 150, 1)');
+    flashGradient.addColorStop(0.4, 'rgba(255, 120, 0, 0.6)');
+    flashGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = flashGradient;
+    ctx.fillRect(0, 0, 128, 128);
+    
+    ctx.translate(64, 64);
+    for (let i = 0; i < 7; i++) {
+      ctx.rotate(Math.PI * 2 / 7);
+      ctx.beginPath();
+      ctx.moveTo(-3, 0);
+      ctx.lineTo(0, -55);
+      ctx.lineTo(3, 0);
+      ctx.fillStyle = 'rgba(255, 200, 50, 0.7)';
+      ctx.fill();
+    }
+    
+    const flashTexture = new THREE.CanvasTexture(flashCanvas);
+    const flashMat = new THREE.SpriteMaterial({
+      map: flashTexture,
+      color: 0xffffff,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false
+    });
+    const flashSprite = new THREE.Sprite(flashMat);
+    // Align and size properly
+    flashSprite.scale.set(0.6, 0.6, 1.0);
+    
     const flashGroup = new THREE.Group();
     flashGroup.position.copy(muzzleLocal);
-    
-    const coreGeo = new THREE.SphereGeometry(0.05, 8, 8);
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
-    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-    flashGroup.add(coreMesh);
-    
-    const glowGeo = new THREE.SphereGeometry(0.15, 8, 8);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0 });
-    const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-    flashGroup.add(glowMesh);
-    
-    const spikeGeo = new THREE.ConeGeometry(0.08, 0.4, 4);
-    spikeGeo.rotateX(Math.PI / 2);
-    const spikeMat = new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 0 });
-    const spikeMesh = new THREE.Mesh(spikeGeo, spikeMat);
-    spikeMesh.position.set(0, 0, -0.15);
-    flashGroup.add(spikeMesh);
+    flashGroup.add(flashSprite);
     
     fpsGun.add(flashGroup);
     flashGroup.visible = false;
     
     fpsGun.userData.flashGroup = flashGroup;
-    fpsGun.userData.flashCoreMat = coreMat;
-    fpsGun.userData.flashGlowMat = glowMat;
-    fpsGun.userData.flashSpikeMat = spikeMat;
+    fpsGun.userData.flashMat = flashMat;
+    fpsGun.userData.flashSprite = flashSprite;
 
     // Place centered, at counter height, forward toward targets
     fpsGun.position.set(0, 1.5, 4.5);
@@ -737,7 +750,6 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   const _shootDir = new THREE.Vector3();
 
   const onClick = (e) => {
-    console.log("SHOOT CLICKED, button:", e.button, "aimMode:", aimMode);
     if (!aimMode || e.button !== 0) return;
 
     // Recoil and muzzle flash parameters
@@ -749,10 +761,9 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     // Trigger visual muzzle flash visibility directly for instant feedback
     if (fpsGun && fpsGun.userData.flashGroup) {
       fpsGun.userData.flashGroup.visible = true;
-      fpsGun.userData.flashCoreMat.opacity = 1.0;
-      fpsGun.userData.flashGlowMat.opacity = 0.8;
-      fpsGun.userData.flashSpikeMat.opacity = 0.9;
-      fpsGun.userData.flashGroup.scale.setScalar(2.0);
+      if (fpsGun.userData.flashMat) fpsGun.userData.flashMat.opacity = 1.0;
+      fpsGun.userData.flashGroup.scale.setScalar(1.5 + Math.random() * 0.8); // Dynamic burst size
+      if (fpsGun.userData.flashSprite) fpsGun.userData.flashSprite.material.rotation = Math.random() * Math.PI;
     }
 
     cameraShake.set(
@@ -808,41 +819,58 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       impactPointLocal.set(0, 1.8, -2.0);
     }
 
-    // Spawn tracer mesh. Wrapping the bullet model in a group and rotating by 90 deg around Y 
-    // aligns its length (local X axis of the GLTF model) with the lookAt target (local Z axis).
-    let tracer;
+    // Spawn visible glowing tracer mesh (elongated cylinder) instead of a tiny bullet model
+    // Offset geometry so it extends FORWARD from the spawn point rather than crossing it backwards
+    const tracerGeo = new THREE.CylinderGeometry(0.03, 0.03, 2.5, 8); // 2.5m long thick tracer
+    tracerGeo.rotateX(Math.PI / 2);
+    tracerGeo.translate(0, 0, 1.25); 
+    const tracerMat = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff, 
+      transparent: true, 
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    let tracer = new THREE.Mesh(tracerGeo, tracerMat);
+    
+    // Glow halo
+    const glowGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 8);
+    glowGeo.rotateX(Math.PI / 2);
+    glowGeo.translate(0, 0, 1.25);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa00,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    tracer.add(new THREE.Mesh(glowGeo, glowMat));
+
+    // Add original bullet model at the tip of the tracer
     if (bulletGltf) {
-      tracer = new THREE.Group();
       const model = bulletGltf.scene.clone();
       sanitizeMaterials(model);
       model.traverse(o => {
         if (o.isMesh) {
           o.castShadow = false;
           o.receiveShadow = false;
-          o.material = new THREE.MeshBasicMaterial({ color: 0xffdd44 }); // Glow yellow/orange
+          o.material = new THREE.MeshBasicMaterial({ color: 0xffeedd }); // Bright yellow/white
         }
       });
-      model.scale.setScalar(0.015); // Scale appropriately so length is ~12cm
-      model.rotation.y = Math.PI / 2; // Rotate +X length to point along +Z
+      model.scale.setScalar(0.015); // proper scale
+      model.rotation.y = Math.PI / 2;
+      model.position.z = 2.5; // Place precisely at the front tip of the tracer tail
       tracer.add(model);
-    } else {
-      const tracerGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.6, 6);
-      tracerGeo.rotateX(Math.PI / 2);
-      const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffbb22, transparent: true, opacity: 0.95 });
-      tracer = new THREE.Mesh(tracerGeo, tracerMat);
     }
+
     tracer.position.copy(muzzleLocalInGroup);
     group.add(tracer);
 
     // Store bullet
-    const speed = 90.0;
+    const speed = 70.0; // Slightly slower so the tracer stays on-screen for a few more frames
     const velocity = new THREE.Vector3().subVectors(impactPointLocal, muzzleLocalInGroup).normalize().multiplyScalar(speed);
     const distanceToTarget = muzzleLocalInGroup.distanceTo(impactPointLocal);
 
-    console.log("Muzzle Local:", muzzleLocalInGroup.x, muzzleLocalInGroup.y, muzzleLocalInGroup.z);
-    console.log("Impact Local:", impactPointLocal.x, impactPointLocal.y, impactPointLocal.z);
-    console.log("Velocity:", velocity.x, velocity.y, velocity.z);
-    console.log("Distance:", distanceToTarget);
 
     activeBullets.push({
       mesh: tracer,
@@ -861,50 +889,78 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     const impactPoint = bullet.endPos;
     const hitObject = bullet.hitObject;
 
-    // Expanding shockwave bubble
+    // Intense Flash core for shockwave
     const sMat = new THREE.MeshBasicMaterial({
-      color: 0xffaa44,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.9,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
       depthWrite: false
     });
     const sMesh = new THREE.Mesh(shockwaveGeo, sMat);
     sMesh.position.copy(impactPoint);
     group.add(sMesh);
 
+    // Outer glow halo
+    const gMat = new THREE.MeshBasicMaterial({
+      color: 0xff5500,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const gMesh = new THREE.Mesh(shockwaveGeo, gMat);
+    sMesh.add(gMesh);
+
     activeParticles.push({
       mesh: sMesh,
       mat: sMat,
+      gMat: gMat, // stored to fade it out
       type: 'shockwave',
       age: 0,
-      lifetime: 0.15
+      lifetime: 0.2
     });
 
-    // Spark splash particles
-    const particleCount = 24;
-    const colors = [0xffcc00, 0xff8822, 0xff3300, 0xffffff];
+    // High-energy Spark splash streaks
+    const particleCount = 35;
+    const colors = [0xffdd44, 0xff8800, 0xff2200, 0xffffff];
     for (let i = 0; i < particleCount; i++) {
       const color = colors[Math.floor(Math.random() * colors.length)];
-      const pMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1.0 });
-      const pMesh = new THREE.Mesh(particleGeo, pMat);
+      // use long thin boxes for fast-moving spark streaks
+      const pGeo = new THREE.BoxGeometry(0.015, 0.015, 0.15 + Math.random() * 0.3);
+      const pMat = new THREE.MeshBasicMaterial({ 
+        color, 
+        transparent: true, 
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false 
+      });
+      const pMesh = new THREE.Mesh(pGeo, pMat);
       pMesh.position.copy(impactPoint);
-      group.add(pMesh);
+      
+      // Random direction outward from impact
+      const dir = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2
+      ).normalize();
+      
+      // Look at direction of travel for streaks to align perfectly
+      pMesh.lookAt(pMesh.position.clone().add(dir));
 
-      // Radial splash velocity
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 2.0 + Math.random() * 5.0;
-      const vel = new THREE.Vector3(
-        Math.cos(angle) * speed * 0.7,
-        (Math.random() * 4.0 + 1.5),
-        Math.sin(angle) * speed * 0.7
-      );
+      const speed = 5.0 + Math.random() * 10.0;
+      const vel = dir.multiplyScalar(speed);
+      vel.y += 2.0; // slight upward bias
+      
+      group.add(pMesh);
 
       activeParticles.push({
         mesh: pMesh,
         mat: pMat,
         velocity: vel,
+        type: 'spark',
         age: 0,
-        lifetime: 0.2 + Math.random() * 0.4
+        lifetime: 0.15 + Math.random() * 0.25
       });
     }
 
@@ -989,15 +1045,11 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
 
       // Update visual muzzle flash scale and opacity on the FPS gun
       if (fpsGun && fpsGun.userData.flashGroup) {
-        const intensityNorm = muzzleFlashIntensity / 12.0; // 0 to 1
-        const opacity = Math.min(1.0, intensityNorm * 2.0);
-        const scale = 0.5 + 1.5 * intensityNorm;
-        
+        const scale = 1.0 + (muzzleFlashIntensity / 12.0) * 1.5;
+        const opacity = muzzleFlashIntensity / 12.0;
         fpsGun.userData.flashGroup.visible = (muzzleFlashIntensity > 0.01);
         fpsGun.userData.flashGroup.scale.setScalar(scale);
-        fpsGun.userData.flashCoreMat.opacity = opacity;
-        fpsGun.userData.flashGlowMat.opacity = opacity * 0.8;
-        fpsGun.userData.flashSpikeMat.opacity = opacity * 0.9;
+        if (fpsGun.userData.flashMat) fpsGun.userData.flashMat.opacity = opacity;
       }
 
       cameraShake.multiplyScalar(Math.max(0, 1 - dt * 10));
@@ -1037,15 +1089,20 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
         group.remove(p.mesh);
         activeParticles.splice(i, 1);
       } else {
+        const progress = p.age / p.lifetime;
         if (p.type === 'shockwave') {
-          const progress = p.age / p.lifetime;
-          p.mesh.scale.setScalar(0.1 + progress * 2.5);
-          p.mat.opacity = 0.9 * (1.0 - progress);
+          p.mesh.scale.setScalar(0.1 + progress * 6.0); // Big fiery explosion expansion
+          p.mat.opacity = 1.0 - Math.pow(progress, 2);
+          if (p.gMat) {
+            p.gMat.opacity = 0.8 * (1.0 - progress);
+            // Note: materials do not have scale, the parent mesh handles scaling
+          }
         } else {
-          p.velocity.y -= 9.8 * dt; // gravity
+          // Laser sparks don't use much gravity
           p.mesh.position.addScaledVector(p.velocity, dt);
-          p.mat.opacity = 1.0 - (p.age / p.lifetime);
-          p.mesh.scale.setScalar(1.0 - (p.age / p.lifetime));
+          p.mat.opacity = 1.0 - progress;
+          // Scale down length as they age to look like dissipating streaks
+          p.mesh.scale.setScalar(1.0 - progress * 0.8);
         }
       }
     }
