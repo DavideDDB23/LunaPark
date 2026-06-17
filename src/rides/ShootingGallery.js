@@ -23,6 +23,12 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     console.warn("Failed to load models", err);
   }
 
+  if (bulletGltf) {
+    const box = new THREE.Box3().setFromObject(bulletGltf.scene);
+    const size = box.getSize(new THREE.Vector3());
+    console.log("BULLET MODEL SIZE:", size.x, size.y, size.z);
+  }
+
   // ── Helper to create customized prize versions ──
   function createPrize(type, { tint, scale = 1.0, position, rotation }) {
     let baseScene;
@@ -518,6 +524,40 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     // Rotate so barrel points forward (-Z in local, toward targets)
     fpsGunModel.rotation.set(0, -Math.PI / 2, 0);
     fpsGun.add(fpsGunModel);
+
+    // Calculate muzzle position in fpsGun's local space
+    fpsGunModel.updateMatrix();
+    const muzzleLocal = new THREE.Vector3(0.18, 0.13, 0).applyMatrix4(fpsGunModel.matrix);
+
+    // Create visual muzzle flash mesh (a stylized bright flash effect)
+    const flashGroup = new THREE.Group();
+    flashGroup.position.copy(muzzleLocal);
+    
+    const coreGeo = new THREE.SphereGeometry(0.05, 8, 8);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    flashGroup.add(coreMesh);
+    
+    const glowGeo = new THREE.SphereGeometry(0.15, 8, 8);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0 });
+    const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+    flashGroup.add(glowMesh);
+    
+    const spikeGeo = new THREE.ConeGeometry(0.08, 0.4, 4);
+    spikeGeo.rotateX(Math.PI / 2);
+    const spikeMat = new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 0 });
+    const spikeMesh = new THREE.Mesh(spikeGeo, spikeMat);
+    spikeMesh.position.set(0, 0, -0.15);
+    flashGroup.add(spikeMesh);
+    
+    fpsGun.add(flashGroup);
+    flashGroup.visible = false;
+    
+    fpsGun.userData.flashGroup = flashGroup;
+    fpsGun.userData.flashCoreMat = coreMat;
+    fpsGun.userData.flashGlowMat = glowMat;
+    fpsGun.userData.flashSpikeMat = spikeMat;
+
     // Place centered, at counter height, forward toward targets
     fpsGun.position.set(0, 1.5, 4.5);
     fpsGun.visible = false;
@@ -543,6 +583,7 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   let recoilTimer = 0;
   let muzzleFlashIntensity = 0;
   const particleGeo = new THREE.BoxGeometry(0.04, 0.04, 0.04);
+  const shockwaveGeo = new THREE.SphereGeometry(0.1, 12, 12);
 
   // Muzzle flash point light
   const muzzleLight = new THREE.PointLight(0xff9922, 0.0, 4.0, 1.5);
@@ -696,6 +737,7 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   const _shootDir = new THREE.Vector3();
 
   const onClick = (e) => {
+    console.log("SHOOT CLICKED, button:", e.button, "aimMode:", aimMode);
     if (!aimMode || e.button !== 0) return;
 
     // Recoil and muzzle flash parameters
@@ -704,22 +746,37 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     recoilTimer = 0.12;
     muzzleFlashIntensity = 12.0;
 
+    // Trigger visual muzzle flash visibility directly for instant feedback
+    if (fpsGun && fpsGun.userData.flashGroup) {
+      fpsGun.userData.flashGroup.visible = true;
+      fpsGun.userData.flashCoreMat.opacity = 1.0;
+      fpsGun.userData.flashGlowMat.opacity = 0.8;
+      fpsGun.userData.flashSpikeMat.opacity = 0.9;
+      fpsGun.userData.flashGroup.scale.setScalar(2.0);
+    }
+
     cameraShake.set(
       (Math.random() - 0.5) * 0.06,
       (Math.random() * 0.03 + 0.03), // recoil kick upwards
       (Math.random() - 0.5) * 0.06
     );
 
-    // Locate gun muzzle position
-    const muzzleWorld = new THREE.Vector3();
+    // Locate gun muzzle position in local coordinates of group
+    const muzzleLocalInGroup = new THREE.Vector3();
     if (aimMode && fpsGun) {
-      // Muzzle is at the tip of the FPS gun barrel (local -Z after rotation)
-      muzzleWorld.set(0, 0, -0.5);
-      fpsGun.localToWorld(muzzleWorld);
-      group.worldToLocal(muzzleWorld);
-      group.localToWorld(muzzleWorld);
+      // Get the muzzle's local position in fpsGunModel's space, then transform to group space
+      const tempMuzzle = new THREE.Vector3(0.18, 0.13, 0);
+      if (fpsGun.children[0]) {
+        fpsGun.children[0].updateMatrix();
+        tempMuzzle.applyMatrix4(fpsGun.children[0].matrix);
+      }
+      fpsGun.updateMatrix();
+      tempMuzzle.applyMatrix4(fpsGun.matrix);
+      muzzleLocalInGroup.copy(tempMuzzle);
     } else {
-      muzzleWorld.copy(camera.position).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), 0.5);
+      const tempWorld = camera.position.clone().addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), 0.5);
+      muzzleLocalInGroup.copy(tempWorld);
+      group.worldToLocal(muzzleLocalInGroup);
     }
 
     // Raycast from camera center to find target impact point
@@ -739,44 +796,58 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     }
 
     const hits = raycaster.intersectObjects(intersectObjects, true);
-    const impactPoint = new THREE.Vector3();
+    const impactPointLocal = new THREE.Vector3();
     let hitObject = null;
 
     if (hits.length > 0) {
-      impactPoint.copy(hits[0].point);
+      impactPointLocal.copy(hits[0].point);
+      group.worldToLocal(impactPointLocal);
       hitObject = hits[0].object;
     } else {
       // Default fallback plane
-      const localDest = new THREE.Vector3(0, 1.8, -2.0);
-      group.localToWorld(localDest);
-      impactPoint.copy(localDest);
+      impactPointLocal.set(0, 1.8, -2.0);
     }
 
-    // Spawn tracer mesh
+    // Spawn tracer mesh. Wrapping the bullet model in a group and rotating by 90 deg around Y 
+    // aligns its length (local X axis of the GLTF model) with the lookAt target (local Z axis).
     let tracer;
     if (bulletGltf) {
-      tracer = bulletGltf.scene.clone();
-      tracer.scale.set(0.015, 0.015, 0.015);
-      // Ensure bullet matches original tracer's oriention if needed
-      // (The update loop handles pointing it at the velocity direction)
+      tracer = new THREE.Group();
+      const model = bulletGltf.scene.clone();
+      sanitizeMaterials(model);
+      model.traverse(o => {
+        if (o.isMesh) {
+          o.castShadow = false;
+          o.receiveShadow = false;
+          o.material = new THREE.MeshBasicMaterial({ color: 0xffdd44 }); // Glow yellow/orange
+        }
+      });
+      model.scale.setScalar(0.015); // Scale appropriately so length is ~12cm
+      model.rotation.y = Math.PI / 2; // Rotate +X length to point along +Z
+      tracer.add(model);
     } else {
-      const tracerGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.45, 6);
+      const tracerGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.6, 6);
       tracerGeo.rotateX(Math.PI / 2);
       const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffbb22, transparent: true, opacity: 0.95 });
       tracer = new THREE.Mesh(tracerGeo, tracerMat);
     }
-    tracer.position.copy(muzzleWorld);
+    tracer.position.copy(muzzleLocalInGroup);
     group.add(tracer);
 
     // Store bullet
-    const speed = 75.0;
-    const velocity = new THREE.Vector3().subVectors(impactPoint, muzzleWorld).normalize().multiplyScalar(speed);
-    const distanceToTarget = muzzleWorld.distanceTo(impactPoint);
+    const speed = 90.0;
+    const velocity = new THREE.Vector3().subVectors(impactPointLocal, muzzleLocalInGroup).normalize().multiplyScalar(speed);
+    const distanceToTarget = muzzleLocalInGroup.distanceTo(impactPointLocal);
+
+    console.log("Muzzle Local:", muzzleLocalInGroup.x, muzzleLocalInGroup.y, muzzleLocalInGroup.z);
+    console.log("Impact Local:", impactPointLocal.x, impactPointLocal.y, impactPointLocal.z);
+    console.log("Velocity:", velocity.x, velocity.y, velocity.z);
+    console.log("Distance:", distanceToTarget);
 
     activeBullets.push({
       mesh: tracer,
-      startPos: muzzleWorld.clone(),
-      endPos: impactPoint.clone(),
+      startPos: muzzleLocalInGroup.clone(),
+      endPos: impactPointLocal.clone(),
       velocity,
       distanceTravelled: 0,
       totalDistance: distanceToTarget,
@@ -790,18 +861,42 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     const impactPoint = bullet.endPos;
     const hitObject = bullet.hitObject;
 
+    // Expanding shockwave bubble
+    const sMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa44,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false
+    });
+    const sMesh = new THREE.Mesh(shockwaveGeo, sMat);
+    sMesh.position.copy(impactPoint);
+    group.add(sMesh);
+
+    activeParticles.push({
+      mesh: sMesh,
+      mat: sMat,
+      type: 'shockwave',
+      age: 0,
+      lifetime: 0.15
+    });
+
     // Spark splash particles
-    const particleCount = 18;
+    const particleCount = 24;
+    const colors = [0xffcc00, 0xff8822, 0xff3300, 0xffffff];
     for (let i = 0; i < particleCount; i++) {
-      const pMat = new THREE.MeshBasicMaterial({ color: 0xff8822, transparent: true, opacity: 1.0 });
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const pMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1.0 });
       const pMesh = new THREE.Mesh(particleGeo, pMat);
       pMesh.position.copy(impactPoint);
       group.add(pMesh);
 
+      // Radial splash velocity
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2.0 + Math.random() * 5.0;
       const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * 4.5,
-        (Math.random() * 3.5 + 1.2),
-        (Math.random() - 0.5) * 4.5
+        Math.cos(angle) * speed * 0.7,
+        (Math.random() * 4.0 + 1.5),
+        Math.sin(angle) * speed * 0.7
       );
 
       activeParticles.push({
@@ -809,7 +904,7 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
         mat: pMat,
         velocity: vel,
         age: 0,
-        lifetime: 0.25 + Math.random() * 0.35
+        lifetime: 0.2 + Math.random() * 0.4
       });
     }
 
@@ -861,6 +956,7 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     for (const p of activeParticles) group.remove(p.mesh);
     if (muzzleLight) group.remove(muzzleLight);
     particleGeo.dispose();
+    shockwaveGeo.dispose();
   };
 
   // Tick
@@ -872,16 +968,36 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       muzzleFlashIntensity = Math.max(0, muzzleFlashIntensity - dt * 65);
       if (muzzleLight) {
         muzzleLight.intensity = muzzleFlashIntensity;
-        let gunModel = null;
-        if (operator) {
-          gunModel = operator.fig.getObjectByName('Sketchfab_Scene');
-        }
-        if (gunModel) {
+        if (fpsGun) {
+          // Position at the muzzle of the FPS gun (in group local space)
           const mPos = new THREE.Vector3(0.18, 0.13, 0);
-          gunModel.localToWorld(mPos);
-          group.worldToLocal(mPos);
+          if (fpsGun.children[0]) {
+            mPos.applyMatrix4(fpsGun.children[0].matrix);
+          }
+          mPos.applyMatrix4(fpsGun.matrix);
           muzzleLight.position.copy(mPos);
+        } else if (operator) {
+          const gunModel = operator.fig.getObjectByName('Sketchfab_Scene');
+          if (gunModel) {
+            const mPos = new THREE.Vector3(0.18, 0.13, 0);
+            gunModel.localToWorld(mPos);
+            group.worldToLocal(mPos);
+            muzzleLight.position.copy(mPos);
+          }
         }
+      }
+
+      // Update visual muzzle flash scale and opacity on the FPS gun
+      if (fpsGun && fpsGun.userData.flashGroup) {
+        const intensityNorm = muzzleFlashIntensity / 12.0; // 0 to 1
+        const opacity = Math.min(1.0, intensityNorm * 2.0);
+        const scale = 0.5 + 1.5 * intensityNorm;
+        
+        fpsGun.userData.flashGroup.visible = (muzzleFlashIntensity > 0.01);
+        fpsGun.userData.flashGroup.scale.setScalar(scale);
+        fpsGun.userData.flashCoreMat.opacity = opacity;
+        fpsGun.userData.flashGlowMat.opacity = opacity * 0.8;
+        fpsGun.userData.flashSpikeMat.opacity = opacity * 0.9;
       }
 
       cameraShake.multiplyScalar(Math.max(0, 1 - dt * 10));
@@ -900,9 +1016,11 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
       b.distanceTravelled += b.velocity.length() * dt;
       b.mesh.position.addScaledVector(b.velocity, dt);
 
-      // Rotate tracer to face flight direction
-      const lookAtTarget = b.mesh.position.clone().add(b.velocity);
-      b.mesh.lookAt(lookAtTarget);
+      // Rotate tracer to face flight direction (using world coordinates since lookAt expects world space)
+      const lookAtTargetLocal = b.mesh.position.clone().add(b.velocity);
+      const lookAtTargetWorld = lookAtTargetLocal.clone();
+      group.localToWorld(lookAtTargetWorld);
+      b.mesh.lookAt(lookAtTargetWorld);
 
       if (b.distanceTravelled >= b.totalDistance) {
         handleBulletImpact(b);
@@ -919,10 +1037,16 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
         group.remove(p.mesh);
         activeParticles.splice(i, 1);
       } else {
-        p.velocity.y -= 9.8 * dt; // gravity
-        p.mesh.position.addScaledVector(p.velocity, dt);
-        p.mat.opacity = 1.0 - (p.age / p.lifetime);
-        p.mesh.scale.setScalar(1.0 - (p.age / p.lifetime));
+        if (p.type === 'shockwave') {
+          const progress = p.age / p.lifetime;
+          p.mesh.scale.setScalar(0.1 + progress * 2.5);
+          p.mat.opacity = 0.9 * (1.0 - progress);
+        } else {
+          p.velocity.y -= 9.8 * dt; // gravity
+          p.mesh.position.addScaledVector(p.velocity, dt);
+          p.mat.opacity = 1.0 - (p.age / p.lifetime);
+          p.mesh.scale.setScalar(1.0 - (p.age / p.lifetime));
+        }
       }
     }
 
