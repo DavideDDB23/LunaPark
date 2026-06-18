@@ -8,10 +8,31 @@ const TARGET_HEIGHT = 48;
 const PASSENGER_COUNTS = [2, 3, 3];
 
 const BALLOON_ZONES = [
-  { cx: -40, cz: 40, radius: 6, baseY: 28, minY: 22 },
-  { cx: 40, cz: -40, radius: 6, baseY: 20, minY: 14 },
-  { cx: 0, cz: -30, radius: 6, baseY: 26, minY: 16 },
+  { cx: -40, cz: 42, hw: 20, hd: 14, baseY: 42, minY: 36 },
+  { cx: 42, cz: -42, hw: 14, hd: 20, baseY: 38, minY: 32 },
+  { cx: 0, cz: -32, hw: 14, hd: 10, baseY: 50, minY: 44 },
 ];
+
+// 2D value noise: hash deterministico + interpolazione smoothstep.
+// Restituisce valori in [-1, 1], continuo nello spazio (x,y).
+function hash2D(ix, iy) {
+  let h = ix * 374761393 + iy * 668265263;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  h = h ^ (h >>> 16);
+  return ((h >>> 0) / 4294967295) * 2 - 1;
+}
+function smooth(t) { return t * t * (3 - 2 * t); }
+function noise2D(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const a = hash2D(ix, iy);
+  const b = hash2D(ix + 1, iy);
+  const c = hash2D(ix, iy + 1);
+  const d = hash2D(ix + 1, iy + 1);
+  const u = smooth(fx), v = smooth(fy);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
 
 function buildOneBalloon(model, index) {
   const srcNode = model.getObjectByName('V1_HotAirBalloon_' + index);
@@ -171,24 +192,82 @@ function buildOneBalloon(model, index) {
   balloonLight.position.set(0, TARGET_HEIGHT * 0.5, 0);
   b.add(balloonLight);
 
-  let driftAngle = index * 2.094;
   let nightFactor = 0;
-  b.userData.driftAngle = driftAngle;
+
+  // Stato per il movimento "random walk con heading": la mongolfiera ha una
+  // direzione (heading) e una velocità angolare (ω) che variano dolcemente.
+  // Non si ferma mai: il target serve solo come bias verso il centro.
+  const initialAngle = (index * 2.094) % (Math.PI * 2);
+  b.userData.headingX = Math.cos(initialAngle);
+  b.userData.headingZ = Math.sin(initialAngle);
+  b.userData.omega = 0;
+  b.userData.omegaJitterTime = 0;
 
   eventBus.on('time-phase-change', (data) => {
     nightFactor = data.nightFactor;
   });
 
   b.userData.tick = (delta, time, windSpeed = 1) => {
-    const dt = Math.min(delta, 0.05);
+    // Velocità di crociera scalata dal vento: 1.5 unità/s a wind=1
+    const ws = 0.4 + windSpeed * 0.8;
+    const speed = 1.5 * ws;
+    const MAX_OMEGA = 0.5; // rad/s — raggio di curvatura minimo = speed/MAX_OMEGA ≈ 3 unità
 
-    driftAngle += dt * (0.06 + 0.06 * Math.sin(time * 0.04 + index)) * windSpeed;
-    b.userData.driftAngle = driftAngle;
-    const driftRadius = 1 + Math.abs(Math.sin(time * 0.02 + index * 1.7)) * (zone.radius - 1);
-    b.position.x = zone.cx + Math.cos(driftAngle) * driftRadius;
-    b.position.z = zone.cz + Math.sin(driftAngle) * driftRadius;
+    // Distanza dal centro della zona (per il bias verso casa)
+    const fromCenterX = b.position.x - zone.cx;
+    const fromCenterZ = b.position.z - zone.cz;
+    const fromCenter = Math.hypot(fromCenterX, fromCenterZ);
+    const maxR = Math.max(zone.hw, zone.hd);
+    const ratio = fromCenter / maxR;
 
-    b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5);
+    // Jitter periodico sulla velocità angolare per variare la direzione
+    // (~ogni 3-6 secondi, più frequente con più vento)
+    const jitterInterval = 4.5 / (0.5 + windSpeed * 0.6);
+    if (time >= b.userData.omegaJitterTime) {
+      // Aggiungi una coppia casuale: cambia direzione di sterzata
+      b.userData.omega += (Math.random() * 2 - 1) * 0.6;
+      b.userData.omegaJitterTime = time + jitterInterval * (0.7 + Math.random() * 0.6);
+    }
+
+    // Bias verso il centro quando siamo oltre il 65% del raggio:
+    // se ci stiamo allontanando dal centro, sterza per curvare verso casa
+    if (ratio > 0.65 && fromCenter > 0.001) {
+      const tdx = -fromCenterX / fromCenter; // direzione "verso il centro"
+      const tdz = -fromCenterZ / fromCenter;
+      // Prodotto scalare heading · toward_center: < 0 = ci stiamo allontanando
+      const dot = b.userData.headingX * tdx + b.userData.headingZ * tdz;
+      if (dot < 0.4) {
+        // Cross product (heading × toward_center) per determinare se girare
+        // a destra o sinistra. cross = hx*tz - hz*tx
+        const cross = b.userData.headingX * tdz - b.userData.headingZ * tdx;
+        // cross < 0 → sterzare a destra; cross > 0 → sterzare a sinistra
+        const steerSign = cross > 0 ? 1 : -1;
+        b.userData.omega += steerSign * 1.2 * delta;
+      }
+    }
+
+    // Smorzamento della velocità angolare (evita che diverga)
+    b.userData.omega *= 0.94;
+    // Clamp
+    if (b.userData.omega > MAX_OMEGA) b.userData.omega = MAX_OMEGA;
+    if (b.userData.omega < -MAX_OMEGA) b.userData.omega = -MAX_OMEGA;
+
+    // Ruota heading dell'angolo ω * delta (passo di integrazione)
+    const dTheta = b.userData.omega * delta;
+    const cosT = Math.cos(dTheta);
+    const sinT = Math.sin(dTheta);
+    const newHx = b.userData.headingX * cosT - b.userData.headingZ * sinT;
+    const newHz = b.userData.headingX * sinT + b.userData.headingZ * cosT;
+    b.userData.headingX = newHx;
+    b.userData.headingZ = newHz;
+
+    // Avanza nella direzione del heading
+    b.position.x += b.userData.headingX * speed * delta;
+    b.position.z += b.userData.headingZ * speed * delta;
+
+    // Y: oscillazione lenta fissa + jitter leggero scalato dal vento
+    const yJitter = noise2D(time * 0.2, index * 50) * 0.5 * ws;
+    b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5 + yJitter);
     b.rotation.z = Math.sin(time * 0.5 + windSpeed + index) * 0.08;
     b.rotation.x = Math.sin(time * 0.4 + windSpeed * 0.7 + index) * 0.05;
 

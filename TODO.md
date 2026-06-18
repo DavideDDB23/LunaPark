@@ -270,6 +270,8 @@ The examiner will ask you to demo the project live and then ask technical questi
 ```
 P0  →  Technical report PDF (luna_park_report.pdf)
 P0  →  Roller coaster: fix animation (360° roll before stop / after launch) and FPV camera underground at stop
+P0  →  Stage: fix colored lights (cyan/magenta volumetric beams at y=14 above roof — need visible fixtures or repositioning)
+P1  →  Roller coaster: fix wagon/passenger animation (check commit df6056a where passengers were misplaced but wagons animated well, possibly in reverse)
 P1  →  Fix GLTFLoader warning "Unknown extension KHR_materials_pbrSpecularGlossiness" (called from App.js:346, Train.js:154) — replace specular-glossiness materials with standard PBR or register the extension
 P1  →  Roller coaster: evaluate moving the stop to the short straight low-to-ground track section
 P1  →  Train: front headlight
