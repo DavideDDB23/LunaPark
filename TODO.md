@@ -166,6 +166,7 @@ The night scene is too dark between attractions — needs ambient fill and moonl
 - [x] **Water night tint**: brighten river shader night color so it's visible after dark ✅ (`uNight` uniform in `Water.js`)
 - [x] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist. (Implemented via 3-state click cycle: Auto -> Manual opposite state -> Manual matching state -> Auto, with confirmation blink)
 - [x] ~~**Test**: add layer 0 to ride lights — already tried, too much lag~~ ❌ Discarded
+- [ ] **Illuminare la recinzione perimetrale**: aggiungere lampioni aggiuntivi lungo il perimetro o fili di luci (puntiformi/emissive) sulla recinzione per renderla visibile di notte
 
 ---
 
@@ -305,6 +306,7 @@ P1  →  Shooting gallery: clamp aimYaw ±0.18 rad from initial yaw (`ShootingGa
 P1  →  Camera presets: improve roller coaster framing (key 4)
 P1  →  Deploy GitHub Pages + test live URL
 P1  →  Remove `test_coaster.js` from repo root (leftover)
+P2  →  Illuminare la recinzione perimetrale (lampioni extra o fili di luci sulla fence)
 P2  →  Add external landscape / scenery around the park perimeter
 P2  →  People model animation refinement
 P2  →  Submission formalities (email, tag, check)
