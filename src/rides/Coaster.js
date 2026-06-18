@@ -31,7 +31,9 @@ import { ControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
 import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
-import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
+import {
+  loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight,
+} from '../people/Passengers.js';
 
 const MODEL_URL = 'assets/models/rides/coaster_track.glb';
 const TARGET_LONG = 94;      // world units — longest horizontal extent after auto-fit. Enlarged so
@@ -49,13 +51,18 @@ const CAR_GAP = 1.0;         // centre-to-centre spacing in car-lengths (1 = nos
 const TRAIN_SPACING = 1.0 / NUM_TRAINS; // 0.5 — second train half a circuit ahead
 const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at park scale
 
-// Passenger seating, in DOLLY-LOCAL space (the dolly is unit-scaled; +Z = travel direction,
-// +Y = up). Riders are seated exactly like the Tagada: upright, facing forward, hip-centred.
-const SEAT_HALF_SEP = 0.5;   // lateral half-separation between the two seats (local X)
-const SEAT_SURFACE_Y = 0.75; // seat-cushion height relative to the rail centre (local Y); the
-                             // cart's seat sits ABOVE the rail, so hips land here, not below
-const SEAT_FWD_Z = -0.05;    // fore/aft offset of the hips from the rail centre (local Z)
-const SEAT_FACING_Y = 0;     // rider yaw — riders face the seat's open side (like the Tagada)
+// Reference points for cart lighting (dolly-local; +Z = travel, +Y = up).
+const SEAT_FWD_Z = 0.36;      // Dolly-local Z of cabin centre (= CZ used by lights)
+const SEAT_LAT_X = 0.17;      // Dolly-local X of cabin centre (= CX used by lights)
+const SEAT_HALF_X = 0.45;     // Half-spacing of the two side-by-side seats (cart-local, world-scale units)
+const SEAT_CUSHION_Y = 0.58;  // Cushion top height for rider hips (cart-local; +Y = seat up)
+const SEAT_HIP_Z = 1.15;      // Hip fore-aft on the cushion (cart-local; +Z = seat forward)
+
+// Idle action pool for coaster riders. Cheer/wave are EXCLUDED on purpose: the runtime
+// loop forces hands up procedurally while the train moves, so the idle state-machine must
+// only pick calm behaviours — otherwise hands would twitch between an idle cheer and the
+// motion-driven cheer. When the train halts, these are the behaviours riders return to.
+const COASTER_IDLE_ACTIONS = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'point', 'photo', 'relax'];
 const G_EFF = 9.8;           // gravity for the energy model (world-units/s²)
 const CURVE_SAMPLES = 80;    // control points kept for the CatmullRom
 const NUM_FRAMES = 4000;     // resolution of the rotation-minimizing frame field
@@ -66,10 +73,6 @@ const V_LAUNCH_MIN = 3.0;
 const V_COAST_MIN = 14.0;
 const STATION_PAUSE = 3.0;
 
-// Passenger animation action pools
-const COASTER_REST_POOL = ['rest', 'relax', 'lookL', 'lookR'];
-const COASTER_RIDE_POOL = ['cheer', 'wave', 'cheer', 'wave', 'lookUp'];
-const COASTER_BRAKE_POOL = ['rest', 'relax'];
 
 const RAIL_MESH_NAME = 'Circle023_build_gen_1_0'; // GLTFLoader strips the dot from "Circle.023"
 const RAIL_RING = 24; // verts per ring of the swept-circle rail tube (9480 verts = 395 rings × 24)
@@ -190,7 +193,7 @@ function extractCenterline(model) {
 }
 
 export async function buildCoaster({ position = [45, 0, 45], camera, renderer, anisotropy = 8 } = {}) {
-  const templates = await loadVisitorTemplates(8);
+  const visitors = await loadVisitorTemplates(8);
   const gltf = await loadGLB(MODEL_URL); // loadGLB strips the imported animation — we never use it
   const model = gltf.scene;
 
@@ -418,6 +421,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   // ── Build 2 trains × 4 carriages — each carriage on its own dolly, spaced by WORLD arc-length so the
   //    cars of a train stay coupled. arcOffset = world distance behind the lead reference (controller.u).
   const cars = [{ dolly: dolly0, arcOffset: 0 }]; // train 0, carriage 0 (the lead)
+
   for (let i = 1; i < NUM_CARS; i++) {
     const t = Math.floor(i / CARS_PER_TRAIN);
     const c = i % CARS_PER_TRAIN;
@@ -432,61 +436,10 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     clone.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     dolly.add(clone);
     group.add(dolly); // Add directly to group to avoid scale inheritance
+
     cars.push({ dolly, arcOffset });
   }
 
-  // ── Seat passengers in the carriages ──────────────────────────────────────────────────────
-  // Seating mirrors the Tagada exactly: riders are parented to the UNIT-SCALE dolly (whose frame
-  // is +Z = travel direction, +Y = up), sit upright, face forward, and are dropped by the hip-bone
-  // offset so the hips land precisely on the seat point. The dolly rolls/inverts with the track,
-  // so the riders bank and go upside-down through the loop rigidly attached to their carriage.
-  const riders = [];
-  const riderHeight = getPassengerWorldHeight() * 0.88; // same rider size as the Tagada / Carousel
-
-  const _dynP = new THREE.Vector3(), _dynV = new THREE.Vector3(), _dynA = new THREE.Vector3();
-  const _dynQI = new THREE.Quaternion();
-
-  cars.forEach((car, carIdx) => {
-    [0, 1].forEach((seatIdx) => {
-      const template = templates[(carIdx * 2 + seatIdx) % templates.length];
-      if (!template) return;
-
-      const rider = makeRider(template, riderHeight, {
-        pool: ['rest'],
-        facingY: SEAT_FACING_Y, // face the +Z direction of travel
-        phase: carIdx * 1.7 + seatIdx * 0.9,
-      });
-
-      // Riders appear upside-down in the dolly frame: the GLB model's root has an intrinsic
-      // rotation that puts the head toward -Y of the dolly and faces -X. Flip 180° around Z
-      // (head↔feet), then -90° around Y to rotate from +X to +Z (forward travel direction).
-      const _flipZ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
-      rider.fig.quaternion.premultiply(_flipZ);
-      const _turnFwd = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
-      rider.fig.quaternion.premultiply(_turnFwd);
-      rider.fig.updateMatrixWorld(true);
-
-      // Hip-bone centring (identical method to the Tagada): drop the figure so the hip bone lands
-      // exactly on the seat surface, centred laterally on its own seat.
-      const hipBone = rider.fig.getObjectByName('Hips');
-      const sx = seatIdx === 0 ? -SEAT_HALF_SEP : SEAT_HALF_SEP;
-      if (hipBone) {
-        const hp = hipBone.getWorldPosition(new THREE.Vector3());
-        rider.fig.worldToLocal(hp);
-        hp.multiplyScalar(rider.scale);
-        rider.pivot.position.set(sx - hp.x, SEAT_SURFACE_Y - hp.y, SEAT_FWD_Z - hp.z);
-      } else {
-        rider.pivot.position.set(sx, SEAT_SURFACE_Y - riderHeight * 0.28, SEAT_FWD_Z);
-      }
-
-      rider.restX = rider.pivot.position.x;
-      rider.restY = rider.pivot.position.y;
-      rider.restZ = rider.pivot.position.z;
-
-      car.dolly.add(rider.pivot); // child of the unit-scale dolly — no cart-scale counteraction
-      riders.push(rider);
-    });
-  });
 
   // ── Sophisticated carriage lighting ───────────────────────────────────────────────────────────
   // The glow ADHERES to the carriage model itself: we make the cart's own materials emissive (via their
@@ -499,7 +452,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const cartLights = [];       // warm interior lamps (light the riders)
   const cartUnderLights = [];  // coloured under-glow pooled on the ground (recoloured with rails)
   const emiss = (col) => new THREE.MeshStandardMaterial({ color: 0x080808, emissive: col, emissiveIntensity: 0, roughness: 0.3, metalness: 0.2, toneMapped: false });
-  const CX = 0.17, CZ = 0.36;                 // cart footprint centre (dolly-local)
+  const CX = SEAT_LAT_X, CZ = SEAT_FWD_Z;     // cart footprint centre (dolly-local) — condiviso coi sedili
   const dotGeo = new THREE.SphereGeometry(0.14, 12, 10);
   const bodyMatMap = new Map();               // share one emissive clone per original cart material
   for (const car of cars) {
@@ -538,6 +491,65 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     for (const sx of [-0.55, 0.55]) {
       const hl = new THREE.Mesh(dotGeo, hlMat); hl.position.set(CX + sx, 0.72, CZ + 1.5); d.add(hl); cartGlows.push(hl);
       const tl = new THREE.Mesh(dotGeo, tlMat); tl.position.set(CX + sx, 0.72, CZ - 1.4); d.add(tl); cartGlows.push(tl);
+    }
+  }
+
+  // ── Passengers: exactly two riders per carriage, on the left & right seats ──
+  // The pivot is parented to the DOLLY (not the cart body), so riders inherit the
+  // track's upright orientation, not the cart mesh's internal GLTF rotation.
+  // Seat positions are measured in cart-local space then transformed to dolly-local
+  // via the cart body's matrix, placing riders at the geometrically correct seat.
+  const riderHeight = getPassengerWorldHeight() * 0.88;
+  for (let ci = 0; ci < cars.length; ci++) {
+    const car = cars[ci];
+    car.riders = [];
+    const cartBody = car.dolly.children[0];
+    cartBody.updateMatrix();
+    for (let s = 0; s < 2; s++) {
+      const idx = ci * 2 + s;                                   // 0..15
+      const template = visitors[idx % visitors.length];
+      const rider = makeRider(template, riderHeight, {
+        pool: COASTER_IDLE_ACTIONS,
+        facingY: 0,           // model +Z = forward = dolly travel direction
+        phase: idx * 1.3,     // staggered so the two seats never animate in sync
+        seatedStyle: 'chair',
+      });
+      rider.variant = idx % 4;      // selects a hands-up style while moving
+      rider.height = riderHeight;   // keeps FPV head-Y math valid
+
+      // Symmetric left/right seats about the cart's X centre (cart-local).
+      const seatX = (s === 0 ? -1 : 1) * SEAT_HALF_X;
+
+      // Transform cart-local seat position to dolly-local via the cart body's matrix,
+      // then fix both seats to the same Y height (center-seat height) to prevent
+      // the cart's GLTF rotation from tilting left/right riders to different heights.
+      const seatDolly = new THREE.Vector3(seatX, SEAT_CUSHION_Y, SEAT_HIP_Z)
+        .applyMatrix4(cartBody.matrix);
+      seatDolly.y = new THREE.Vector3(0, SEAT_CUSHION_Y, SEAT_HIP_Z)
+        .applyMatrix4(cartBody.matrix).y;
+
+      // Seat the hip exactly on the cushion: measure the Hips bone offset and shift
+      // the pivot so the hip lands on seatDolly in dolly-local space.
+      rider.fig.updateMatrixWorld(true);
+      const hipBone = rider.fig.getObjectByName('Hips');
+      if (hipBone) {
+        const hp = hipBone.getWorldPosition(new THREE.Vector3());
+        rider.fig.worldToLocal(hp);
+        hp.multiplyScalar(rider.scale);
+        rider.pivot.position.set(seatDolly.x - hp.x, seatDolly.y - hp.y, seatDolly.z - hp.z);
+      } else {
+        rider.pivot.position.set(seatDolly.x, seatDolly.y - riderHeight * 0.28, seatDolly.z);
+      }
+      rider.restX = rider.pivot.position.x;
+      rider.restY = rider.pivot.position.y;
+      rider.restZ = rider.pivot.position.z;
+
+      const cushionNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(cartBody.quaternion);
+      const roll = Math.atan2(cushionNormal.x, cushionNormal.y);
+      rider.fig.rotation.set(0, 0, -roll * 0.5, 'ZYX');
+
+      car.dolly.add(rider.pivot);   // parent to dolly — upright track orientation
+      car.riders.push(rider);
     }
   }
 
@@ -636,9 +648,9 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     cars,
     curve,
     u: uCar,
-    riders,
     panel: controlPanel.group,
     nightMix: 0,
+    cheerMix: 0,
     get running() { return controlPanel.running; },
     set running(v) { controlPanel.running = v; },
     speedScale: 1.0,
@@ -737,73 +749,56 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       c.dolly.quaternion.setFromRotationMatrix(_mtx);
     }
 
-    // 4. Update riders dynamically (keeps idle breathing and head-turning active when stopped)
-    const timeVal = _time;
-
-    let activePool = COASTER_REST_POOL;
-    if (controller.state === 'LAUNCH' || controller.state === 'COASTING') {
-      activePool = COASTER_RIDE_POOL;
-    } else if (controller.state === 'BRAKING') {
-      activePool = COASTER_BRAKE_POOL;
-    }
-
-    // Per-car kinematics: world acceleration measured from the dolly, smoothed
-    // and expressed in the car frame (+z = travel, x = lateral, y = vertical).
-    const dtc = Math.max(dt, 1e-3);
-    for (const car of cars) {
-      if (!car.dyn) car.dyn = { p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), q: new THREE.Quaternion(), init: false };
-      const D = car.dyn;
-      car.dolly.getWorldPosition(_dynP);
-      car.dolly.getWorldQuaternion(D.q);
-      if (!D.init) { D.p.copy(_dynP); D.init = true; }
-      _dynV.copy(_dynP).sub(D.p).divideScalar(dtc);
-      D.p.copy(_dynP);
-      _dynA.copy(_dynV).sub(D.v).divideScalar(dtc);
-      D.v.copy(_dynV);
-      _dynA.applyQuaternion(_dynQI.copy(D.q).invert());
-      if (_dynA.length() > 80) _dynA.setLength(80);
-      D.a.lerp(_dynA, Math.min(1, dtc * 8));
-    }
-
-    controller.riders.forEach((r, idx) => {
-      // If coaster state changed, set the new action pool and force immediate pose switch
-      if (r.pool !== activePool) {
-        r.pool = activePool;
-        r.from = r.to;
-        r.to = activePool[Math.floor(Math.random() * activePool.length)];
-        r.tStart = timeVal;
-        r.nextSwitch = timeVal + r.transDur + 2.5 + Math.random() * 4;
-      }
-      updateRider(r, timeVal);
-
-      // Physics-based inertia: bodies respond to the REAL car acceleration —
-      // pressed back on launch, thrown forward on the brakes, leaning out of
-      // curves — plus a small speed-proportional rattle.
-      const B = r.bones;
-      const car = cars[(idx / 2) | 0];
-      const a = car && car.dyn ? car.dyn.a : null;
-      if (a && ease > 0.0001) {
-        const lim = (v, l) => Math.max(-l, Math.min(l, v));
-        const pitch = lim(-a.z * 0.010, 0.22);          // accel → pressed back
-        const roll = lim(a.x * 0.008, 0.16);            // curve → lean out
-        const squash = lim(-a.y * 0.004, 0.10);         // drops → lift, valleys → squash
-        const rattle = 0.018 * Math.min(1, (controller.lastSpeed || 0) / 18);
-        if (B.Torso) {
-          B.Torso.bone.rotation.x += pitch + squash + rattle * Math.sin(timeVal * 9.0 + r.phase);
-          B.Torso.bone.rotation.z += roll + rattle * 0.5 * Math.cos(timeVal * 7.3 + r.phase);
-        }
-        if (B.Head) {
-          B.Head.bone.rotation.x += pitch * 0.6 + rattle * Math.sin(timeVal * 11.0 + r.phase + 1);
-          B.Head.bone.rotation.z += roll * 0.5;
+    // 4. ── Passengers: update every rider each frame. While the train is actively moving
+    //    (not waiting at the station), force their hands up in a dynamic waving/cheering
+    //    motion; when it halts, cheerMix → 0 and updateRider's idle behaviours (look around,
+    //    point, photo, relax…) take over untouched. ──
+    const inMotion = ease > 0.01 && controller.state !== 'STATION_STOP' && controller.lastSpeed > 1.0;
+    controller.cheerMix += ((inMotion ? 1 : 0) - controller.cheerMix) * (1 - Math.exp(-6 * dt));
+    const mix = controller.cheerMix;
+    for (let ci = 0; ci < cars.length; ci++) {
+      const riders = cars[ci].riders;
+      if (!riders) continue;
+      for (let ri = 0; ri < riders.length; ri++) {
+        const r = riders[ri];
+        updateRider(r, _time + r.phase);   // idle state-machine + seated legs + breathing
+        if (mix <= 0.001) continue;        // halted → idle poses stand as-is
+        const B = r.bones;
+        const t = _time + r.phase;
+        if (r.variant === 0 || r.variant === 3) {
+          // Both hands up — cheering with a vertical pump
+          const pump = Math.sin(t * 7.0 + r.phase) * 0.18;
+          pose(B, 'UpperArmR', (0.20 + pump) * mix, (2.20 + pump * 0.5) * mix, -0.20 * mix);
+          pose(B, 'UpperArmL', (-0.20 - pump) * mix, (-2.20 - pump * 0.5) * mix, 0.20 * mix);
+          pose(B, 'LowerArmR', (0.80 + pump) * mix, 0, 0);
+          pose(B, 'LowerArmL', (0.80 + pump) * mix, 0, 0);
+          pose(B, 'Head', -0.06 * mix, Math.sin(t * 2.0) * 0.10 * mix, 0);
+          pose(B, 'Torso', (0.05 + Math.sin(t * 7.0) * 0.03) * mix, 0, 0);
+        } else if (r.variant === 1) {
+          // Right hand waving high, left hand relaxed on the lap
+          const wob = Math.sin(t * 9.0);
+          pose(B, 'UpperArmR', 0.20 * mix, (1.90 + Math.sin(t * 3.0) * 0.06) * mix, -0.20 * mix);
+          pose(B, 'LowerArmR', 1.10 * mix, wob * 0.35 * mix, wob * 0.35 * mix);
+          pose(B, 'UpperArmL', 0.55 * mix, 0, -0.10 * mix);
+          pose(B, 'LowerArmL', 0.45 * mix, 0, 0);
+          pose(B, 'Head', 0, (0.20 + Math.sin(t * 2.0) * 0.08) * mix, 0);
+        } else {
+          // Left hand cheering high, right hand waving
+          const pump = Math.sin(t * 6.5 + r.phase) * 0.16;
+          pose(B, 'UpperArmL', (-0.20 - pump) * mix, (-2.20 - pump * 0.5) * mix, 0.20 * mix);
+          pose(B, 'LowerArmL', (0.80 + pump) * mix, 0, 0);
+          pose(B, 'UpperArmR', 0.20 * mix, 1.90 * mix, -0.20 * mix);
+          pose(B, 'LowerArmR', 1.10 * mix, Math.sin(t * 9.0) * 0.30 * mix, Math.sin(t * 9.0) * 0.30 * mix);
+          pose(B, 'Head', -0.05 * mix, Math.sin(t * 2.2) * 0.12 * mix, 0);
         }
       }
-    });
+    }
 
     // 5. ── Night light show: the rail itself glows + gently breathes ──
     const isNight = isNightNow(group);
     controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * dt));
     const nf = controller.nightMix;
-    const breathe = 0.5 + 0.5 * Math.sin(timeVal * 1.6);
+    const breathe = 0.5 + 0.5 * Math.sin(_time * 1.6);
     // With toneMapped = false, push the thin real rail bright so it reads clearly; breathe 1.5→2.0.
     for (let i = 0; i < railGlowMats.length; i++) {
       railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 0.5);
@@ -813,7 +808,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       cartBodyMats[i].emissiveIntensity = nf * 1.7;
     }
     for (let i = 0; i < cartGlows.length; i++) {
-      cartGlows[i].material.emissiveIntensity = nf * (1.4 + 0.2 * Math.sin(timeVal * 2.0 + i));
+      cartGlows[i].material.emissiveIntensity = nf * (1.4 + 0.2 * Math.sin(_time * 2.0 + i));
     }
     for (let i = 0; i < cartLights.length; i++) {
       cartLights[i].intensity = nf * 6.0;
