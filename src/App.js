@@ -227,7 +227,7 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     group: co,
     getFpvTarget: () => co.userData.controller.cars[0]?.dolly || null,
     getFpvOffset: () => new THREE.Vector3(0, 1.9, 0),
-    getRiders: () => co.userData.controller.riders.slice(0, 2),
+    getRiders: () => co.userData.controller.cars[0].riders,
     getFpvCameraPos: (fpvTarget, targetVec) => {
       fpvTmpVec.set(0.17, 2.45, 0.5);
       fpvTarget.localToWorld(fpvTmpVec);
@@ -259,9 +259,8 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
-    getFpvUp: (fpvTarget, upVec) => {
-      fpvTarget.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+    getFpvUp: (_fpvTarget, upVec) => {
+      upVec.set(0, 1, 0);
     }
   });
   if (balloons && balloons[0]) {

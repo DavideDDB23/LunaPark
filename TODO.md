@@ -226,6 +226,12 @@ The report is submitted alongside the code. Sections required:
 
 ---
 
+## 🔴 ROLLER COASTER — PASSENGER REWRITE
+
+- [ ] **Rimuovere completamente i passeggeri da `src/rides/Coaster.js` e re-implementarli da zero**. Provare prima con modelli più economici, e alla fine con GLM 5.2 (attenzione ai limiti rimasti: meglio saltare modelli "intermedi" in favore di GLM 5.2).
+
+---
+
 ## 🔴 SHOOTING GALLERY IMPROVEMENTS
 
 - [x] **Move position**: currently at `(30, 0, 25)` — move to a more appropriate location (moved to X=12)
@@ -265,7 +271,8 @@ The examiner will ask you to demo the project live and then ask technical questi
 
 ## 📋 Remaining Tasks (prioritised)
 
-- [-] People model animation (needs refinement: arms and walking)
+- [ ] Remove `'photo'` action from idle position arrays in `Passengers.js`,
+      `FerrisWheel.js`, and `Coaster.js` (it clips camera into face)
 
 ```
 P0  →  Technical report PDF (luna_park_report.pdf)

@@ -54,9 +54,9 @@ const CART_SCALE = 3.8;      // visual up-scale of each cart so riders read at p
 // Reference points for cart lighting (dolly-local; +Z = travel, +Y = up).
 const SEAT_FWD_Z = 0.36;      // Dolly-local Z of cabin centre (= CZ used by lights)
 const SEAT_LAT_X = 0.17;      // Dolly-local X of cabin centre (= CX used by lights)
-const SEAT_HALF_X = 0.45;     // Half-spacing of the two side-by-side seats (cart-local, world-scale units)
-const SEAT_CUSHION_Y = 0.58;  // Cushion top height for rider hips (cart-local; +Y = seat up)
-const SEAT_HIP_Z = 1.15;      // Hip fore-aft on the cushion (cart-local; +Z = seat forward)
+const SEAT_HALF_X = 0.95;     // Half the lateral distance between the two seats
+const SEAT_CUSHION_Y = 0.15;  // Cushion top height for rider hips (cart-local; +Y = seat up)
+const SEAT_HIP_Z = 0.85;      // Hip fore-aft on the cushion (cart-local; +Z = seat forward)
 
 // Idle action pool for coaster riders. Cheer/wave are EXCLUDED on purpose: the runtime
 // loop forces hands up procedurally while the train moves, so the idle state-machine must
@@ -379,6 +379,11 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const carLen = _cartBox.max.z - _cartBox.min.z; // nose-to-tail length along the travel (dolly Z) axis
   const carSpacing = carLen * CAR_GAP;            // world distance between consecutive couplings
 
+  // Cart centre and lateral half-width in DOLLY-local space (from the real geometry bounding box).
+  // These are used to place passengers at the correct seat positions without depending on
+  // cartBody.matrix (whose GLTF rotation maps cart-local X to the wrong dolly axis).
+
+
   // ── World-arc-length table ───────────────────────────────────────────────────────────────────
   // The track is stretched vertically (Y_STRETCH), so equal steps in the curve's NORMALISED arc-length
   // are NOT equal WORLD distances — on loops the gap between cars balloons. We build a table of
@@ -517,16 +522,14 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       rider.variant = idx % 4;      // selects a hands-up style while moving
       rider.height = riderHeight;   // keeps FPV head-Y math valid
 
-      // Symmetric left/right seats about the cart's X centre (cart-local).
-      const seatX = (s === 0 ? -1 : 1) * SEAT_HALF_X;
-
-      // Transform cart-local seat position to dolly-local via the cart body's matrix,
-      // then fix both seats to the same Y height (center-seat height) to prevent
-      // the cart's GLTF rotation from tilting left/right riders to different heights.
-      const seatDolly = new THREE.Vector3(seatX, SEAT_CUSHION_Y, SEAT_HIP_Z)
-        .applyMatrix4(cartBody.matrix);
-      seatDolly.y = new THREE.Vector3(0, SEAT_CUSHION_Y, SEAT_HIP_Z)
-        .applyMatrix4(cartBody.matrix).y;
+      // Transform cart-local seat position to dolly-local via the cart body's matrix.
+      // The GLTF internal rotation is handled by cartBody.matrix, so SEAT_HALF_X
+      // in cart-local X produces the correct lateral offset in dolly space.
+      const seatDolly = new THREE.Vector3(
+        s === 0 ? -SEAT_HALF_X / 4 : -SEAT_HALF_X,
+        SEAT_CUSHION_Y,
+        SEAT_HIP_Z
+      ).applyMatrix4(cartBody.matrix);
 
       // Seat the hip exactly on the cushion: measure the Hips bone offset and shift
       // the pivot so the hip lands on seatDolly in dolly-local space.
