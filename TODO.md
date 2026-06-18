@@ -62,11 +62,11 @@ No imported animations — all motion is JavaScript math.
 - [x] At the end of the arm, a circular seat platform that spins fast independently
 - [x] 8 seats arranged around the disc, each with a passenger
 - [x] Placed in the **southwest** area (around −40, 0, +40)
- - [x] Fix legs in `passengers.js` (`applyChairSeatedLegs`)
- - [x] Fix position of some passenger models (some are clipped into the chair)
- - [x] Fix arm override (hands-up animation) when the ride is on
- - [x] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
- - [x] Remove the two pistons that cross the central mast ("albero") of the Tagada
+- [x] Fix legs in `passengers.js` (`applyChairSeatedLegs`)
+- [x] Fix position of some passenger models (some are clipped into the chair)
+- [x] Fix arm override (hands-up animation) when the ride is on
+- [x] When the ride is off, the platform must return to a neutral position to allow passenger loading and unloading
+- [x] Remove the two pistons that cross the central mast ("albero") of the Tagada
 
 ---
 
@@ -79,17 +79,23 @@ Each ride has a small 3D control panel placed next to it.
 - [x] Clicking a panel starts or stops its ride
 - [x] Starting a ride: speed eases in gradually over ~1.5 seconds
 - [x] Stopping a ride: speed eases out gradually over ~2 seconds
+- [ ] **Verificare e unificare i tempi di RAMP_UP/RAMP_DOWN** in tutti i pannelli. Attualmente:
+  - `ControlPanel.js` default: 0.5s up, 0.5s down
+  - `Train.js`: passa `rampUp: 1.5, rampDown: 2.0` ✅
+  - `FerrisWheel.js`: dichiara `RAMP_UP=1.5, RAMP_DOWN=2.0` ma **NON** li passa al costruttore — usa i default 0.5s (bug!)
+  - `Coaster.js`, `Tagada.js`, `Carousel.js`: usano i default 0.5s
+  - Decidere se usare 1.5s/2.0s per tutte le giostre o valori diversi per ognuna
 
 ---
 
 ## 🔴 CAMERA & NAVIGATION
 
- - [x] **Click-to-fly**: click anywhere in the scene (ground, ride, stall) and the camera smoothly flies to that point over ~1.2 seconds with easing
- - [x] **6 preset viewpoints**: pressing keys 1–6 flies instantly to preset camera positions (overview, Ferris Wheel close-up, Carousel, Roller Coaster, Tagada, Stage)
- - [x] **FPV Gondola Camera**: press C when close to the Ferris Wheel → camera enters a gondola and you ride it from the inside. Press ESC to exit back to normal view.
- - [x] **FPV Train Camera**: press C when close to the train → camera enters the locomotive cabin. Press ESC to exit.
- - [x] **FPV Roller Coaster Camera**: press C when close to the roller coaster → FPV view from the front car.
- - [x] **FPV Tagada Camera**: press C when close to the Tagada → FPV view from a seat.
+- [x] **Click-to-fly**: click anywhere in the scene (ground, ride, stall) and the camera smoothly flies to that point over ~1.2 seconds with easing
+- [x] **6 preset viewpoints**: pressing keys 1–6 flies instantly to preset camera positions (overview, Ferris Wheel close-up, Carousel, Roller Coaster, Tagada, Stage)
+- [x] **FPV Gondola Camera**: press C when close to the Ferris Wheel → camera enters a gondola and you ride it from the inside. Press ESC to exit back to normal view.
+- [x] **FPV Train Camera**: press C when close to the train → camera enters the locomotive cabin. Press ESC to exit.
+- [x] **FPV Roller Coaster Camera**: press C when close to the roller coaster → FPV view from the front car.
+- [x] **FPV Tagada Camera**: press C when close to the Tagada → FPV view from a seat.
 
 ---
 
@@ -99,8 +105,8 @@ Each ride has a small 3D control panel placed next to it.
 - [x] **Scroll wheel near a ride**: hovering the mouse over a ride and scrolling changes that ride's speed (up = faster, down = slower)
 - [x] **Ride decoration light colour picker**: an HTML colour picker that changes the colour of all the decorative lights on the rides
 - [x] **Space bar**: toggles the time-of-day auto-advance on/off (time automatically moves forward)
- - [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
- - [x] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message) — implemented via `RideHints.js`, 4 sprite billboards with proximity fade
+- [x] **Hover cursor**: cursor changes to a pointer hand when hovering over anything clickable
+- [x] **In-world ride hints**: show a small in-scene hint near a ride when close (not only HUD 'press C' message) — implemented via `RideHints.js`, 4 sprite billboards with proximity fade
 
 ---
 
@@ -108,12 +114,12 @@ Each ride has a small 3D control panel placed next to it.
 
 A heads-up display showing the current time of day. Already partially designed — needs to be wired in.
 
- - [x] Digital clock showing the current hour:minute (e.g. "14:30")
- - [x] Semicircular arc with a sun/moon icon tracking its position across the sky (`drawTimeArc()` in `main.js:498`)
- - [x] Day / Dusk / Night phase label (inside `drawTimeArc()`, lines 558–564)
- - [x] Manual time slider (drag to change time of day)
- - [x] Auto-advance toggle button
- - [x] Slow down auto-advance speed (reduce rate of time progression)
+- [x] Digital clock showing the current hour:minute (e.g. "14:30")
+- [x] Semicircular arc with a sun/moon icon tracking its position across the sky (`drawTimeArc()` in `main.js:498`)
+- [x] Day / Dusk / Night phase label (inside `drawTimeArc()`, lines 558–564)
+- [x] Manual time slider (drag to change time of day)
+- [x] Auto-advance toggle button
+- [x] Slow down auto-advance speed (reduce rate of time progression)
 
 ---
 
@@ -167,11 +173,38 @@ The night scene is too dark between attractions — needs ambient fill and moonl
 
 A small HUD panel overlaid on the scene with:
 
- - [x] Time of day slider (0–24h) — already partially wired
- - [x] Ride light colour picker
- - [x] "?" help button that opens a list of all keyboard/mouse controls
- - [x] Auto day/night toggle button
- - [x] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency) ✅
+- [x] Time of day slider (0–24h) — already partially wired
+- [x] Ride light colour picker
+- [x] "?" help button that opens a list of all keyboard/mouse controls
+- [x] Auto day/night toggle button
+- [x] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency) ✅
+
+---
+
+## 🔴 TRAIN IMPROVEMENTS
+
+- [x] **Front headlight**: implement a `SpotLight` + visible emissive bulb on the locomotive ✅ (`Train.js:282-313`)
+- [x] **Train colour fix**: the train appears white in the browser — fix material cloning in `Train.js:216-242` (shared materials between cloned wagons are not being overridden by `carriageColors`) ✅ (carriageColors applied per-wagon)
+- [x] **Train passengers**: add riders to the train wagons using `makeRider`/`updateRider` pattern. ~2 passengers per wagon, 5 wagons total. ✅ (`Train.js:327-348`)
+- [x] **Wagons**: the 3 wagons are procedural (BoxGeometry) — find a better GLB model or improve the procedural geometry ✅ Replaced with wacky worm coaster model (locomotive + 3 wagons from single GLB, scale 0.013, auto-calibrated via Box3)
+
+---
+
+## 🔴 BALLOON IMPROVEMENTS
+
+- [x] **Zone-based positioning**: 3 balloons placed in zones with varied heights and drift areas ✅ (`Balloon.js:10-14`)
+- [x] **Riders**: passengers seated in each balloon basket ✅ (`Balloon.js` uses `makeRider`/`updateRider`)
+- [x] **Drift trajectory**: smooth curved drift using waypoint steering, noise-based wander, wind-affected speed ✅ (multiple commits)
+- [x] **FPV camera height**: camera positioned at rider head level inside the basket ✅ (`Balloon.js:126`, `cameraLocalY`)
+
+---
+
+## 🔴 COASTER IMPROVEMENTS
+
+- [x] **Centerline extraction**: rewrote `extractCenterline` with Parallel Transport for correct banking orientation ✅ (commit `d72db69`)
+- [x] **Cart orientation**: removed parasitic Z rotation, cart now faces forward with Parallel Transport frame ✅ (commit `df0d2d9`)
+- [x] **Passenger seat positioning**: refined rider position, rotation, and elevation on seats ✅ (commits `fbf2636`, `16c61d8`)
+- [x] **FPV camera underground at stop**: FPV now tracks rider head position dynamically, no longer goes underground ✅ (unstaged fix in `App.js`)
 
 ---
 
@@ -211,24 +244,9 @@ The report is submitted alongside the code. Sections required:
 
 ---
 
-## 🔴 TRAIN IMPROVEMENTS
-
-- [x] **Front headlight**: implement a `SpotLight` + visible emissive bulb on the locomotive (currently no headlight exists — `nightLights[]` is empty). Reference: `Coaster.js:487-492`
-- [x] **Train colour fix**: the train appears white in the browser — fix material cloning in `Train.js:216-242` (shared materials between cloned wagons are not being overridden by `carriageColors`)
-- [x] **Train passengers**: add riders to the train wagons using `makeRider`/`updateRider` pattern. ~2 passengers per wagon, 5 wagons total.
-- [x] **Wagons**: the 3 wagons are procedural (BoxGeometry) — find a better GLB model or improve the procedural geometry ✅ Replaced with wacky worm coaster model (locomotive + 3 wagons from single GLB, scale 0.013, auto-calibrated via Box3)
-
----
-
 ## 🔴 CAMERA PRESETS
 
 - [ ] **Roller Coaster preset (key 4)**: currently `pos: [0, 30, -5], target: [52, 10, 54]` — review framing, may need a more distant/angled position to show the entire loop
-
----
-
-## 🔴 ROLLER COASTER — PASSENGER REWRITE
-
-- [ ] **Rimuovere completamente i passeggeri da `src/rides/Coaster.js` e re-implementarli da zero**. Provare prima con modelli più economici, e alla fine con GLM 5.2 (attenzione ai limiti rimasti: meglio saltare modelli "intermedi" in favore di GLM 5.2).
 
 ---
 
@@ -251,6 +269,7 @@ The report is submitted alongside the code. Sections required:
 - [ ] Tag the final commit: `v1.0-submission`
 - [ ] `luna_park_report.pdf` committed in the repository root
 - [ ] No `node_modules` or build artifacts in the repository
+- [ ] Remove leftover `test_coaster.js` from repository root
 
 ---
 
@@ -275,23 +294,17 @@ The examiner will ask you to demo the project live and then ask technical questi
       `FerrisWheel.js`, and `Coaster.js` (it clips camera into face)
 
 ```
-P0  →  Technical report PDF (luna_park_report.pdf)
-P0  →  Roller coaster: fix animation (360° roll before stop / after launch) and FPV camera underground at stop
+P0  →  Technical report PDF (luna_park_report.pdf) — NOT STARTED
+P0  →  Roller coaster: fix animation (360° roll before stop / after launch)
 P0  →  Stage: fix colored lights (cyan/magenta volumetric beams at y=14 above roof — need visible fixtures or repositioning)
-P1  →  Roller coaster: fix wagon/passenger animation (check commit df6056a where passengers were misplaced but wagons animated well, possibly in reverse)
-P1  →  Fix GLTFLoader warning "Unknown extension KHR_materials_pbrSpecularGlossiness" (called from App.js:346, Train.js:154) — replace specular-glossiness materials with standard PBR or register the extension
-P1  →  Roller coaster: evaluate moving the stop to the short straight low-to-ground track section
-P1  →  Train: front headlight
-P1  →  Train: colour fix (white appearance)
-P1  →  Train: passengers
-P1  →  Shooting gallery: replace booth GLB
-P1  →  Shooting gallery: performance (yaw clamp + culling)
-P1  →  Visitor waypoints: train area + shooting gallery
-P1  →  Camera presets: improve roller coaster framing
+P1  →  Control panel ramp-up/down: FerrisWheel.js dichiara RAMP_UP=1.5/RAMP_DOWN=2.0 ma non li passa al costruttore — usa i default 0.5s. Decidere valori per ogni giostra.
+P1  →  GLTFLoader warning: "Unknown extension KHR_materials_pbrSpecularGlossiness" (Train.js:196) — register the extension or fully convert materials
+P1  →  Roller coaster: evaluate moving the stop to the short straight low-to-ground track section (currently at computed uCar station)
+P1  →  Shooting gallery: replace booth GLB with a different model
+P1  →  Shooting gallery: clamp aimYaw ±0.18 rad from initial yaw (`ShootingGallery.js:254`)
+P1  →  Camera presets: improve roller coaster framing (key 4)
 P1  →  Deploy GitHub Pages + test live URL
-P1  →  Shooting gallery: fix bugs/visual issues
-P1  →  Balloon: fix initial positions (ensure balloons fly higher than all rides)
-P1  →  Balloon FPV: raise camera height so it looks out from above the basket
+P1  →  Remove `test_coaster.js` from repo root (leftover)
 P2  →  Add external landscape / scenery around the park perimeter
 P2  →  People model animation refinement
 P2  →  Submission formalities (email, tag, check)
