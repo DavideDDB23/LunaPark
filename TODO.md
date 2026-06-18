@@ -295,21 +295,19 @@ The examiner will ask you to demo the project live and then ask technical questi
       `FerrisWheel.js`, and `Coaster.js` (it clips camera into face)
 
 ```
-P0  →  Technical report PDF (luna_park_report.pdf) — NOT STARTED
-P0  →  Roller coaster: fix animation (360° roll before stop / after launch)
-P0  →  Stage: fix colored lights (cyan/magenta volumetric beams at y=14 above roof — need visible fixtures or repositioning)
-P1  →  Control panel ramp-up/down: FerrisWheel.js dichiara RAMP_UP=1.5/RAMP_DOWN=2.0 ma non li passa al costruttore — usa i default 0.5s. Decidere valori per ogni giostra.
-P1  →  GLTFLoader warning: "Unknown extension KHR_materials_pbrSpecularGlossiness" (Train.js:196) — register the extension or fully convert materials
-P1  →  Roller coaster: evaluate moving the stop to the short straight low-to-ground track section (currently at computed uCar station)
-P1  →  Shooting gallery: replace booth GLB with a different model
-P1  →  Shooting gallery: clamp aimYaw ±0.18 rad from initial yaw (`ShootingGallery.js:254`)
-P1  →  Camera presets: improve roller coaster framing (key 4)
-P1  →  Deploy GitHub Pages + test live URL
-P1  →  Remove `test_coaster.js` from repo root (leftover)
-P2  →  Illuminare la recinzione perimetrale (lampioni extra o fili di luci sulla fence)
-P2  →  Add external landscape / scenery around the park perimeter
-P2  →  People model animation refinement
-P2  →  Tagada: spring-damper rider bounce → Math.sin (Tagada.js:848-865, ~15 righe, allinea al pattern lezione)
-P2  →  Submission formalities (email, tag, check)
-P2  →  Oral exam prep + backup video
+[ ] Technical report PDF (luna_park_report.pdf) — NOT STARTED
+[ ] Stage: fix colored lights (cyan/magenta volumetric beams at y=14 above roof — need visible fixtures or repositioning)
+[ ] Control panel ramp-up/down: FerrisWheel.js dichiara RAMP_UP=1.5/RAMP_DOWN=2.0 ma non li passa al costruttore — usa i default 0.5s. Decidere valori per ogni giostra.
+[ ] GLTFLoader warning: "Unknown extension KHR_materials_pbrSpecularGlossiness" (Train.js:196) — register the extension or fully convert materials
+[ ] Roller coaster: evaluate moving the stop to the short straight low-to-ground track section (currently at computed uCar station)
+[ ] Shooting gallery: replace booth GLB with a different model
+[ ] Shooting gallery: clamp aimYaw ±0.18 rad from initial yaw (`ShootingGallery.js:254`)
+[ ] Camera presets: improve roller coaster framing (key 4)
+[ ] Deploy GitHub Pages + test live URL
+[ ] Remove `test_coaster.js` from repo root (leftover)
+[ ] Illuminare la recinzione perimetrale (lampioni extra o fili di luci sulla fence)
+[ ] Add external landscape / scenery around the park perimeter
+[ ] Tagada: spring-damper rider bounce → Math.sin (Tagada.js:848-865, ~15 righe, allinea al pattern lezione)
+[ ] Submission formalities (email, tag, check)
+[ ] Oral exam prep + backup video
 ```
