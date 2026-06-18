@@ -309,6 +309,7 @@ P1  →  Remove `test_coaster.js` from repo root (leftover)
 P2  →  Illuminare la recinzione perimetrale (lampioni extra o fili di luci sulla fence)
 P2  →  Add external landscape / scenery around the park perimeter
 P2  →  People model animation refinement
+P2  →  Tagada: spring-damper rider bounce → Math.sin (Tagada.js:848-865, ~15 righe, allinea al pattern lezione)
 P2  →  Submission formalities (email, tag, check)
 P2  →  Oral exam prep + backup video
 ```
