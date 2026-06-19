@@ -257,6 +257,7 @@ The report is submitted alongside the code. Sections required:
 - [x] **Implement shooting mode**: the pointer-lock aim system already exists (`ShootingGallery.js`) — verify it works correctly and improve the experience (implemented smooth FPV flight transition, pointer lock camera rotation, custom HUD overlays, Option A moving targets with distance multipliers, and physical pendulum spin damping animation)
 - [ ] **Replace booth GLB**: find/import a different carnival booth model to replace `stylized_carnival_booth.glb`
 - [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). ❌ **Reverted (approccio iniziale non riuscito bene — da rifare con approccio diverso: lock yaw a `euler.y` finché non esce da aim mode)**
+- [ ] **Roller coaster**: rimuovere le pointlight fluttuanti sotto i vagoni
 
 ---
 
