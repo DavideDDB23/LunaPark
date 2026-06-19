@@ -206,21 +206,18 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const tr = environmentGroup.getObjectByName('train');
   if (tr) rides.push({
     group: tr,
-    getFpvTarget: () => tr.userData.controller.cars[0]?.mesh || null,
-    getFpvOffset: () => new THREE.Vector3(0, 1.8, -0.3),
+    getFpvTarget: () => tr.userData.controller.cars[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => tr.userData.controller.riders ? tr.userData.controller.riders.slice(0, 1) : [],
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 136.0, -26.0); // unscaled eye height and cabin depth
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 125.0, 150.0); // look forward along the track
+      // 10m along the rig's -Z. Rig has Y-rotation = PI, so its -Z = wrapper's +Z
+      // (= direction of travel, where the existing look target offset pointed).
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (_fpvTarget, upVec) => {
-      upVec.set(0, 1, 0);
     }
   });
   if (balloons && balloons[0]) {
