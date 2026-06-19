@@ -165,48 +165,22 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const tg = environmentGroup.getObjectByName('tagada');
   if (tg) rides.push({
     group: tg,
-    getFpvTarget: () => tg.userData.controller.discMeshGroup.getObjectByName('seat_group_0') || null,
-    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getFpvTarget: () => tg.userData.controller.seats[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const r = tg.userData.controller.seats[0]?.rider;
       return r ? [r] : [];
     },
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      const seat = tg.userData.controller.seats[0];
-      if (!seat) return;
-      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
-      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
-      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
-      const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
-      // Seat-local +Z is the rider's forward direction (toward disc centre), per the convention
-      // established in Tagada.js (backrest at -Z, grab bar / cushion front at +Z). The camera
-      // sits just in front of the head, slightly inward (+Z), so the FPV looks toward the centre
-      // of the ride — the same direction the rider is facing.
-      fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
-      const shake = tg.userData.controller.ease || 0;
-      const tN = performance.now() * 0.001;
-      fpvTmpVec.x += Math.sin(tN * 23.0) * 0.045 * shake;
-      fpvTmpVec.y += Math.sin(tN * 31.0 + 1.7) * 0.05 * shake;
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      const seat = tg.userData.controller.seats[0];
-      if (!seat) return;
-      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
-      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
-      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
-      const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
-      // Look inward (+Z in seat-local space = toward disc centre), matching the rider's facing.
-      fpvTmpVec.set(px, py + h * 0.82, pz + 10.0);
+      // 10m along the rig's -Z. Rig has no Y-flip, so its -Z = seat-local -Z,
+      // pointing outward over the rim. To look inward (toward disc centre,
+      // matching the rider's gaze), use the rig's +Z.
+      fpvTmpVec.set(0, 0, 10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      // Use the seat's world Y axis as the camera up so the view stays
-      // right-side-up even when the disc tilts during the ride.
-      fpvTarget.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const co = environmentGroup.getObjectByName('coaster');
