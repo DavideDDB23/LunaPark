@@ -146,31 +146,18 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const cr = environmentGroup.getObjectByName('carousel');
   if (cr) rides.push({
     group: cr,
-    getFpvTarget: () => cr.userData.controller.horses[0]?.container || null,
-    getFpvOffset: () => new THREE.Vector3(0, 2.5, 0),
+    getFpvTarget: () => cr.userData.controller.horses[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const r = cr.userData.controller.horses[0]?.rider;
       return r ? [r] : [];
     },
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      const horse = cr.userData.controller.horses[0];
-      if (!horse) return;
-      const h = horse.rider ? horse.rider.height : 3.28;
-      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
-      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
-      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
-      fpvTmpVec.set(px - 0.15, py + h * 0.82, pz);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      const horse = cr.userData.controller.horses[0];
-      if (!horse) return;
-      const h = horse.rider ? horse.rider.height : 3.28;
-      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
-      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
-      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
-      fpvTmpVec.set(px - 10.0, py + h * 0.82, pz + 2.5);
+      // 10m along the rig's -Z (= container's +X = tangential forward = travel direction)
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     }
