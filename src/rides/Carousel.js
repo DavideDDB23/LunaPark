@@ -323,10 +323,13 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     horseContainer.add(horse);
 
     // Add Quaternius human rider sitting on the horse
+    let rider = null;
+    let riderHeight = 0;
     if (activeVisitors && activeVisitors.length > 0) {
       const tmpl = activeVisitors[i % activeVisitors.length];
       const currentHeight = getPassengerWorldHeight();
-      const rider = makeRider(tmpl, currentHeight, {
+      riderHeight = currentHeight;
+      rider = makeRider(tmpl, currentHeight, {
         // mostly both-hands-on-pole, with occasional waves/looks
         pool: ['holdPole', 'holdPole', 'holdPole', 'holdPole', 'wave', 'lookL', 'lookR', 'cheer'],
         facingY: 0,
@@ -386,20 +389,27 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       //    is rotated 180° around Y so its -Z (camera look) aligns with +X (forward).
       //    Inherits the carousel yaw (rotatingAssembly) and the horse's Y-bob
       //    (container.position.y oscillates in tick).
+      //    Always created (even without a rider) so FPV works regardless of visitor load.
       const cameraRig = new THREE.Group();
       cameraRig.name = 'cameraRig';
-      cameraRig.position.set(
-        rider.pivot.position.x,
-        rider.pivot.position.y + rider.height * 0.85,
-        rider.pivot.position.z
-      );
+      const headX = rider ? rider.pivot.position.x : 0.5;
+      const headY = rider ? rider.pivot.position.y + rider.height * 0.85 : 0.6 + riderHeight * 0.85;
+      const headZ = rider ? rider.pivot.position.z : 0;
+      cameraRig.position.set(headX, headY, headZ);
       cameraRig.rotation.y = Math.PI;
       horseContainer.add(cameraRig);
       horses[horses.length - 1].cameraRig = cameraRig;
     } else {
+      // No visitors loaded — still create a camera-rig at a sensible default head position
+      const cameraRig = new THREE.Group();
+      cameraRig.name = 'cameraRig';
+      cameraRig.position.set(0.5, 0.6 + riderHeight * 0.85, 0);
+      cameraRig.rotation.y = Math.PI;
+      horseContainer.add(cameraRig);
       horses.push({
         container: horseContainer,
         rider: null,
+        cameraRig,
         phaseOffset: i * (Math.PI / 4)
       });
     }
