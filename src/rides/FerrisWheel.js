@@ -229,6 +229,18 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     }
 
     gondolaMounts.push({ mount, pivot, gondolaMesh: gNode, baseQuat, passengers });
+
+    // ── FPV camera-rig: positioned at passenger eye height inside the gondola.
+    //    The gondola's local +Z points radially outward (the "view" direction),
+    //    so we rotate the rig by 180° around Y so its -Z (camera look) aligns
+    //    with the gondola's +Z (outward). Inherits the gondola's world-stable
+    //    orientation (counter-rotated by the wheel — no banking on a ferris wheel).
+    const cameraRig = new THREE.Group();
+    cameraRig.name = 'cameraRig';
+    cameraRig.position.set(0, 1.8, 1.0);
+    cameraRig.rotation.y = Math.PI;
+    gNode.add(cameraRig);
+    gondolaMounts[gondolaMounts.length - 1].cameraRig = cameraRig;
   }
 
   // ── Top group: ride is auto-fit-scaled inside; panel stays at world (human) scale. ──
