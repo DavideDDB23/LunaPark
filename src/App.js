@@ -116,27 +116,16 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     group: fw,
     getFpvTarget: () => {
       const c = fw.userData.controller;
-      if (!c || !c.gondolaMounts || c.gondolaMounts.length === 0) {
-        console.warn('[FPV] ferris: no gondolaMounts available');
-        return null;
-      }
-      // Prefer the highest gondola; fall back to the first if no cameraRig found.
       let best = null, bestY = -Infinity;
       for (const gm of c.gondolaMounts) {
         gm.gondolaMesh.getWorldPosition(tmpVec);
         if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
       }
-      if (best?.cameraRig) return best.cameraRig;
-      // Fallback: any mount with a cameraRig, else first mount's cameraRig
-      for (const gm of c.gondolaMounts) {
-        if (gm.cameraRig) return gm.cameraRig;
-      }
-      return c.gondolaMounts[0].cameraRig || null;
+      return best?.cameraRig || null;
     },
     getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const c = fw.userData.controller;
-      if (!c || !c.gondolaMounts) return [];
       let best = null, bestY = -Infinity;
       for (const gm of c.gondolaMounts) {
         gm.gondolaMesh.getWorldPosition(tmpVec);
