@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
+import { eventBus } from '../utils/EventBus.js';
+import TWEEN from '@tweenjs/tween.js';
+import { Easings } from '../utils/Easings.js';
 
 const FENCE_URL = 'assets/models/environment/fence.glb';
 const HALF = 100;
@@ -125,28 +128,45 @@ export async function buildFence() {
   for (let i = 0; i < count; i += 2) {
     const t = start + i * SEG_LEN;
 
-    const northMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+    const northMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
     const nl = new THREE.Mesh(lightGeo, northMat);
     nl.position.set(t, fenceTop, -HALF);
     fenceLights.add(nl);
 
-    const eastMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+    const eastMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
     const el = new THREE.Mesh(lightGeo, eastMat);
     el.position.set(HALF, fenceTop, t);
     fenceLights.add(el);
 
-    const westMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+    const westMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
     const wl = new THREE.Mesh(lightGeo, westMat);
     wl.position.set(-HALF, fenceTop, t);
     fenceLights.add(wl);
 
     if (Math.abs(t) >= 12) {
-      const southMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+      const southMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
       const sl = new THREE.Mesh(lightGeo, southMat);
       sl.position.set(t, fenceTop, HALF);
       fenceLights.add(sl);
     }
   }
+
+  const fenceColor = new THREE.Color(0xffaa44);
+  eventBus.on('color-change', (hex) => {
+    const target = new THREE.Color(hex);
+    new TWEEN.Tween(fenceColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        const bulbs = fenceLights.children;
+        for (let i = 0; i < bulbs.length; i++) {
+          const b = bulbs[i];
+          b.material.color.copy(fenceColor);
+          b.material.emissive.copy(fenceColor);
+        }
+      })
+      .start();
+  });
 
   group.userData.tick = (delta, time) => {
     const night = isNightNow(group);
