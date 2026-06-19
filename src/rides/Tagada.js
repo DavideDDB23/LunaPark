@@ -681,6 +681,24 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     }
 
     seats.push({ group: seatGroup, rider });
+
+    // ── FPV camera-rig: positioned at the rider's head, in seatGroup-local.
+    //    Seat-local +Z is already toward the disc centre (the rider's forward
+    //    direction — see comment at line 656-659), so NO Y-flip is needed: the
+    //    rig's local -Z naturally points outward (over the rim) and +Z points
+    //    inward (toward the centre), matching how the rider faces.
+    //    Inherits the disc spin and the seat's tilt from the parent transforms.
+    if (rider) {
+      const cameraRig = new THREE.Group();
+      cameraRig.name = 'cameraRig';
+      cameraRig.position.set(
+        rider.pivot.position.x,
+        rider.pivot.position.y + rider.height * 0.82,
+        rider.pivot.position.z + 0.15
+      );
+      seatGroup.add(cameraRig);
+      seats[seats.length - 1].cameraRig = cameraRig;
+    }
   }
 
   // 8. Emissive Blinking Bulbs for night lighting
