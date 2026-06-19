@@ -688,15 +688,17 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     //    rig's local -Z naturally points outward (over the rim) and +Z points
     //    inward (toward the centre), matching how the rider faces.
     //    Inherits the disc spin and the seat's tilt from the parent transforms.
-    //    Always created (even without a rider) so FPV works regardless of visitor load.
-    const cameraRig = new THREE.Group();
-    cameraRig.name = 'cameraRig';
-    const headX = rider ? rider.pivot.position.x : 0;
-    const headY = rider ? rider.pivot.position.y + rider.height * 0.82 : 0.8 - riderHeight * 0.28 + riderHeight * 0.82;
-    const headZ = rider ? rider.pivot.position.z + 0.15 : 0.54 + 0.15;
-    cameraRig.position.set(headX, headY, headZ);
-    seatGroup.add(cameraRig);
-    seats[seats.length - 1].cameraRig = cameraRig;
+    if (rider) {
+      const cameraRig = new THREE.Group();
+      cameraRig.name = 'cameraRig';
+      cameraRig.position.set(
+        rider.pivot.position.x,
+        rider.pivot.position.y + rider.height * 0.82,
+        rider.pivot.position.z + 0.15
+      );
+      seatGroup.add(cameraRig);
+      seats[seats.length - 1].cameraRig = cameraRig;
+    }
   }
 
   // 8. Emissive Blinking Bulbs for night lighting
