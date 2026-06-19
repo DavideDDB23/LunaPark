@@ -226,30 +226,21 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const co = environmentGroup.getObjectByName('coaster');
   if (co) rides.push({
     group: co,
-    getFpvTarget: () => co.userData.controller.cars[0]?.dolly || null,
-    getFpvOffset: () => new THREE.Vector3(0, 1.9, 0),
+    getFpvTarget: () => co.userData.controller.cars[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => co.userData.controller.cars[0].riders,
-    // FPV anchored to the head of the front-row passenger (cars[0].riders[0]):
-    // position = pivot (hip) + head height, look = straight ahead along dolly +Z.
-    // Up follows the dolly's world quaternion so the camera banks with the carriage.
+    // FPV via camera-rig: rig is a child of cars[0].dolly (built in Coaster.js),
+    // positioned at the head of the front-row passenger with rotation.y = PI
+    // so its local -Z aligns with the dolly's +Z (direction of travel).
+    // Rig inherits dolly's full transform (roll, pitch, yaw) automatically.
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      const rider = co.userData.controller.cars[0].riders[0];
-      fpvTmpVec.copy(rider.pivot.position);
-      fpvTmpVec.y += rider.height * 0.82;
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      const rider = co.userData.controller.cars[0].riders[0];
-      fpvTmpVec.copy(rider.pivot.position);
-      fpvTmpVec.y += rider.height * 0.82;
-      fpvTmpVec.z += 10;
+      // 10m along the rig's -Z (= forward direction of travel)
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      fpvTarget.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const tr = environmentGroup.getObjectByName('train');
