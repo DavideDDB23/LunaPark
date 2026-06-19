@@ -556,6 +556,27 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     }
   }
 
+  // ── FPV camera-rig: positioned at the head of the front-row passenger of the
+  //    first car. Parent-child of the dolly, so the rig inherits all transforms
+  //    (position, roll, pitch, yaw) automatically. Camera convention looks down
+  //    its local -Z; dolly +Z is forward (see tick() at lines 720-753), so we
+  //    rotate the rig by 180° around Y to make the rig's -Z align with the dolly's
+  //    +Z (= direction of travel). This produces perfect banking in FPV.
+  {
+    const firstCar = cars[0];
+    const r0 = firstCar.riders[0];
+    const cameraRig = new THREE.Group();
+    cameraRig.name = 'cameraRig';
+    cameraRig.position.set(
+      r0.pivot.position.x,
+      r0.pivot.position.y + r0.height * 0.85,
+      r0.pivot.position.z - 0.3
+    );
+    cameraRig.rotation.y = Math.PI;
+    firstCar.dolly.add(cameraRig);
+    firstCar.cameraRig = cameraRig;
+  }
+
   // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
   // Smooth start/stop acceleration (rampUp: 1.0s, rampDown: 1.5s)
   const controlPanel = new ControlPanel({ initialRunning: true });
