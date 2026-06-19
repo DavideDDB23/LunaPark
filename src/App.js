@@ -224,31 +224,20 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
     const b1 = balloons[0];
     rides.push({
       group: b1,
-      getFpvTarget: () => b1.userData.fpvTarget,
-      getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+      getFpvTarget: () => b1.userData.cameraRig,
+      getFpvOffset: () => new THREE.Vector3(0, 0, 0),
       getRiders: () => (b1.userData.riders || []).map(r => ({ pivot: r.pivot })),
       getFpvCameraPos: (fpvTarget, targetVec) => {
-        const camY = b1.userData.cameraLocalY ?? 1.8;
-        fpvTmpVec.set(0, camY, 0);
-        fpvTarget.localToWorld(fpvTmpVec);
-        targetVec.copy(fpvTmpVec);
+        fpvTarget.getWorldPosition(targetVec);
       },
       getFpvLookTarget: (fpvTarget, targetVec) => {
-        const driftAngle = b1.userData.driftAngle ?? 0;
-        const lookDist = 25;
-        const lookDrop = 8;
-        const camY = b1.userData.cameraLocalY ?? 1.8;
-        fpvTmpVec.set(0, camY, 0);
+        // 10m along the rig's -Z. Rig has no Y-flip, so its -Z gives a stable
+        // horizontal gaze direction in the basket frame. The balloon doesn't
+        // yaw, so this direction is fixed in world space (modulo pitch/roll
+        // from b.rotation.x/z in tick).
+        fpvTmpVec.set(0, 0, -10);
         fpvTarget.localToWorld(fpvTmpVec);
-        targetVec.set(
-          fpvTmpVec.x + Math.cos(driftAngle) * lookDist,
-          fpvTmpVec.y - lookDrop,
-          fpvTmpVec.z + Math.sin(driftAngle) * lookDist
-        );
-      },
-      getFpvUp: (fpvTarget, upVec) => {
-        fpvTarget.getWorldQuaternion(fpvTmpQuat);
-        upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+        targetVec.copy(fpvTmpVec);
       }
     });
   }
