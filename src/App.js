@@ -12,7 +12,6 @@ import { buildPaths } from './environment/Paths.js';
 import { buildSky } from './environment/Sky.js';
 import { buildLights } from './lighting/LightManager.js';
 import { buildFence } from './environment/Fence.js';
-import { buildExternalScenery } from './environment/ExternalScenery.js';
 import { buildLampposts } from './environment/Lampposts.js';
 import { buildFoodStalls } from './environment/FoodStalls.js';
 import { buildStage } from './environment/Stage.js';
@@ -300,8 +299,6 @@ async function init() {
 
   const fence = await buildFence({ anisotropy: maxAniso });
   environmentGroup.add(fence);
-
-  buildExternalScenery(scene);
 
   const lamps = await buildLampposts();
   environmentGroup.add(lamps);
