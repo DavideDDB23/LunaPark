@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
+import { isNightNow } from '../lighting/DayNightCycle.js';
 
 const FENCE_URL = 'assets/models/environment/fence.glb';
 const HALF = 100;
@@ -112,6 +113,49 @@ export async function buildFence() {
     post.receiveShadow = true;
     group.add(post);
   }
+
+  // ── String lights along the top of the fence ──
+  const fenceTop = (bbox.max.y - bbox.min.y) * scale;
+  const fenceLights = new THREE.Group();
+  fenceLights.name = 'fenceLights';
+  group.add(fenceLights);
+
+  const lightGeo = new THREE.SphereGeometry(0.175, 10, 10);
+
+  for (let i = 0; i < count; i += 2) {
+    const t = start + i * SEG_LEN;
+
+    const northMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+    const nl = new THREE.Mesh(lightGeo, northMat);
+    nl.position.set(t, fenceTop, -HALF);
+    fenceLights.add(nl);
+
+    const eastMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+    const el = new THREE.Mesh(lightGeo, eastMat);
+    el.position.set(HALF, fenceTop, t);
+    fenceLights.add(el);
+
+    const westMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+    const wl = new THREE.Mesh(lightGeo, westMat);
+    wl.position.set(-HALF, fenceTop, t);
+    fenceLights.add(wl);
+
+    if (Math.abs(t) >= 12) {
+      const southMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 1 });
+      const sl = new THREE.Mesh(lightGeo, southMat);
+      sl.position.set(t, fenceTop, HALF);
+      fenceLights.add(sl);
+    }
+  }
+
+  group.userData.tick = (delta, time) => {
+    const night = isNightNow(group);
+    const bulbs = fenceLights.children;
+    for (let i = 0; i < bulbs.length; i++) {
+      const b = bulbs[i];
+      b.material.opacity = night ? 0.5 + 0.5 * Math.sin(time * 2 + i) : 0;
+    }
+  };
 
   return group;
 }

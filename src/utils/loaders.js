@@ -6,6 +6,9 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
 const textureLoader = new THREE.TextureLoader();
 const gltfLoader = new GLTFLoader();
+gltfLoader.register(function () {
+  return { name: 'KHR_materials_pbrSpecularGlossiness' };
+});
 const rgbeLoader = new RGBELoader();
 
 export function loadColorTexture(url, { repeat = [1, 1], anisotropy = 8 } = {}) {

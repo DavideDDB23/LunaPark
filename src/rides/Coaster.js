@@ -62,7 +62,7 @@ const SEAT_HIP_Z = 0.85;      // Hip fore-aft on the cushion (cart-local; +Z = s
 // loop forces hands up procedurally while the train moves, so the idle state-machine must
 // only pick calm behaviours — otherwise hands would twitch between an idle cheer and the
 // motion-driven cheer. When the train halts, these are the behaviours riders return to.
-const COASTER_IDLE_ACTIONS = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'point', 'photo', 'relax'];
+const COASTER_IDLE_ACTIONS = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'point', 'relax'];
 const G_EFF = 9.8;           // gravity for the energy model (world-units/s²)
 const CURVE_SAMPLES = 80;    // control points kept for the CatmullRom
 const NUM_FRAMES = 4000;     // resolution of the rotation-minimizing frame field

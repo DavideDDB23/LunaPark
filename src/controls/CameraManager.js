@@ -7,7 +7,7 @@ const PRESETS = {
   1: { pos: [70, 60, 70],   target: [0, 0, 0] },     // overview
   2: { pos: [-10, 25, -10], target: [-50, 22, -50] }, // ferris wheel
   3: { pos: [15, 18, -15],  target: [40, 5, -40] },   // carousel
-  4: { pos: [0, 30, -5],    target: [52, 10, 54] },   // roller coaster
+  4: { pos: [-25, 25, 15],   target: [52, 15, 54] },   // roller coaster (full loop view)
   5: { pos: [-15, 18, 15],  target: [-40, 0, 40] },   // tagada
   6: { pos: [0, 14, -58],   target: [0, 4, -88] },    // stage
 };

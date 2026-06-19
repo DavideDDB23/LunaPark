@@ -774,10 +774,8 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     setSpeed(v) { this.maxSpeed = Math.max(0, v); },
   };
 
-  const _seatW = new THREE.Vector3();
   group.userData.tick = (delta, time) => {
     const ease = controlPanel.tick(delta, controller.speedMultiplier);
-
     const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
     controller.spinAngle += controller.maxSpeed * ease * speedMult * delta;
     controller.pitchAngle += PITCH_FREQ * ease * speedMult * delta;
@@ -845,23 +843,11 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
       if (B.Torso) { const tb = B.Torso.bone; tb.rotation.x += -0.15 * ease; tb.rotation.z += Math.sin(t * 1.5) * 0.05 * ease; }
       if (B.Head) { const hb = B.Head.bone; hb.rotation.x += -0.15 * ease; hb.rotation.y += Math.sin(t * 2.0) * 0.08 * ease; }
 
-      // Inertia spring: measure the seat's world-Y velocity/acceleration and
-      // let the body lag it. Stiffness/damping tuned for a fleshy bounce.
-      if (!s.dyn) s.dyn = { lastY: NaN, vy: NaN, off: 0, vel: 0 };
-      const d = s.dyn;
-      const dtc = Math.min(Math.max(delta, 1e-3), 0.05);
-      s.group.getWorldPosition(_seatW);
-      const vy = Number.isNaN(d.lastY) ? 0 : (_seatW.y - d.lastY) / dtc;
-      let ay = Number.isNaN(d.vy) ? 0 : (vy - d.vy) / dtc;
-      d.lastY = _seatW.y; d.vy = vy;
-      ay = Math.max(-60, Math.min(60, ay));
-      d.vel += (-90 * d.off - 14 * d.vel - ay * 0.35) * dtc;
-      d.off = Math.max(-0.22, Math.min(0.22, d.off + d.vel * dtc));
-
+      // Simple Math.sin bounce aligned with lecture ride pattern
+      const bounce = Math.sin(time * 3.0 + i * 0.8) * 0.08 * ease;
       const jitterX = Math.sin(time * JITTER_FREQ + i * 2.1) * JITTER_AMP * 0.5 * ease;
-      s.rider.pivot.position.set(s.rider.restX + jitterX, s.rider.restY + d.off, s.rider.restZ);
-      // Rock the body with the spring velocity (compression → lean back).
-      s.rider.pivot.rotation.x = Math.max(-0.15, Math.min(0.15, -d.vel * 0.18));
+      s.rider.pivot.position.set(s.rider.restX + jitterX, s.rider.restY + bounce, s.rider.restZ);
+      s.rider.pivot.rotation.x = Math.sin(time * 2.5 + i * 1.2) * 0.08 * ease;
       s.rider.pivot.rotation.z = Math.cos(time * JITTER_FREQ * 0.8 + i * 1.4) * 0.04 * ease;
     }
 

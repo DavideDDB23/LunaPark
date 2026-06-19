@@ -720,6 +720,30 @@ export function buildStage({ anisotropy = 8 } = {}) {
     beam.userData.baseZ = beam.rotation.z;
     group.add(beam);
     beams.push(beam);
+
+    // Fixture housing for the volumetric beam source
+    const beamHousingMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.7 });
+    const fixtureGroup = new THREE.Group();
+    fixtureGroup.position.set(i === 0 ? -5 : 5, 14, Z + 8);
+    const housing = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.25, 0.4, 12),
+      beamHousingMat
+    );
+    housing.castShadow = true;
+    fixtureGroup.add(housing);
+    const capMat = new THREE.MeshStandardMaterial({
+      color: beamColors[i],
+      emissive: beamColors[i],
+      emissiveIntensity: 2.0,
+      roughness: 0.3,
+    });
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.17, 0.22, 0.06, 12),
+      capMat
+    );
+    cap.position.y = -0.23;
+    fixtureGroup.add(cap);
+    group.add(fixtureGroup);
   }
 
   // ─── Stage Uplights ─────────────────────────────────────────
