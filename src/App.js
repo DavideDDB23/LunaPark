@@ -121,9 +121,9 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
         gm.gondolaMesh.getWorldPosition(tmpVec);
         if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
       }
-      return best?.gondolaMesh || null;
+      return best?.cameraRig || null;
     },
-    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const c = fw.userData.controller;
       let best = null, bestY = -Infinity;
@@ -134,12 +134,11 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       return best ? best.passengers : [];
     },
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 1.8, 1.0);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 1.8, 10.0);
+      // 10m along the rig's -Z (= gondola's +Z = radial outward = view direction)
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     }
