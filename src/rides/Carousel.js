@@ -384,27 +384,26 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
         phaseOffset: i * (Math.PI / 4) // phase-offset wave pattern
       });
 
-      // ── FPV camera-rig: positioned at the rider's head, in horseContainer-local.
-      //    Container's +X is the tangential forward (direction of travel). The rig
-      //    is rotated 180° around Y so its -Z (camera look) aligns with +X (forward).
-      //    Inherits the carousel yaw (rotatingAssembly) and the horse's Y-bob
-      //    (container.position.y oscillates in tick).
-      //    Always created (even without a rider) so FPV works regardless of visitor load.
+      // ── FPV camera-rig at rider's head, in horseContainer-local.
+      //    Container +X = tangential forward (travel). Rotated -90° around Y
+      //    so rig's -Z (camera look) = container's +X (forward).
+      //    Inherits carousel yaw + horse Y-bob.
+      //    Created always (even without rider) so FPV works regardless of visitor load.
       const cameraRig = new THREE.Group();
       cameraRig.name = 'cameraRig';
       const headX = rider ? rider.pivot.position.x : 0.5;
       const headY = rider ? rider.pivot.position.y + rider.height * 0.85 : 0.6 + riderHeight * 0.85;
       const headZ = rider ? rider.pivot.position.z : 0;
       cameraRig.position.set(headX, headY, headZ);
-      cameraRig.rotation.y = Math.PI;
+      cameraRig.rotation.y = Math.PI / 2;
       horseContainer.add(cameraRig);
       horses[horses.length - 1].cameraRig = cameraRig;
     } else {
-      // No visitors loaded — still create a camera-rig at a sensible default head position
+      // No visitors — still create camera-rig at default head position
       const cameraRig = new THREE.Group();
       cameraRig.name = 'cameraRig';
       cameraRig.position.set(0.5, 0.6 + riderHeight * 0.85, 0);
-      cameraRig.rotation.y = Math.PI;
+      cameraRig.rotation.y = Math.PI / 2;
       horseContainer.add(cameraRig);
       horses.push({
         container: horseContainer,
