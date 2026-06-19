@@ -85,6 +85,9 @@ function buildOneBalloon(model, index) {
   let fairyMat = null;
 
   const basket = node.getObjectByName('V1_HotAirBalloon_Basket_' + index);
+  if (!basket) {
+    console.warn('[Balloon] No basket found for index', index, '— using fallback camera rig position');
+  }
   if (basket) {
     const basketWorldPos = new THREE.Vector3();
     basket.getWorldPosition(basketWorldPos);
@@ -138,19 +141,6 @@ function buildOneBalloon(model, index) {
     b.userData.basketWidthZ = basketWidthZ;
     b.userData.cameraLocalY = (localBottomY + getPassengerWorldHeight() * 0.16) - node.position.y;
 
-    // ── FPV camera-rig: positioned at passenger eye height inside the basket,
-    //    as a child of `node` (the balloon's GLB sub-root = b.userData.fpvTarget).
-    //    No Y-flip: the balloon doesn't yaw (b.rotation.y is never set in tick),
-    //    so the rig's local -Z gives a stable horizontal gaze direction. The rig
-    //    inherits the basket's pitch/roll oscillations (b.rotation.x and .z in tick).
-    {
-      const cameraRig = new THREE.Group();
-      cameraRig.name = 'cameraRig';
-      cameraRig.position.set(0, b.userData.cameraLocalY, 0);
-      node.add(cameraRig);
-      b.userData.cameraRig = cameraRig;
-    }
-
     // ── Create warm interior basket light ──
     basketLight = new THREE.PointLight(0xffddaa, 0.0, 6.0, 1.5);
     // Position it inside the basket, slightly below the rim
@@ -199,6 +189,21 @@ function buildOneBalloon(model, index) {
       mesh.position.set(bar.x, rimY, bar.z);
       b.add(mesh);
     }
+  }
+
+  // ── FPV camera-rig: positioned at passenger eye height inside the basket,
+  //    as a child of `node` (the balloon's GLB sub-root = b.userData.fpvTarget).
+  //    No Y-flip: the balloon doesn't yaw (b.rotation.y is never set in tick),
+  //    so the rig's local -Z gives a stable horizontal gaze direction. The rig
+  //    inherits the basket's pitch/roll oscillations (b.rotation.x and .z in tick).
+  //    Always created (even if basket scan failed) so FPV works regardless.
+  {
+    const cameraRig = new THREE.Group();
+    cameraRig.name = 'cameraRig';
+    const eyeY = b.userData.cameraLocalY ?? 1.8;
+    cameraRig.position.set(0, eyeY, 0);
+    node.add(cameraRig);
+    b.userData.cameraRig = cameraRig;
   }
 
   const balloonLight = new THREE.PointLight(0xff8844, 0, 25, 1.5);
