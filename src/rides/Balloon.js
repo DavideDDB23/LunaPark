@@ -80,6 +80,10 @@ function buildOneBalloon(model, index) {
   const baseY = zone.baseY;
   b.position.set(zone.cx, baseY, zone.cz);
 
+  let basketLight = null;
+  let burnerLight = null;
+  let fairyMat = null;
+
   const basket = node.getObjectByName('V1_HotAirBalloon_Basket_' + index);
   if (basket) {
     const basketWorldPos = new THREE.Vector3();
@@ -91,24 +95,30 @@ function buildOneBalloon(model, index) {
     let localTopY = -Infinity, localBottomY = Infinity;
     let localMinX = Infinity, localMaxX = -Infinity;
     let localMinZ = Infinity, localMaxZ = -Infinity;
+
     basket.traverse(child => {
       if (child.isMesh && child.geometry) {
-        if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-        const bb = child.geometry.boundingBox;
+        const posAttr = child.geometry.attributes.position;
+        if (!posAttr) return;
+
+        child.updateMatrixWorld(true);
         const mw = child.matrixWorld.elements;
-        const corners = [
-          [bb.min.x, bb.min.y, bb.min.z], [bb.max.x, bb.min.y, bb.min.z],
-          [bb.min.x, bb.max.y, bb.min.z], [bb.max.x, bb.max.y, bb.min.z],
-          [bb.min.x, bb.min.y, bb.max.z], [bb.max.x, bb.min.y, bb.max.z],
-          [bb.min.x, bb.max.y, bb.max.z], [bb.max.x, bb.max.y, bb.max.z],
-        ];
-        for (const c of corners) {
-          const wx = mw[0]*c[0] + mw[4]*c[1] + mw[8]*c[2] + mw[12];
-          const wy = mw[1]*c[0] + mw[5]*c[1] + mw[9]*c[2] + mw[13];
-          const wz = mw[2]*c[0] + mw[6]*c[1] + mw[10]*c[2] + mw[14];
-          const lx = wx - b.position.x;
-          const ly = wy - b.position.y;
-          const lz = wz - b.position.z;
+        const tempV = new THREE.Vector3();
+
+        for (let i = 0; i < posAttr.count; i++) {
+          tempV.set(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+
+          // Filter out the struts/burner frames (only keep the actual basket box)
+          // The basket box geometry vertices are all below -110.0 in local Y
+          if (tempV.y > -110.0) continue;
+
+          tempV.applyMatrix4(child.matrixWorld);
+
+          // Convert world coordinates to b-local coordinates
+          const lx = tempV.x - b.position.x;
+          const ly = tempV.y - b.position.y;
+          const lz = tempV.z - b.position.z;
+
           if (ly > localTopY) localTopY = ly;
           if (ly < localBottomY) localBottomY = ly;
           if (lx < localMinX) localMinX = lx;
@@ -118,12 +128,64 @@ function buildOneBalloon(model, index) {
         }
       }
     });
+
     b.userData.basketCenterLocal = basketCenterLocal;
     b.userData.basketTopLocal = localTopY;
     b.userData.basketFloorLocal = localBottomY;
-    b.userData.basketWidthX = localMaxX - localMinX;
-    b.userData.basketWidthZ = localMaxZ - localMinZ;
+    const basketWidthX = localMaxX - localMinX;
+    const basketWidthZ = localMaxZ - localMinZ;
+    b.userData.basketWidthX = basketWidthX;
+    b.userData.basketWidthZ = basketWidthZ;
     b.userData.cameraLocalY = (localBottomY + getPassengerWorldHeight() * 0.16) - node.position.y;
+
+    // ── Create warm interior basket light ──
+    basketLight = new THREE.PointLight(0xffddaa, 0.0, 6.0, 1.5);
+    // Position it inside the basket, slightly below the rim
+    basketLight.position.set(basketCenterLocal.x, localTopY - 0.5, basketCenterLocal.z);
+    basketLight.layers.set(2);
+    b.add(basketLight);
+
+    // ── Create flickering burner flame light ──
+    burnerLight = new THREE.PointLight(0xff6611, 0.0, 20.0, 1.5);
+    // Position it higher up where the burner flame would fire
+    burnerLight.position.set(basketCenterLocal.x, localTopY + 3.5, basketCenterLocal.z);
+    burnerLight.layers.set(2);
+    b.add(burnerLight);
+
+    // ── Create 4 decorative LED bars along the precise sides of the mesh ──
+    fairyMat = new THREE.MeshStandardMaterial({
+      color: 0xffeebb,
+      emissive: 0xffeebb,
+      emissiveIntensity: 0.0,
+      roughness: 0.2,
+      metalness: 0.8,
+      toneMapped: false
+    });
+    
+    const rimY = localTopY + 0.02; // Placed exactly on the top edge of the basket
+    const barThickness = 0.06;
+
+    const centerX = (localMaxX + localMinX) / 2;
+    const centerZ = (localMaxZ + localMinZ) / 2;
+
+    const lengthX = basketWidthX * 0.98; // Slightly shorter than full width
+    const lengthZ = basketWidthZ * 0.98;
+
+    const barGeoX = new THREE.BoxGeometry(lengthX, barThickness, barThickness);
+    const barGeoZ = new THREE.BoxGeometry(barThickness, barThickness, lengthZ);
+
+    const ledBars = [
+      { geo: barGeoX, x: centerX, z: localMinZ }, // Back
+      { geo: barGeoX, x: centerX, z: localMaxZ }, // Front
+      { geo: barGeoZ, x: localMinX, z: centerZ }, // Left
+      { geo: barGeoZ, x: localMaxX, z: centerZ }, // Right
+    ];
+
+    for (const bar of ledBars) {
+      const mesh = new THREE.Mesh(bar.geo, fairyMat);
+      mesh.position.set(bar.x, rimY, bar.z);
+      b.add(mesh);
+    }
   }
 
   const balloonLight = new THREE.PointLight(0xff8844, 0, 25, 1.5);
@@ -210,6 +272,23 @@ function buildOneBalloon(model, index) {
     b.rotation.x = Math.sin(time * 0.4 + windSpeed * 0.7 + index) * 0.05;
 
     balloonLight.intensity = nightFactor * 40;
+
+    // Update new lights
+    if (basketLight) {
+      basketLight.intensity = nightFactor * 6.0;
+    }
+    if (burnerLight) {
+      // Simulate hot air balloon burner firing bursts and flickering
+      // Use high frequency sine combined with slower envelope to look like random bursts
+      const burst = 0.5 + 0.5 * Math.sin(time * 1.5 + index * 4.0);
+      const flicker = 0.8 + 0.2 * Math.sin(time * 12.0 + index);
+      const isFiring = burst > 0.4 ? 1.0 : 0.15;
+      burnerLight.intensity = nightFactor * isFiring * flicker * 25.0;
+    }
+    if (fairyMat) {
+      // Gentle twinkle effect for the basket fairy lights
+      fairyMat.emissiveIntensity = nightFactor * (2.5 + 1.0 * Math.sin(time * 3.5 + index * 1.7));
+    }
 
     const riders = b.userData.riders;
     if (riders) {

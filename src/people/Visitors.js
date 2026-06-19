@@ -467,7 +467,7 @@ const LANDMARKS = [
   [10, 14], [-10, 14], [10, -13], [-10, -13],
   [7, 49], [16, -19], [-15, 33], [-19, -31],
   [76, -65], [68, -60], // Train area waypoints (sign & control panel)
-  [12, 24], [11, 20],   // Shooting gallery waypoints (booth & sign)
+  [9.2, 24.0], [11, 20],   // Shooting gallery waypoints (booth & sign)
 ];
 
 function aStar(grid, start, goal) {

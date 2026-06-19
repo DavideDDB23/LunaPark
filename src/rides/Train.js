@@ -217,6 +217,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     const SCALE = 0.030;
     const CAR_SPACING = 4.0;
     const wagonGroups = [];
+    let wagonIdx = 0;
 
     for (const wn of wagonNodes) {
       const subtree = wn.clone(true);
@@ -241,16 +242,22 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
         
         // Preserve original texture maps while applying the custom wagon tint color
         const origMat = child.material;
-        child.material = new THREE.MeshStandardMaterial({
+        const newMat = new THREE.MeshStandardMaterial({
           color: wnColor,
           map: origMat.map || null,
           normalMap: origMat.normalMap || null,
           roughnessMap: origMat.roughnessMap || null,
           metalnessMap: origMat.metalnessMap || null,
+          emissive: new THREE.Color(wnColor),
+          emissiveMap: origMat.map || null,
+          emissiveIntensity: 0.0,
           roughness: 0.7,
           metalness: 0.1,
           envMapIntensity: 0,
+          toneMapped: false
         });
+        child.material = newMat;
+        nightLights.push({ type: 'body-mat', mat: newMat });
         
         wagonGroup.add(child);
       }
@@ -267,10 +274,97 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
 
       const wrapper = new THREE.Group();
       wrapper.scale.setScalar(SCALE);
+      
+      // Soft coloured under-light pools a glow on the ground below each car (using world distance of 10.0 units)
+      const under = new THREE.PointLight(wnColor, 0.0, 10.0, 2.0);
+      under.position.set(0, -5.0, 0); // slightly below the wagon
+      under.layers.set(2);
+      wagonGroup.add(under);
+      nightLights.push({ type: 'under-light', light: under });
+
+      // Warm interior lamp for riders (using world distance of 7.5 units)
+      const interiorLight = new THREE.PointLight(0xffd9a0, 0.0, 7.5, 2.0);
+      interiorLight.position.set(0, 60.0, 0); // Positioned exactly above the passengers in wrapper space
+      interiorLight.layers.set(2);
+      wrapper.add(interiorLight);
+      nightLights.push({ type: 'interior-light', light: interiorLight });
+
+      const widthX = bbox.max.x - bbox.min.x;
+      const heightY = bbox.max.y - bbox.min.y;
+      const depthZ = bbox.max.z - bbox.min.z;
+
+      // Add decorative warm-white cabochon light bulbs on the sides of the wagon
+      const sideBulbMat = new THREE.MeshStandardMaterial({
+        color: 0xffeebb,
+        emissive: 0xffeebb,
+        emissiveIntensity: 0.0,
+        roughness: 0.2,
+        metalness: 0.8,
+        toneMapped: false
+      });
+      const bulbGeo = new THREE.SphereGeometry(4.0, 16, 16);
+      const sideBulbMeshes = [];
+
+      // Position passenger bulbs based on the exact shape of the real mesh
+      const isFront = (wagonIdx === 0);
+      const bulbPositions = [];
+      
+      if (isFront) {
+        // Antenna balls: Place exactly inside the geometry of the antennae
+        // Colored same as carriage, turning glowing white/warm at night
+        const antennaBulbGeo = new THREE.SphereGeometry(7.0, 16, 16);
+        const antennaMat = new THREE.MeshStandardMaterial({
+          color: wnColor,
+          emissive: 0xffeebb,
+          emissiveIntensity: 0.0,
+          roughness: 0.7,
+          metalness: 0.1,
+          toneMapped: false
+        });
+
+        const rightAntenna = new THREE.Mesh(antennaBulbGeo, antennaMat);
+        rightAntenna.position.set(41.6, 169.0, 55.4); // lowered Y from 174.7
+        wrapper.add(rightAntenna);
+        sideBulbMeshes.push(rightAntenna);
+
+        const leftAntenna = new THREE.Mesh(antennaBulbGeo, antennaMat);
+        leftAntenna.position.set(-41.6, 169.0, 55.4); // lowered Y from 174.7
+        wrapper.add(leftAntenna);
+        sideBulbMeshes.push(leftAntenna);
+      } else {
+        // Passenger carriages: Exact coordinates from mesh vertex sampling
+        // to ensure zero floating. We sink them slightly (1.0 unit) into the mesh.
+        bulbPositions.push(
+          // Left side
+          { x: -39.5, y: 97.5, z: -60 }, // Front
+          { x: -41.5, y: 80.3, z: 0 },   // Middle
+          { x: -38.2, y: 80.3, z: 40 },  // Back
+          // Right side
+          { x: 39.5, y: 97.5, z: -60 },
+          { x: 41.5, y: 80.3, z: 0 },
+          { x: 38.2, y: 80.3, z: 40 }
+        );
+      }
+
+      for (const pos of bulbPositions) {
+        const bulb = new THREE.Mesh(bulbGeo, sideBulbMat);
+        bulb.position.set(pos.x, pos.y, pos.z);
+        wrapper.add(bulb);
+        sideBulbMeshes.push(bulb);
+      }
+
+      // Add to nightLights as wagon-bulbs with unique phase per wagon
+      nightLights.push({
+        type: 'wagon-bulbs',
+        meshes: sideBulbMeshes,
+        phase: wagonIdx * 1.5
+      });
+
       wrapper.add(wagonGroup);
       wrapper.updateMatrixWorld(true);
 
       wagonGroups.push(wrapper);
+      wagonIdx++;
     }
 
     // ── 5. Populate cars array with progressive offsets ──
@@ -282,29 +376,30 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     // ── 6. Front Headlight (Locomotive) ──
     if (cars.length > 0) {
       const loco = cars[0].mesh;
+      const wnColor = 0x22aa44; // Base color of the front wagon
 
-      // Emissive bulb mesh (radius scaled up to fit the 1.0 -> 0.030 model space)
-      const bulbGeo = new THREE.SphereGeometry(5.0, 16, 16);
+      // Emissive bulb mesh (reduced size, colored to match body during day)
+      const bulbGeo = new THREE.SphereGeometry(12.0, 32, 32); 
       const bulbMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
+        color: wnColor,
         emissive: 0xfff2d0,
         emissiveIntensity: 0.0,
-        roughness: 0.2,
-        metalness: 0.8,
+        roughness: 0.7,
+        metalness: 0.1,
         toneMapped: false
       });
       const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-      bulb.position.set(0, 45.0, 86.0); // front-center of caterpillar face in local coordinates
+      bulb.position.set(0, 80.0, 77.0); // Fit perfectly on the snout nose bump
       loco.add(bulb);
 
       // Spotlight pointing forward (range and position scaled)
-      const spotLight = new THREE.SpotLight(0xfff2d0, 0, 1500, Math.PI / 4, 0.6, 1.0);
-      spotLight.position.set(0, 45.0, 87.0);
+      const spotLight = new THREE.SpotLight(0xfff2d0, 0, 80.0, Math.PI / 4, 0.6, 1.0);
+      spotLight.position.set(0, 80.0, 79.0);
       spotLight.castShadow = true;
       spotLight.shadow.mapSize.width = 512;
       spotLight.shadow.mapSize.height = 512;
       spotLight.shadow.camera.near = 15.0;
-      spotLight.shadow.camera.far = 1500;
+      spotLight.shadow.camera.far = 3000;
 
       const target = new THREE.Object3D();
       target.position.set(0, 45.0, 300.0);
@@ -429,7 +524,9 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     for (const nl of nightLights) {
       if (nl.type === 'spot') {
         nl.light.intensity = nightMix * 20.0;
+        nl.light.color.copy(lightColor);
         nl.mesh.material.emissiveIntensity = nightMix * 2.0;
+        nl.mesh.material.emissive.copy(lightColor);
       } else if (nl.type === 'point') {
         const glow = nightMix * (0.6 + 0.4 * Math.sin(time * 3 + nl.phase));
         nl.light.intensity = glow * 8.0;
@@ -440,7 +537,16 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
         const glow = nightMix * (0.6 + 0.4 * Math.sin(time * 4 + nl.phase));
         for (const mesh of nl.meshes) {
           mesh.material.emissiveIntensity = glow * 3.0;
+          mesh.material.emissive.copy(lightColor);
         }
+      } else if (nl.type === 'body-mat') {
+        nl.mat.emissiveIntensity = 0.0; // Disabled body glow to preserve PBR shading
+      } else if (nl.type === 'under-light') {
+        nl.light.intensity = nightMix * 6.0; // Balanced underglow
+        nl.light.color.copy(lightColor);
+      } else if (nl.type === 'interior-light') {
+        nl.light.intensity = nightMix * 4.0; // Subtle interior light
+        nl.light.color.copy(lightColor);
       }
     }
   };

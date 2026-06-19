@@ -43,9 +43,12 @@ function makeHintTexture(lines) {
   return tex;
 }
 
-export function buildRideHint({ position = [0, 4.2, 0] } = {}) {
+export function buildRideHint({
+  position = [0, 4.2, 0],
+  lines = ['Click Panel to Turn On/Off', 'Scroll on Panel: Speed'],
+} = {}) {
   const material = new THREE.SpriteMaterial({
-    map: makeHintTexture(['Click Panel to Turn On/Off', 'Scroll on Panel: Speed']),
+    map: makeHintTexture(lines),
     transparent: true,
     opacity: 0.0,
     depthWrite: false,
