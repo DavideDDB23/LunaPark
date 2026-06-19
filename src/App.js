@@ -141,6 +141,12 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of gondolaMesh. Read gondolaMesh's world up so the camera
+      // follows the gondola's orientation (gondola is world-stable, so up = world Y).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const cr = environmentGroup.getObjectByName('carousel');
@@ -160,6 +166,12 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of horseContainer. Read container's world up so the camera
+      // follows the carousel rotation (rotatingAssembly yaw + per-horse Y-bob).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const tg = environmentGroup.getObjectByName('tagada');
@@ -175,12 +187,17 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's -Z. Rig has no Y-flip, so its -Z = seat-local -Z,
-      // pointing outward over the rim. To look inward (toward disc centre,
-      // matching the rider's gaze), use the rig's +Z.
+      // 10m along the rig's +Z. Rig has no Y-flip, so its +Z = seat-local +Z,
+      // pointing toward the disc centre (matching the rider's gaze).
       fpvTmpVec.set(0, 0, 10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of seatGroup. Read seatGroup's world up so the camera
+      // follows the disc tilt (armTilt applied to ancestor of discMeshGroup).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const co = environmentGroup.getObjectByName('coaster');
@@ -197,10 +214,16 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's -Z (= forward direction of travel)
+      // 10m along the rig's -Z (= dolly's +Z = forward direction of travel)
       fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of dolly. Read dolly's world up so the camera follows
+      // the dolly's banking (roll) as it traverses the track.
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const tr = environmentGroup.getObjectByName('train');
@@ -218,6 +241,12 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
+    },
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of car mesh. Read car's world up so the camera follows
+      // the curve-banking tilt (cars[i].mesh.rotateZ applied in tick).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   if (balloons && balloons[0]) {
@@ -238,6 +267,14 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
         fpvTmpVec.set(0, 0, -10);
         fpvTarget.localToWorld(fpvTmpVec);
         targetVec.copy(fpvTmpVec);
+      },
+      getFpvUp: (fpvTarget, upVec) => {
+        // Rig is child of node. Read node's world up (parent of rig is the
+        // GLB sub-root, but node itself is parent of rig; b.rotation.x/z tilt
+        // is applied to the b group, which is the GRANDPARENT of the rig).
+        // Use b's world up to capture the basket pitch/roll.
+        fpvTarget.parent.parent.getWorldQuaternion(fpvTmpQuat);
+        upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
       }
     });
   }
