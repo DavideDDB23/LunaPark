@@ -380,6 +380,22 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
         rider: rider,
         phaseOffset: i * (Math.PI / 4) // phase-offset wave pattern
       });
+
+      // ── FPV camera-rig: positioned at the rider's head, in horseContainer-local.
+      //    Container's +X is the tangential forward (direction of travel). The rig
+      //    is rotated 180° around Y so its -Z (camera look) aligns with +X (forward).
+      //    Inherits the carousel yaw (rotatingAssembly) and the horse's Y-bob
+      //    (container.position.y oscillates in tick).
+      const cameraRig = new THREE.Group();
+      cameraRig.name = 'cameraRig';
+      cameraRig.position.set(
+        rider.pivot.position.x,
+        rider.pivot.position.y + rider.height * 0.85,
+        rider.pivot.position.z
+      );
+      cameraRig.rotation.y = Math.PI;
+      horseContainer.add(cameraRig);
+      horses[horses.length - 1].cameraRig = cameraRig;
     } else {
       horses.push({
         container: horseContainer,
