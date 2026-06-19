@@ -373,6 +373,23 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
       cars.push({ mesh: wagonGroups[i], offset: i * CAR_SPACING });
     }
 
+    // ── FPV camera-rig: positioned at the rider's eye height inside the
+    //    first car. The wrapper's local +Z holds the cabin content (rider at
+    //    z=-20, headlights at z=+77, look target at z=+150), so we rotate the
+    //    rig 180° around Y so its -Z (camera look) aligns with the wrapper's
+    //    +Z (forward, in the same convention the existing FPV offsets use).
+    //    Inherits the car's position, lookAt-driven yaw, and the curve-banking
+    //    tilt applied in tick (cars[i].mesh.rotateZ at line ~514).
+    {
+      const firstCar = cars[0];
+      const cameraRig = new THREE.Group();
+      cameraRig.name = 'cameraRig';
+      cameraRig.position.set(0, 136.0, -26.0);
+      cameraRig.rotation.y = Math.PI;
+      firstCar.mesh.add(cameraRig);
+      firstCar.cameraRig = cameraRig;
+    }
+
     // ── 6. Front Headlight (Locomotive) ──
     if (cars.length > 0) {
       const loco = cars[0].mesh;
