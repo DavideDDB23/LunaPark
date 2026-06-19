@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>report</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="REPORT_files/libs/clipboard/clipboard.min.js"></script>
+<script src="REPORT_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="REPORT_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="REPORT_files/libs/quarto-html/popper.min.js"></script>
+<script src="REPORT_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="REPORT_files/libs/quarto-html/anchor.min.js"></script>
+<link href="REPORT_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="REPORT_files/libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="REPORT_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="REPORT_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="REPORT_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+
+
+<section id="luna-park-interactive-3d-amusement-park" class="level1">
+<h1>Luna Park — Interactive 3D Amusement Park</h1>
+<section id="project-report-interactive-graphics-course" class="level2">
+<h2 class="anchored" data-anchor-id="project-report-interactive-graphics-course">Project Report — Interactive Graphics Course</h2>
+<p><strong>Authors:</strong> Enrico Battistoni, Davide De Blasio<br>
+<strong>Course:</strong> Interactive Graphics — Prof.&nbsp;Marco Schaerf<br>
+<strong>Institution:</strong> Sapienza University of Rome, DIAG<br>
+<strong>Academic Year:</strong> 2025–2026<br>
+<strong>Date:</strong> June 2026</p>
+<hr>
+</section>
+<section id="table-of-contents" class="level2">
+<h2 class="anchored" data-anchor-id="table-of-contents">Table of Contents</h2>
+<ol type="1">
+<li><a href="#1-project-introduction">Project Introduction</a></li>
+<li><a href="#2-external-libraries-and-tools">External Libraries and Tools</a></li>
+<li><a href="#3-external-assets">External Assets</a></li>
+<li><a href="#4-technical-implementation--rides-and-animations">Technical Implementation — Rides and Animations</a></li>
+<li><a href="#5-technical-implementation--lighting-shaders-and-pbr">Technical Implementation — Lighting, Shaders, and PBR</a></li>
+<li><a href="#6-technical-implementation--npcs-camera-and-interactions">Technical Implementation — NPCs, Camera, and Interactions</a></li>
+<li><a href="#7-mapping-to-course-topics">Mapping to Course Topics</a></li>
+<li><a href="#8-user-manual">User Manual</a></li>
+<li><a href="#9-performance-notes">Performance Notes</a></li>
+</ol>
+<hr>
+</section>
+<section id="project-introduction" class="level2">
+<h2 class="anchored" data-anchor-id="project-introduction">1. Project Introduction</h2>
+<section id="overview" class="level3">
+<h3 class="anchored" data-anchor-id="overview">1.1 Overview</h3>
+<p><em>Luna Park</em> is a fully interactive, real-time 3D amusement park rendered entirely within the web browser via Three.js and the WebGL 2.0 graphics API. Developed as the final project for the Interactive Graphics course at Sapienza University of Rome, it demonstrates the practical application of the core topics covered in the syllabus — from the rendering pipeline and shading models to hierarchical scene graphs, custom GLSL shaders, and computer animation — within a cohesive, visually rich application.</p>
+<p>The project is served as a set of static files with no build step required: any HTTP server pointing at the repository root suffices. The entry point is <code>index.html</code>, which sets up a <code>&lt;canvas&gt;</code> element and loads all JavaScript as native ES modules via an <code>importmap</code>. This design decision keeps the development workflow simple and ensures the project runs identically on a local machine and on GitHub Pages.</p>
+</section>
+<section id="motivation-and-design-goals" class="level3">
+<h3 class="anchored" data-anchor-id="motivation-and-design-goals">1.2 Motivation and Design Goals</h3>
+<p>The amusement park theme was chosen because it naturally motivates every major graphics technique in the course:</p>
+<ol type="1">
+<li><strong>Rides as hierarchical models</strong>: Each attraction is a tree of <code>THREE.Group</code> and <code>THREE.Mesh</code> nodes whose compound rotations and translations produce the characteristic motion — exactly the kind of hierarchical scene graph described in the course lectures.</li>
+<li><strong>Hand-coded animations</strong>: The project mandate prohibits importing animation clips. All motion — from the Ferris wheel’s counter-rotating gondolas to the roller coaster’s energy-governed cart — is derived from first principles in JavaScript, providing a direct demonstration of computer animation techniques.</li>
+<li><strong>Shader-driven visuals</strong>: The park contains several environments that cannot be achieved with standard materials alone: an animated river with wave displacement and caustics, an HDR sky that transitions smoothly across the diurnal cycle, and a GPU particle fireworks system. These are implemented as custom GLSL shaders.</li>
+<li><strong>Rich lighting</strong>: Multiple light types co-exist — a directional sun that orbits the sky, a moon, a hemisphere sky light, twelve point-light lampposts, path spotlights, and per-ride decoration bulbs — all managed by a single <code>DayNightCycle</code> class that drives every light source from a single time parameter.</li>
+<li><strong>Full interactivity</strong>: The user can click anywhere in the 3D scene to fly the camera there, toggle individual lampposts, control ride speed, manipulate the time of day, and even enter first-person view aboard any ride.</li>
+</ol>
+</section>
+<section id="technology-environment" class="level3">
+<h3 class="anchored" data-anchor-id="technology-environment">1.3 Technology Environment</h3>
+<p>The project uses <strong>Three.js r170</strong> as a high-level abstraction over <strong>WebGL 2.0</strong>. Three.js was chosen because it handles the low-level boilerplate of WebGL (buffer management, shader compilation, texture upload, matrix stacks) while remaining thin enough that the application can drop down to raw GLSL for the water, sky, and fireworks shaders. All custom shader code is written in <strong>GLSL ES 3.0</strong> (<code>#version 300 es</code>), matching the WebGL 2.0 context requested by <code>canvas.getContext('webgl2')</code>.</p>
+<p>The render loop uses Three.js’s <code>EffectComposer</code> pipeline:</p>
+<pre><code>WebGLRenderTarget → RenderPass → UnrealBloomPass → OutputPass → display</code></pre>
+<p>Tone mapping is set to <code>THREE.ACESFilmicToneMapping</code>, and the renderer’s output colour space is <code>THREE.SRGBColorSpace</code> to ensure correct gamma handling throughout the pipeline.</p>
+<p>Shadow mapping is enabled globally with <code>THREE.PCFSoftShadowMap</code>, which applies a Poisson-disk kernel in the shadow map to produce soft-edged shadows without visible aliasing.</p>
+</section>
+<section id="high-level-feature-list" class="level3">
+<h3 class="anchored" data-anchor-id="high-level-feature-list">1.4 High-Level Feature List</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Category</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Rides</strong></td>
+<td>Ferris Wheel (counter-rotating gondolas), Carousel (phase-offset bobbing horses), Roller Coaster (spline track, energy-governed speed), Tagada (compound oscillation), Panoramic Train (CatmullRom ring track), Hot Air Balloons (3, wind-drift with 2D noise trajectory), Shooting Gallery (pointer-lock FPV aim)</td>
+</tr>
+<tr class="even">
+<td><strong>Environment</strong></td>
+<td>PBR-textured grass ground, asphalt paths, park perimeter fence with string lights, 6 food stalls, central octagonal stage, entrance gate, river with animated water shader, fish, rocks, vegetation (trees, bushes, flowers)</td>
+</tr>
+<tr class="odd">
+<td><strong>Lighting</strong></td>
+<td>Day/night cycle (sun/moon orbit), HemisphereLight, PCF shadows, 12 auto-lampposts, stage spotlight, 6 path spotlights, per-ride decoration bulbs with colour picker</td>
+</tr>
+<tr class="even">
+<td><strong>Sky</strong></td>
+<td>4 HDR equirectangular presets (night, sunrise, day, sunset) crossfaded by a custom two-texture sky sphere shader</td>
+</tr>
+<tr class="odd">
+<td><strong>Post-processing</strong></td>
+<td>Selective UnrealBloom, ACES filmic tone mapping</td>
+</tr>
+<tr class="even">
+<td><strong>NPCs</strong></td>
+<td>10 procedurally animated park visitors with A* pathfinding, analytic leg IK, and 14 outfit variants</td>
+</tr>
+<tr class="odd">
+<td><strong>Passengers</strong></td>
+<td>Seated riders on all rides (gondolas, carousel horses, coaster seats, Tagada disc, train wagons, balloon baskets)</td>
+</tr>
+<tr class="even">
+<td><strong>Particles</strong></td>
+<td>Night fireworks: GPU particle system with 3 burst types (spherical, corona, willow)</td>
+</tr>
+<tr class="odd">
+<td><strong>Camera</strong></td>
+<td>Click-to-fly, 6 preset viewpoints (keys 1–6), FPV aboard any ride, OrbitControls</td>
+</tr>
+<tr class="even">
+<td><strong>HUD</strong></td>
+<td>Time-of-day arc, digital clock, manual slider, auto-advance toggle, FPS counter, ride hotbar, colour picker</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-structure" class="level3">
+<h3 class="anchored" data-anchor-id="module-structure">1.5 Module Structure</h3>
+<p>The source tree under <code>src/</code> is organized by concern:</p>
+<pre><code>src/
+├── App.js                  Scene bootstrap, render loop, HUD wiring
+├── main.js                 Entry point (imports App.js)
+├── controls/
+│   ├── CameraManager.js    Orbit, click-to-fly, FPV, preset viewpoints
+│   └── InteractionManager.js  Raycaster, click/wheel/hover dispatch
+├── environment/
+│   ├── Ground.js, Paths.js, Fence.js, River.js, Rocks.js, Benches.js
+│   ├── FoodStalls.js, Props.js (entrance gate), Stage.js, Vegetation.js
+│   ├── Lampposts.js, PathLights.js, ExternalScenery.js
+│   ├── Water.js            Custom GLSL wave + caustic shader
+│   ├── Sky.js              HDR crossfade sky-sphere shader
+│   ├── Fish.js             Animated clownfish with skeleton
+│   └── Fireworks.js        GPU particle burst system
+├── lighting/
+│   ├── DayNightCycle.js    Sun/moon orbit, tone mapping, lamp control
+│   └── LightManager.js     HemisphereLight + DirectionalLight factory
+├── people/
+│   ├── Visitors.js         NPC pathfinding, procedural gait (~900 lines)
+│   └── Passengers.js       Rider template system, seated poses, IK
+├── rides/
+│   ├── FerrisWheel.js, Carousel.js, Coaster.js, Tagada.js
+│   ├── Balloon.js, Train.js, ShootingGallery.js
+├── ui/
+│   ├── ControlPanel.js     3D in-world ride panel (semaphore + lever)
+│   ├── Hud.js              Canvas-based time arc, clock, slider
+│   ├── RideHints.js        Proximity-fade FPV hint billboards
+│   └── RideHotbar.js       HTML bottom bar for ride FPV buttons
+└── utils/
+    ├── EventBus.js         Pub/sub for decoupled component communication
+    ├── NavGrid.js          Occupancy grid + A* for NPC pathfinding
+    ├── loaders.js          GLB/HDR/texture loader wrappers
+    └── Easings.js          Shared easing functions for tweens</code></pre>
+<hr>
+</section>
+</section>
+<section id="external-libraries-and-tools" class="level2">
+<h2 class="anchored" data-anchor-id="external-libraries-and-tools">2. External Libraries and Tools</h2>
+<p>This section catalogues every library, framework, and tool used in the project that was not developed by the project team.</p>
+<section id="three.js-r170" class="level3">
+<h3 class="anchored" data-anchor-id="three.js-r170">2.1 Three.js r170</h3>
+<ul>
+<li><strong>Version:</strong> r170 | <strong>Licence:</strong> MIT | <strong>URL:</strong> https://threejs.org</li>
+</ul>
+<p>Three.js is the primary rendering library. It provides a scene graph abstraction (<code>Object3D</code>, <code>Group</code>, <code>Mesh</code>), geometry primitives (<code>CylinderGeometry</code>, <code>SphereGeometry</code>, <code>TorusGeometry</code>, <code>TubeGeometry</code>, <code>CatmullRomCurve3</code>), material types (<code>MeshStandardMaterial</code>, <code>ShaderMaterial</code>), light types (<code>DirectionalLight</code>, <code>HemisphereLight</code>, <code>PointLight</code>, <code>SpotLight</code>), texture utilities (<code>CanvasTexture</code>, <code>TextureLoader</code>, <code>PMREMGenerator</code>), and the WebGL renderer (<code>WebGLRenderer</code>). It also provides the <code>EffectComposer</code> post-processing pipeline.</p>
+<p>Three.js is loaded as an ES module from the <code>importmap</code> in <code>index.html</code>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"imports"</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">"three"</span><span class="fu">:</span> <span class="st">"https://unpkg.com/three@0.170.0/build/three.module.js"</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">"three/addons/"</span><span class="fu">:</span> <span class="st">"https://unpkg.com/three@0.170.0/examples/jsm/"</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="three.js-addons-r170-mit" class="level3">
+<h3 class="anchored" data-anchor-id="three.js-addons-r170-mit">2.2 Three.js Addons (r170, MIT)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Module</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>OrbitControls</code></td>
+<td>Mouse orbit, pan, zoom around a target point</td>
+</tr>
+<tr class="even">
+<td><code>EffectComposer</code></td>
+<td>Multi-pass post-processing pipeline</td>
+</tr>
+<tr class="odd">
+<td><code>RenderPass</code></td>
+<td>Base scene render into a framebuffer</td>
+</tr>
+<tr class="even">
+<td><code>UnrealBloomPass</code></td>
+<td>Selective bloom on bright emissive elements</td>
+</tr>
+<tr class="odd">
+<td><code>OutputPass</code></td>
+<td>Final tone-map and gamma-correct to canvas</td>
+</tr>
+<tr class="even">
+<td><code>GLTFLoader</code></td>
+<td>Load <code>.glb</code> binary GLTF 3D models</td>
+</tr>
+<tr class="odd">
+<td><code>RGBELoader</code></td>
+<td>Load <code>.hdr</code> Radiance RGBE environment maps</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="tween.js" class="level3">
+<h3 class="anchored" data-anchor-id="tween.js">2.3 tween.js</h3>
+<ul>
+<li><strong>Version:</strong> 23.1.3 | <strong>Licence:</strong> MIT | <strong>URL:</strong> https://github.com/tweenjs/tween.js</li>
+</ul>
+<p>tween.js provides a lightweight interpolation engine used throughout the project for smooth, eased transitions: camera fly-to animations (1.2 s, <code>Quadratic.InOut</code>), ride speed ramp-up/ramp-down, lamppost toggle intensity animation, and Tagada arm boarding extension/retraction.</p>
+</section>
+<section id="python-http.server" class="level3">
+<h3 class="anchored" data-anchor-id="python-http.server">2.4 Python <code>http.server</code></h3>
+<p>Used during development for local serving. No build toolchain is required — the browser resolves all <code>import</code> statements via the native ES module system.</p>
+</section>
+<section id="github-pages" class="level3">
+<h3 class="anchored" data-anchor-id="github-pages">2.5 GitHub Pages</h3>
+<p>The project is deployed on GitHub Pages, which serves the repository root as a static site.</p>
+<hr>
+</section>
+</section>
+<section id="external-assets" class="level2">
+<h2 class="anchored" data-anchor-id="external-assets">3. External Assets</h2>
+<section id="asset-pipeline-overview" class="level3">
+<h3 class="anchored" data-anchor-id="asset-pipeline-overview">3.1 Asset Pipeline Overview</h3>
+<p>All 3D models are in <strong>GLB</strong> format (binary GLTF 2.0). The project uses a custom <code>loadGLB()</code> wrapper around Three.js’s <code>GLTFLoader</code> that immediately discards all embedded animation data (<code>gltf.animations = []</code>) before returning the scene graph. This enforces the project policy that every motion is hand-written JavaScript math.</p>
+<p>PBR texture sets follow the <strong>ambientCG / Poly Haven convention</strong>: separate image files for albedo, tangent-space normal map, roughness map, and where available metalness and ambient-occlusion maps. Textures are loaded with <code>anisotropy = renderer.capabilities.getMaxAnisotropy()</code> (typically 16×).</p>
+<p>HDR sky environments are in the <strong>RGBE <code>.hdr</code></strong> format and processed by <code>PMREMGenerator</code> for image-based lighting across all PBR materials.</p>
+</section>
+<section id="three-dimensional-models" class="level3">
+<h3 class="anchored" data-anchor-id="three-dimensional-models">3.2 Three-Dimensional Models</h3>
+<section id="rides" class="level4">
+<h4 class="anchored" data-anchor-id="rides">3.2.1 Rides</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>File</th>
+<th>Source</th>
+<th>Licence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Ferris Wheel</td>
+<td><code>ferris_wheel.glb</code></td>
+<td>Quaternius free pack / Sketchfab</td>
+<td>CC0</td>
+</tr>
+<tr class="even">
+<td>Carousel Horse</td>
+<td><code>carousel_horse.glb</code></td>
+<td>Quaternius creature pack</td>
+<td>CC0</td>
+</tr>
+<tr class="odd">
+<td>Roller Coaster Track</td>
+<td><code>coaster_track.glb</code></td>
+<td>“Animated roller coaster” by assetfactory, Sketchfab</td>
+<td>CC0</td>
+</tr>
+<tr class="even">
+<td>Wacky Worm (Train)</td>
+<td><code>wacky_worm_coaster.glb</code></td>
+<td>Poly Pizza</td>
+<td>CC0</td>
+</tr>
+<tr class="odd">
+<td>Hot Air Balloon</td>
+<td><code>balloon.glb</code></td>
+<td>Quaternius free pack</td>
+<td>CC0</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="buildings-and-structures" class="level4">
+<h4 class="anchored" data-anchor-id="buildings-and-structures">3.2.2 Buildings and Structures</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>File</th>
+<th>Source</th>
+<th>Licence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Carnival Shooting Booth</td>
+<td><code>stylized_carnival_booth.glb</code></td>
+<td>Sketchfab</td>
+<td>CC0</td>
+</tr>
+<tr class="even">
+<td>Food Stall props</td>
+<td>Embedded in environment pack</td>
+<td>Quaternius</td>
+<td>CC0</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="human-characters-visitors-and-riders" class="level4">
+<h4 class="anchored" data-anchor-id="human-characters-visitors-and-riders">3.2.3 Human Characters (Visitors and Riders)</h4>
+<p>All human figures come from the <strong>Quaternius “Ultimate Animated Character Pack”</strong> (CC0). The project loads up to 14 distinct character GLBs as templates at startup, strips all embedded animation data, clones on demand, and drives all bone transformations procedurally through JavaScript.</p>
+</section>
+<section id="props-and-interactables" class="level4">
+<h4 class="anchored" data-anchor-id="props-and-interactables">3.2.4 Props and Interactables</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>File</th>
+<th>Source</th>
+<th>Licence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>9 mm Pistol</td>
+<td><code>9mm_pistol_low_poly_gun.glb</code></td>
+<td>Sketchfab</td>
+<td>CC0</td>
+</tr>
+<tr class="even">
+<td>9 mm Bullet</td>
+<td><code>9mm_bullet_low_poly.glb</code></td>
+<td>Sketchfab</td>
+<td>CC0</td>
+</tr>
+<tr class="odd">
+<td>Environment props (trees, bushes, rocks, benches)</td>
+<td>Quaternius environment pack</td>
+<td>CC0</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="pbr-texture-sets" class="level3">
+<h3 class="anchored" data-anchor-id="pbr-texture-sets">3.3 PBR Texture Sets</h3>
+<p>All PBR texture sets are sourced from <strong>ambientCG</strong> (CC0):</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Surface</th>
+<th>ambientCG Asset</th>
+<th>Maps Included</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Grass</td>
+<td>GrassField001</td>
+<td>color, normal, roughness, ao</td>
+</tr>
+<tr class="even">
+<td>Asphalt / Paths</td>
+<td>Asphalt026</td>
+<td>color, normal, roughness</td>
+</tr>
+<tr class="odd">
+<td>Wood (Carousel)</td>
+<td>WoodFloor050</td>
+<td>color, normal, roughness</td>
+</tr>
+</tbody>
+</table>
+<p>Colour maps are loaded with <code>THREE.SRGBColorSpace</code>; normal and roughness maps are loaded as linear data to avoid double-gamma correction.</p>
+</section>
+<section id="hdr-sky-environments" class="level3">
+<h3 class="anchored" data-anchor-id="hdr-sky-environments">3.4 HDR Sky Environments</h3>
+<p>Four RGBE equirectangular HDR maps from <strong>Poly Haven</strong> (CC0):</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Preset</th>
+<th>Poly Haven Asset</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Day</td>
+<td>Outdoor day HDRI (Kloofendal 48d Partly Cloudy)</td>
+</tr>
+<tr class="even">
+<td>Sunrise</td>
+<td>Sunrise / golden hour HDRI</td>
+</tr>
+<tr class="odd">
+<td>Sunset</td>
+<td>Sunset / warm evening HDRI</td>
+</tr>
+<tr class="even">
+<td>Night</td>
+<td>Night sky HDRI</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="licence-compliance-summary" class="level3">
+<h3 class="anchored" data-anchor-id="licence-compliance-summary">3.5 Licence Compliance Summary</h3>
+<p>All assets are CC0 (no attribution required) or MIT (attribution in source headers). The project is fully distributable.</p>
+<hr>
+</section>
+</section>
+<section id="technical-implementation-rides-and-animations" class="level2">
+<h2 class="anchored" data-anchor-id="technical-implementation-rides-and-animations">4. Technical Implementation — Rides and Animations</h2>
+<section id="scene-graph-and-hierarchical-models" class="level3">
+<h3 class="anchored" data-anchor-id="scene-graph-and-hierarchical-models">4.1 Scene Graph and Hierarchical Models</h3>
+<p>The scene is structured as a standard Three.js scene graph — a tree of <code>THREE.Object3D</code> nodes whose transforms compose from parent to child. Every node stores a local transform (position, rotation, scale); the world transform of any node is the product of all ancestor matrices.</p>
+<p><strong>Project policy</strong>: every motion is hand-written JavaScript. When GLB models are loaded, the custom <code>loadGLB()</code> wrapper immediately discards all embedded animation data. No <code>AnimationMixer</code> is ever instantiated.</p>
+<p>The full top-level scene graph:</p>
+<pre><code>THREE.Scene
+├── sky (sky-sphere mesh)
+├── sun (DirectionalLight, shadow enabled)
+├── moon (DirectionalLight, no shadow)
+├── hemi (HemisphereLight)
+├── environmentGroup
+│   ├── ground, paths, fence
+│   ├── lampposts (×12), pathLights (×6)
+│   ├── foodStalls (×6), benches, rocks, vegetation
+│   ├── stage, entranceGate
+│   ├── river + water (Water.js ShaderMesh)
+│   ├── fish (animated clownfish)
+│   └── fireworks (GPU particles)
+├── ferrisWheel
+├── carousel
+├── coaster
+├── tagada
+├── balloon[0..2]
+├── train
+└── shootingGallery</code></pre>
+<p>Each ride group encapsulates its entire sub-tree. For example, the Tagada’s hierarchy:</p>
+<pre><code>tagada (Group, world position [-40, 0, 40])
+├── foundation (Mesh)
+├── baseSkirt (Mesh)
+├── armPivot (Group)           pitch + roll + yaw applied here
+│   ├── arm (Mesh)
+│   ├── armExtension (Group)   telescopes vertically for boarding
+│   │   └── disc (Group)      spins continuously when ride is on
+│   │       ├── platform (Mesh)
+│   │       ├── canopy (Mesh)
+│   │       └── seat[0..7] (Group each, with passenger)
+│   └── pistons (Mesh ×2)
+└── controlPanel (Group)</code></pre>
+<p>This three-level Group structure allows the compound Tagada oscillation to be implemented by writing to three different <code>rotation</code> properties on three different nodes — each node’s children inherit all parent rotations automatically.</p>
+</section>
+<section id="ferris-wheel-counter-rotation" class="level3">
+<h3 class="anchored" data-anchor-id="ferris-wheel-counter-rotation">4.2 Ferris Wheel — Counter-Rotation</h3>
+<p><strong>Construction</strong>: The Ferris Wheel GLB contains a <code>wheel</code> node (the rotating ring) and a <code>cabin</code> node whose children are ten individual gondola meshes. The model is authored Z-up with a −90° X-rotation on the root, so the real wheel axis and hub position are measured from world matrices at load time.</p>
+<p><strong>Rotation accumulator</strong>: Each frame, a scalar <code>wheelSpin</code> is incremented by <code>rampedSpeed × delta</code>, where <code>rampedSpeed = MAX_SPEED × smoothstep(ramp)</code> and <code>ramp</code> is a [0,1] parameter eased in over <code>RAMP_UP = 1.5 s</code> and out over <code>RAMP_DOWN = 2.0 s</code>.</p>
+<p><strong>Counter-rotation principle</strong>: Each gondola node is the child of a <code>mount</code> Group positioned at the gondola’s orbit radius. The mount co-rotates with the ring. The gondola mesh itself is rotated by exactly <code>−wheelSpin</code> about the same axis. The world orientation of the gondola is:</p>
+<pre><code>worldRot(gondola) = parentRot(mount) + localRot(gondola) = (+wheelSpin) + (−wheelSpin) = 0</code></pre>
+<p>The gondola’s world orientation is identically zero at all times — always aligned with the world frame, always upright, exactly as a real Ferris wheel gondola behaves.</p>
+<p><strong>Passenger sway</strong>: Each gondola carries 2 passengers. Their bodies lean by <code>SWAY_AMP × sin(SWAY_FREQ × t + phaseOffset)</code> radians — a gentle swaying motion.</p>
+</section>
+<section id="carousel-phase-offset-horse-bobbing" class="level3">
+<h3 class="anchored" data-anchor-id="carousel-phase-offset-horse-bobbing">4.3 Carousel — Phase-Offset Horse Bobbing</h3>
+<p><strong>Structure</strong>: The carousel platform is a procedural <code>CylinderGeometry</code> disk. Eight horses (cloned from <code>carousel_horse.glb</code>) are mounted at equal angular spacing around a radius of approximately 7.5 world units. Each horse sits atop a procedural pole.</p>
+<p><strong>Platform rotation</strong>: <code>platformAngle += PLATFORM_OMEGA × rampedSpeed × delta</code>, where <code>PLATFORM_OMEGA = 0.8 rad/s</code>.</p>
+<p><strong>Horse bobbing formula</strong>: Each horse <code>i</code> has a vertical displacement:</p>
+<pre><code>y_i(t) = HORSE_BASE_Y + BOB_AMP × sin(2π × HORSE_BOB_FREQ × t + φ_i)</code></pre>
+<p>where <code>BOB_AMP = 0.9 m</code>, <code>HORSE_BOB_FREQ = 1.5 Hz</code>, and <code>φ_i = i × (2π / 8)</code>.</p>
+<p>The uniform distribution of phases produces a Mexican-wave (travelling wave) pattern around the ring as the platform rotates.</p>
+<p><strong>Procedural canopy texture</strong>: The carousel canopy uses a <code>CanvasTexture</code> with alternating deep-red and cream-white stripes separated by gold dividers, created entirely in JavaScript.</p>
+<p><strong>Night lighting</strong>: The carousel features 16 rim bulbs, festoon swags drooping between rim points, canopy gore-seam bulbs, vertical column bulb strips, and a glowing gold neon band at the platform edge — all animated with phase-staggered sinusoidal pulsing at night.</p>
+</section>
+<section id="roller-coaster-parallel-transport-frame" class="level3">
+<h3 class="anchored" data-anchor-id="roller-coaster-parallel-transport-frame">4.4 Roller Coaster — Parallel Transport Frame</h3>
+<p>The roller coaster is the most algorithmically complex part of the project, proceeding in four stages.</p>
+<section id="track-extraction" class="level4">
+<h4 class="anchored" data-anchor-id="track-extraction">4.4.1 Track Extraction</h4>
+<p>The rail tube mesh (<code>Circle.023_build_gen_1_0</code>) is a circle of 24 vertices swept along the track, storing <code>24 × 395 = 9,480</code> vertices sequentially. The centroid of each 24-vertex ring is a point on the rail centre-line. The 395 raw centroids are low-pass filtered (3 iterations) and down-sampled to 80 control points.</p>
+</section>
+<section id="catmullrom-spline" class="level4">
+<h4 class="anchored" data-anchor-id="catmullrom-spline">4.4.2 CatmullRom Spline</h4>
+<p>The 80 control points are passed to <code>THREE.CatmullRomCurve3(ctrlPts, true, 'catmullrom', 0.5)</code>. The curve is closed, with <code>arcLengthDivisions = 20000</code> for accurate arc-length parameterisation.</p>
+</section>
+<section id="parallel-transport-frame-bishop-frame" class="level4">
+<h4 class="anchored" data-anchor-id="parallel-transport-frame-bishop-frame">4.4.3 Parallel Transport Frame (Bishop Frame)</h4>
+<p>Instead of the Frenet frame (which suffers from discontinuous flips at inflection points and on straight segments), the code uses a <strong>Parallel Transport (Bishop) frame</strong>. The frame is initialised with the rail spoke direction closest to world-up, then propagated along the curve by applying the rotation that maps each tangent to the next. The result is a globally consistent frame field that matches the physical banking of the rail as modelled by the artist.</p>
+</section>
+<section id="cart-orientation" class="level4">
+<h4 class="anchored" data-anchor-id="cart-orientation">4.4.4 Cart Orientation</h4>
+<p>For each carriage at arc-length parameter <code>u</code>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode js code-with-copy"><code class="sourceCode javascript"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>curve<span class="op">.</span><span class="fu">getTangentAt</span>(u)<span class="op">.</span><span class="fu">normalize</span>()<span class="op">.</span><span class="fu">negate</span>()<span class="op">;</span>  <span class="co">// face forward</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="fu">getUpVectorAt</span>(u<span class="op">,</span> _up)<span class="op">;</span>                       <span class="co">// parallel-transport up</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>_mtx<span class="op">.</span><span class="fu">lookAt</span>(_origin<span class="op">,</span> _tan<span class="op">,</span> _up)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Two trains of four carriages each run simultaneously, offset by 0.5 (half-circuit apart). Each carriage is independently positioned and oriented, hugging the rail exactly.</p>
+</section>
+<section id="energy-model" class="level4">
+<h4 class="anchored" data-anchor-id="energy-model">4.4.5 Energy Model</h4>
+<p>The coaster’s speed varies with altitude:</p>
+<pre><code>v² = v₀² + 2g(y_top − y)</code></pre>
+<p>This produces the characteristic roller coaster rhythm: acceleration on descents and deceleration on crests.</p>
+</section>
+<section id="station-state-machine" class="level4">
+<h4 class="anchored" data-anchor-id="station-state-machine">4.4.6 Station State Machine</h4>
+<p>The ride implements a four-state machine: <code>STOP → LAUNCH → COAST → BRAKE → STOP</code>. The station pause is 3 seconds between cycles.</p>
+</section>
+<section id="rail-night-glow" class="level4">
+<h4 class="anchored" data-anchor-id="rail-night-glow">4.4.7 Rail Night Glow</h4>
+<p>At night, the track mesh is split into two material groups: triangles near the centre-line (the rails and ties) receive an emissive material, while support pylons stay dark. The emissive rail material uses <code>toneMapped = false</code> for bright glow through ACES tone mapping, recolourable via the colour picker.</p>
+</section>
+</section>
+<section id="tagada-compound-oscillation" class="level3">
+<h3 class="anchored" data-anchor-id="tagada-compound-oscillation">4.5 Tagada — Compound Oscillation</h3>
+<p>The Tagada is a mechanical arm ride whose characteristic motion arises from simultaneous three-axis oscillation of the <code>armPivot</code> Group:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode js code-with-copy"><code class="sourceCode javascript"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>armPivot<span class="op">.</span><span class="at">rotation</span><span class="op">.</span><span class="at">x</span> <span class="op">=</span> BASE_PITCH <span class="op">+</span> PITCH_AMP × <span class="fu">sin</span>(PITCH_FREQ × t)<span class="op">;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>armPivot<span class="op">.</span><span class="at">rotation</span><span class="op">.</span><span class="at">z</span> <span class="op">=</span> ROLL_AMP × <span class="fu">sin</span>(ROLL_FREQ × t)<span class="op">;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>armPivot<span class="op">.</span><span class="at">rotation</span><span class="op">.</span><span class="at">y</span> <span class="op">+=</span> ARM_YAW_SPEED × delta<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The pitch frequency (2.6 rad/s) and roll frequency (1.9 rad/s) are incommensurable, producing quasi-periodic motion that never exactly repeats within a typical ride cycle — the trajectory in the (pitch, roll) phase plane traces a Lissajous figure. The disc platform at the end of the arm spins at <code>MAX_SPIN_SPEED = 2.0 rad/s</code> independently.</p>
+<p>A boarding mode telescopes the arm down by 7.5 units via TWEEN when stopped, and extends back when the ride starts.</p>
+</section>
+<section id="panoramic-train-catmullrom-track" class="level3">
+<h3 class="anchored" data-anchor-id="panoramic-train-catmullrom-track">4.6 Panoramic Train — CatmullRom Track</h3>
+<p>The train ride follows a hand-authored closed CatmullRom curve with 20 control points that circle the entire park perimeter at scenic height. The track climbs to 11.5 units for panoramic views over the stage, dips to ground level at the corners, and crosses the river twice via elevated bridges. The curve’s <code>getPointAt</code> method is overridden to Y-clamp at 0.2 units, preventing the track from dipping underground.</p>
+<p>A single locomotive and three wagons from the Wacky Worm GLB are positioned along the curve using the same arc-length parameterisation technique as the roller coaster, with a Y-90° offset for proper wagon orientation. Curvature-based banking is applied, with a sharpness of 1.2 and a maximum bank angle of 0.3 radians.</p>
+</section>
+<section id="hot-air-balloons-wind-drift-trajectory" class="level3">
+<h3 class="anchored" data-anchor-id="hot-air-balloons-wind-drift-trajectory">4.7 Hot Air Balloons — Wind-Drift Trajectory</h3>
+<p>Three hot air balloons drift freely above the park in assigned zones. Their horizontal trajectory is driven by <strong>2D value noise</strong> (deterministic hash function with smoothstep interpolation), producing smooth, organic drift patterns that never repeat exactly. Each balloon oscillates vertically with a gentle sine wave (<code>A = 2.5 units</code>, <code>freq = 0.15 Hz</code>) and is buffeted by a configurable wind speed parameter.</p>
+<p>Each balloon carries 2–3 passengers. A camera rig at head height enables FPV mode from the basket.</p>
+</section>
+<section id="shooting-gallery-pointer-lock-aim" class="level3">
+<h3 class="anchored" data-anchor-id="shooting-gallery-pointer-lock-aim">4.8 Shooting Gallery — Pointer-Lock Aim</h3>
+<p>The shooting gallery uses the browser’s <strong>Pointer Lock API</strong> for a first-person aim experience. The user clicks the booth to enter aim mode; mouse movements rotate the aim reticle. Left-clicking fires a ray from the screen centre against target meshes. Each hit spins the target (a brief TWEEN), increments the score with a distance-based multiplier, and resets after 2 s. A 30-second countdown timer governs each game round.</p>
+<hr>
+</section>
+</section>
+<section id="technical-implementation-lighting-shaders-and-pbr" class="level2">
+<h2 class="anchored" data-anchor-id="technical-implementation-lighting-shaders-and-pbr">5. Technical Implementation — Lighting, Shaders, and PBR</h2>
+<section id="lighting-system" class="level3">
+<h3 class="anchored" data-anchor-id="lighting-system">5.1 Lighting System</h3>
+<p>The scene employs a structured approximation of the rendering equation decomposed into three semantically distinct light categories.</p>
+<section id="ambient-sky-hemispherelight" class="level4">
+<h4 class="anchored" data-anchor-id="ambient-sky-hemispherelight">5.1.1 Ambient Sky — HemisphereLight</h4>
+<p>A <code>HemisphereLight</code> approximates indirect illumination with two colours — sky scatter (upper hemisphere) and ground-bounce (lower hemisphere) — interpolated by the surface normal’s elevation. The sky colour changes with the diurnal phase: daytime clear blue (<code>0x87ceeb</code>) / earth brown (<code>0x8b7355</code>), twilight warm orange (<code>0xff9970</code>), night deep navy (<code>0x2a3a64</code>) / near-black (<code>0x12121f</code>).</p>
+</section>
+<section id="direct-sunlight-directionallight" class="level4">
+<h4 class="anchored" data-anchor-id="direct-sunlight-directionallight">5.1.2 Direct Sunlight — DirectionalLight</h4>
+<p>The sun’s colour animates from saturated orange-gold at sunrise to near-white at solar noon. Intensity ramping uses <code>smoothstep</code> of <code>sunHeight</code> to produce a subjectively natural dawn and dusk. This light is solely responsible for shadow casting.</p>
+</section>
+<section id="moonlight" class="level4">
+<h4 class="anchored" data-anchor-id="moonlight">5.1.3 Moonlight</h4>
+<p>A secondary <code>DirectionalLight</code> sits opposite the sun with a cool blue-grey colour (<code>0x4466aa</code>) and max intensity <code>0.40</code> at midnight. It does not cast shadows.</p>
+</section>
+<section id="artificial-night-lighting" class="level4">
+<h4 class="anchored" data-anchor-id="artificial-night-lighting">5.1.4 Artificial Night Lighting</h4>
+<p>Four categories activate at night: 1. <strong>12 Lamppost PointLights</strong> with quadratic distance attenuation 2. <strong>Stage Spotlight</strong> (SpotLight) targeting the stage platform 3. <strong>6 Path Spotlights</strong> at intersections for navigational legibility 4. <strong>Per-ride Decoration PointLights</strong> with phase-staggered sinusoidal pulsing and runtime colour configurability</p>
+</section>
+</section>
+<section id="daynight-cycle" class="level3">
+<h3 class="anchored" data-anchor-id="daynight-cycle">5.2 Day/Night Cycle</h3>
+<p>The diurnal cycle is governed by a normalised time parameter <code>t ∈ [0, 1]</code>, with 0.00 = midnight, 0.25 = sunrise, 0.50 = noon, 0.75 = sunset. The sun position is derived geometrically:</p>
+<pre><code>sunAngle = (t − 0.25) × 2π
+sunY = sin(sunAngle), sunX = −cos(sunAngle)</code></pre>
+<p>Tone-mapping exposure and background intensity are animated as functions of <code>sunHeight</code>, using <code>smoothstep</code> with different threshold ranges. Night detection is via the predicate <code>sun.position.y &lt; 5 OR sun.intensity &lt; 0.5</code>.</p>
+</section>
+<section id="pcf-shadow-maps" class="level3">
+<h3 class="anchored" data-anchor-id="pcf-shadow-maps">5.3 PCF Shadow Maps</h3>
+<p><strong>PCFSoftShadowMap</strong> (Percentage Closer Filtering with a 9×9 Poisson-disk kernel) produces smooth penumbra gradients. The directional sun light uses a <strong>4096 × 4096</strong> shadow map with an orthographic frustum of <strong>180 × 180</strong> world units. Only the sun casts shadows — point lights do not, to stay within the real-time performance budget.</p>
+</section>
+<section id="custom-glsl-shaders" class="level3">
+<h3 class="anchored" data-anchor-id="custom-glsl-shaders">5.4 Custom GLSL Shaders</h3>
+<section id="water-shader" class="level4">
+<h4 class="anchored" data-anchor-id="water-shader">5.4.1 Water Shader</h4>
+<p>The water surface (<code>Water.js</code>) uses a fully custom <code>ShaderMaterial</code> with both stages in GLSL ES 3.00.</p>
+<p><strong>Vertex stage</strong>: Surface displacement is a sum of four sinusoidal Gerstner wave trains with different directions, wavelengths, amplitudes, and speeds. The displaced surface normal is computed analytically by summing partial derivatives. Up to 8 concentric ripple wave-packets are triggered by fish entry/exit events.</p>
+<p><strong>Fragment stage</strong>: Multi-layer optical model including: - <strong>Depth-based colour</strong> transitioning from deep blue at the channel centre to shallow cyan near banks - <strong>Procedural caustics</strong> via two-scale value noise with cubic exponentiation - <strong>Blinn-Phong specular</strong> highlight using the sun direction uniform - <strong>Schlick Fresnel</strong> reflectance blended against a sky-colour tint - <strong>Bank-edge foam</strong> and crest-foam layers with animated noise - <strong>Night tint</strong> mixing toward a moonlit blue-grey</p>
+</section>
+<section id="sky-shader" class="level4">
+<h4 class="anchored" data-anchor-id="sky-shader">5.4.2 Sky Shader</h4>
+<p>The sky is rendered on an inverted sphere (<code>Sky.js</code>) using a custom <code>ShaderMaterial</code>.</p>
+<p><strong>Vertex stage</strong>: Removes the translation component from the view matrix and forces <code>gl_Position.z = gl_Position.w</code> to place the sky at the far plane.</p>
+<p><strong>Fragment stage</strong>: Samples two HDR equirectangular textures simultaneously using equirectangular UV projection (<code>atan(z,x)</code> for azimuth, <code>asin(y)</code> for elevation). The two colours are blended via the <code>uMix</code> uniform. Four HDR presets (night, sunrise, day, sunset) are crossfaded on a schedule that covers the full 24-hour cycle.</p>
+<p><strong>PMREM</strong>: Each HDR preset bakes a pre-filtered mipmapped radiance environment map via <code>PMREMGenerator</code> for image-based lighting on all <code>MeshStandardMaterial</code> objects.</p>
+</section>
+<section id="fireworks-shader" class="level4">
+<h4 class="anchored" data-anchor-id="fireworks-shader">5.4.3 Fireworks Shader</h4>
+<p>The fireworks system (<code>Fireworks.js</code>) is a GPU particle system using <code>BufferGeometry</code> with custom vertex attributes (<code>aVelocity</code>, <code>aLifetime</code>, <code>aType</code>, <code>aTrailOffset</code>).</p>
+<p><strong>Vertex stage</strong>: Ballistic integration entirely in the vertex shader:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode glsl code-with-copy"><code class="sourceCode glsl"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>pos <span class="op">=</span> uCenter <span class="op">+</span> aVelocity × uAge − <span class="fl">0.5</span> × uGravity × uAge²</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Particles whose <code>uAge</code> exceeds <code>aLifetime</code> are culled by projecting to a degenerate position.</p>
+<p><strong>Fragment stage</strong>: Radial gradient alpha using <code>gl_PointCoord</code>, with linear fade by <code>lifeRatio</code>. Three burst archetypes: <strong>spherical</strong> (uniform velocity on a sphere), <strong>corona</strong> (horizontal equatorial ring), <strong>willow</strong> (drooping trails with downward gravity bias).</p>
+</section>
+</section>
+<section id="pbr-material-workflow" class="level3">
+<h3 class="anchored" data-anchor-id="pbr-material-workflow">5.5 PBR Material Workflow</h3>
+<p>All <code>MeshStandardMaterial</code> instances use Three.js’s implementation of the <strong>GGX/Trowbridge-Reitz microfacet BRDF</strong> (Walter et al.&nbsp;2007, Disney BRDF Burley 2012):</p>
+<pre><code>f(l, v) = f_d + f_s
+f_d = c_diff / π
+f_s = F(l, h) · G(l, v, h) · D(h) / (4 · (n·l) · (n·v))</code></pre>
+<p>Texture channels used: albedo (sRGB linearised), tangent-space normal map, roughness map (GGX α), metalness map (conductor/dielectric split), ambient occlusion map (IBL diffuse modulation), emissive map (self-illumination, set above bloom threshold of 1.5).</p>
+<p>All textures use maximum available anisotropic filtering (typically 16×) for correct appearance at shallow grazing angles.</p>
+</section>
+<section id="post-processing" class="level3">
+<h3 class="anchored" data-anchor-id="post-processing">5.6 Post-Processing</h3>
+<p><strong>UnrealBloomPass</strong>: Multi-scale selective bloom (threshold 1.5, strength 0.35, radius 0.4). Only self-illuminating surfaces above the luminance threshold participate. The bloom is composited additively over the HDR scene.</p>
+<p><strong>ACES filmic tone mapping</strong>: S-shaped transfer function with shadow lift, highlight rolloff, and mid-tone saturation preservation.</p>
+<hr>
+</section>
+</section>
+<section id="technical-implementation-npcs-camera-and-interactions" class="level2">
+<h2 class="anchored" data-anchor-id="technical-implementation-npcs-camera-and-interactions">6. Technical Implementation — NPCs, Camera, and Interactions</h2>
+<section id="npc-visitors-and-procedural-walk-cycle" class="level3">
+<h3 class="anchored" data-anchor-id="npc-visitors-and-procedural-walk-cycle">6.1 NPC Visitors and Procedural Walk Cycle</h3>
+<p>The park is populated by 10 NPC visitors that roam continuously (~900 lines in <code>Visitors.js</code>).</p>
+<section id="state-machine-and-waypoints" class="level4">
+<h4 class="anchored" data-anchor-id="state-machine-and-waypoints">6.1.1 State Machine and Waypoints</h4>
+<p>Each NPC operates a <strong>WAIT ↔︎ WALK</strong> two-state machine. On arrival at a waypoint, the NPC waits 1–5 seconds, then selects a new destination from the hand-authored waypoint graph covering the entire park.</p>
+</section>
+<section id="a-pathfinding-on-a-navigation-grid" class="level4">
+<h4 class="anchored" data-anchor-id="a-pathfinding-on-a-navigation-grid">6.1.2 A* Pathfinding on a Navigation Grid</h4>
+<p>Continuous path queries use <strong>A</strong>* on a coarse occupancy grid (<code>CELL = 2</code> world-unit squares) implemented in <code>NavGrid.js</code>. Each cell is flagged blocked if it overlaps any obstacle: rides, buildings, trees (seeded at load time), the river (except the bridge crossing), or the fence perimeter. The heuristic is Euclidean distance; the cost function penalises cells adjacent to obstacles.</p>
+<p>A <strong>string-pulling</strong> step removes redundant waypoints wherever a straight line-of-sight exists, producing smooth routes.</p>
+</section>
+<section id="procedural-gait-engine" class="level4">
+<h4 class="anchored" data-anchor-id="procedural-gait-engine">6.1.3 Procedural Gait Engine</h4>
+<p>Four-layer synthesised walk cycle (no clips, no mixers):</p>
+<p><strong>Layer 1 — Foot Targets</strong>: Each foot alternates stance (planted, world velocity zero) and swing (Hermite arc with heel-strike dorsiflexion and toe-off plantarflexion). Phase advances by <code>distance / stride</code>, eliminating foot-skate.</p>
+<p><strong>Layer 2 — Two-Bone Leg IK</strong>: Analytic IK places thigh and shin bones, calibrated from the skeleton’s own geometry at spawn for correct proportions across all 14 outfit variants.</p>
+<p><strong>Layer 3 — Pelvis Rhythm</strong>: Vertical bob at 2× step frequency, lateral weight shift toward the stance leg, yaw counter-rotation, and roll counter-phased with lateral shift.</p>
+<p><strong>Layer 4 — Trunk and Limbs</strong>: Spine counter-rotation, forward lean proportional to speed, arm swing opposite to same-side leg, elbow flex, and head stabilisation.</p>
+</section>
+<section id="visual-variety-and-crowd-separation" class="level4">
+<h4 class="anchored" data-anchor-id="visual-variety-and-crowd-separation">6.1.4 Visual Variety and Crowd Separation</h4>
+<p>14 outfit variants from the Quaternius pack plus HSL hue shift per NPC for unique colours. A separation force prevents overlapping.</p>
+</section>
+</section>
+<section id="passenger-system" class="level3">
+<h3 class="anchored" data-anchor-id="passenger-system">6.2 Passenger System</h3>
+<p><code>Passengers.js</code> provides shared infrastructure for all rides.</p>
+<p><code>makeRider(template, height, opts)</code> clones a template, caches key bone references, and adds the clone to the scene. <code>updateRider(rider, time)</code> applies procedural seated poses (rest, lookL/R, lookUp, point, relax, cheer, wave) via a state-machine.</p>
+<p>Seated leg pose (<code>applyChairSeatedLegs</code>) sets ~90° hip and knee flexion for carousel jockeys and Tagada disc riders.</p>
+</section>
+<section id="camera-system" class="level3">
+<h3 class="anchored" data-anchor-id="camera-system">6.3 Camera System</h3>
+<p><code>CameraManager.js</code> manages four distinct camera modes:</p>
+<p><strong>Orbit mode</strong>: Default, using <code>OrbitControls</code> with damping (factor 0.08), distance range [5, 250], and max polar angle 0.49π.</p>
+<p><strong>Click-to-fly</strong>: A <code>THREE.Raycaster</code> tests clicks against all interactive objects. On hit, a TWEEN animates both <code>camera.position</code> and <code>controls.target</code> over 1.2 s with <code>Quadratic.InOut</code> easing.</p>
+<p><strong>Preset viewpoints</strong>: Six hardcoded positions (keys 1–6) providing instant access to the full park overview, Ferris wheel close-up, carousel, roller coaster loop, Tagada, and stage.</p>
+<p><strong>First-person view (FPV)</strong>: Pressing C enters FPV mode aboard the nearest ride. The camera is attached to ride-specific nodes (gondola seat, coaster cart, Tagada disc, train cabin, balloon basket) and updated each frame from the node’s world transform. ESC exits FPV with a 0.8 s tween back to the pre-FPV position.</p>
+</section>
+<section id="user-interactions" class="level3">
+<h3 class="anchored" data-anchor-id="user-interactions">6.4 User Interactions</h3>
+<section id="interaction-infrastructure" class="level4">
+<h4 class="anchored" data-anchor-id="interaction-infrastructure">Interaction Infrastructure</h4>
+<p><code>InteractionManager.js</code> maintains a single <code>THREE.Raycaster</code> updated on every <code>pointermove</code> and <code>click</code>. Interactive objects (ride panels, lampposts, stage spotlights, ground) are registered in typed arrays.</p>
+<p><code>ControlPanel.js</code>: Each ride has a 3D in-world panel with a semaphore bulb (red/green) and a lever that tilts when the ride is on.</p>
+<p><code>RideHints.js</code>: Proximity-fade billboard sprites near rides, visible when the camera approaches within a configurable radius.</p>
+<p><code>RideHotbar.js</code>: HTML bar at screen bottom with named buttons — clicking enters FPV for that ride.</p>
+</section>
+<section id="complete-interaction-reference" class="level4">
+<h4 class="anchored" data-anchor-id="complete-interaction-reference">Complete Interaction Reference</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Interaction</th>
+<th>Trigger</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Fly camera to point</td>
+<td>Left-click on ground/ride/scenery</td>
+<td>Raycaster → CameraManager.flyToWorldPoint() TWEEN</td>
+</tr>
+<tr class="even">
+<td>Toggle ride on/off</td>
+<td>Left-click on control panel</td>
+<td>Raycaster → ControlPanel.toggle() → speed ramp TWEEN</td>
+</tr>
+<tr class="odd">
+<td>Toggle lamppost</td>
+<td>Left-click on lamppost</td>
+<td>Raycaster → 3-state cycle (Auto/Manual-off/Manual-on)</td>
+</tr>
+<tr class="even">
+<td>Toggle stage spotlight</td>
+<td>Left-click on stage faretto</td>
+<td>Same 3-state mechanism</td>
+</tr>
+<tr class="odd">
+<td>Adjust ride speed</td>
+<td>Scroll wheel over ride</td>
+<td>speed clamped [0.2×, 1.5×]</td>
+</tr>
+<tr class="even">
+<td>Preset viewpoints 1–6</td>
+<td>Keys 1–6</td>
+<td>CameraManager.flyToPreset(n) TWEEN</td>
+</tr>
+<tr class="odd">
+<td>Enter FPV</td>
+<td>Key C near ride</td>
+<td>CameraManager.enterFPV(closestRide)</td>
+</tr>
+<tr class="even">
+<td>Exit FPV / aim mode</td>
+<td>ESC</td>
+<td>CameraManager.exitFPV() → tween back</td>
+</tr>
+<tr class="odd">
+<td>Pause/resume time</td>
+<td>Space</td>
+<td>Toggle DayNightCycle auto-advance</td>
+</tr>
+<tr class="even">
+<td>Set time of day</td>
+<td>HUD time slider</td>
+<td>DayNightCycle.setHour(value)</td>
+</tr>
+<tr class="odd">
+<td>Change decoration colour</td>
+<td>HUD colour picker</td>
+<td>eventBus.emit → all ride PointLights + emissive mats update</td>
+</tr>
+<tr class="even">
+<td>Shoot (gallery)</td>
+<td>Left-click in pointer-lock</td>
+<td>Raycaster vs targets → score += multiplier</td>
+</tr>
+<tr class="odd">
+<td>Hover cursor</td>
+<td>Mouse move over clickable</td>
+<td>cursor: pointer driven by raycaster</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+</section>
+</section>
+<section id="mapping-to-course-topics" class="level2">
+<h2 class="anchored" data-anchor-id="mapping-to-course-topics">7. Mapping to Course Topics</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Course Topic</th>
+<th>Luna Park Demonstration</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2D/3D Transformations</td>
+<td>Hierarchical scene graph; composed rotation chains (Ferris gondola counter-rotation, Carousel platform+horses, Tagada arm pivot+disc); CatmullRom arc-length parameterisation for coaster cart placement</td>
+</tr>
+<tr class="even">
+<td>Coordinate Systems</td>
+<td>Model-space vs world-space computation in FerrisWheel.js; localToWorld/worldToLocal in rail centreline extraction; NPC bone positions transformed for IK</td>
+</tr>
+<tr class="odd">
+<td>GPU Rendering Pipeline</td>
+<td>Three.js as WebGL 2.0 abstraction; three custom ShaderMaterial shaders (Water, Sky, Fireworks) with hand-written vertex and fragment stages</td>
+</tr>
+<tr class="even">
+<td>Vertex Shaders (GLSL)</td>
+<td>Water: per-vertex sum-of-sine displacement with analytical normals; Sky: translation-free view matrix, forced depth; Fireworks: ballistic integration entirely in vertex shader</td>
+</tr>
+<tr class="odd">
+<td>Fragment Shaders (GLSL)</td>
+<td>Water: caustic noise, Blinn-Phong specular, Fresnel, foam, night tint; Sky: equirectangular UV mapping, HDR crossfade; Fireworks: radial gradient alpha</td>
+</tr>
+<tr class="even">
+<td>Lighting / Shading Models</td>
+<td>Blinn-Phong specular in water shader; MeshStandardMaterial GGX/Trowbridge-Reitz microfacet BRDF; HemisphereLight + DirectionalLight approximation of rendering equation</td>
+</tr>
+<tr class="odd">
+<td>Textures</td>
+<td>PBR maps (albedo, normal, roughness, metalness, AO, emissive); CanvasTexture for procedural textures (carousel canopy); HDR equirectangular for sky and IBL</td>
+</tr>
+<tr class="even">
+<td>Normal Mapping</td>
+<td>Tangent-space normal maps from ambientCG on grass, asphalt, wood; perturbs per-fragment normals for surface micro-detail</td>
+</tr>
+<tr class="odd">
+<td>Shadow Maps</td>
+<td>PCFSoftShadowMap on sun DirectionalLight; 4096×4096 shadow map; orthographic frustum 180×180 world units</td>
+</tr>
+<tr class="even">
+<td>Ray Casting / Picking</td>
+<td>THREE.Raycaster for click-to-fly, panel interaction, lamppost toggle, ride speed scroll; ShootingGallery pointer-lock aim</td>
+</tr>
+<tr class="odd">
+<td>Spline Curves</td>
+<td>CatmullRomCurve3 for coaster track (control points from geometry), train ring track, balloon drift waypoint steering; getPointAt/getTangentAt for arc-length parameterised placement</td>
+</tr>
+<tr class="even">
+<td>Hierarchical Models</td>
+<td>Ferris Wheel (ring → mount → gondola); Carousel (platform → pole → horse); Tagada (base → armPivot → arm → disc → seats); human figure rig</td>
+</tr>
+<tr class="odd">
+<td>Computer Animations</td>
+<td>All ride animations hand-coded in JS: sine-based bobbing, compound oscillation, parallel-transport frame orientation, counter-rotation identity; procedural NPC gait with foot IK</td>
+</tr>
+<tr class="even">
+<td>Particle Systems</td>
+<td>GPU particle fireworks: three burst archetypes, positions integrated in vertex shader using ballistic equations</td>
+</tr>
+<tr class="odd">
+<td>Procedural Geometry</td>
+<td>Tagada built entirely from primitives; carousel platform and poles; river surface mesh (320×16 grid); fence string-light points</td>
+</tr>
+<tr class="even">
+<td>IBL / Environment Maps</td>
+<td>PMREM maps from four HDR presets; scene.environment for specular IBL on all MeshStandardMaterial surfaces</td>
+</tr>
+<tr class="odd">
+<td>Post-Processing</td>
+<td>UnrealBloomPass (threshold 1.5, strength 0.35) for selective glow; ACESFilmicToneMapping for HDR-to-display mapping</td>
+</tr>
+<tr class="even">
+<td>Pathfinding / Spatial Algorithms</td>
+<td>A* on NavGrid occupancy grid; string-pulling for path smoothing; analytic two-bone leg IK</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+<section id="user-manual" class="level2">
+<h2 class="anchored" data-anchor-id="user-manual">8. User Manual</h2>
+<section id="running-the-project" class="level3">
+<h3 class="anchored" data-anchor-id="running-the-project">8.1 Running the Project</h3>
+<p><strong>Requirements</strong>: A modern browser with WebGL 2.0 support (Chrome 80+, Firefox 78+, Edge 80+, Safari 15+).</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> <span class="at">-m</span> http.server 8080</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="co"># then open http://localhost:8080</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<blockquote class="blockquote">
+<p>The project must be served over HTTP/HTTPS — <code>file://</code> URLs will fail due to CORS restrictions on ES module imports.</p>
+</blockquote>
+</section>
+<section id="complete-controls-reference" class="level3">
+<h3 class="anchored" data-anchor-id="complete-controls-reference">8.2 Complete Controls Reference</h3>
+<section id="camera-navigation" class="level4">
+<h4 class="anchored" data-anchor-id="camera-navigation">Camera Navigation</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Left-click on ground/ride/object</td>
+<td>Fly camera smoothly to that point (1.2 s)</td>
+</tr>
+<tr class="even">
+<td>Left drag (hold)</td>
+<td>Orbit camera around target</td>
+</tr>
+<tr class="odd">
+<td>Right drag</td>
+<td>Pan camera</td>
+</tr>
+<tr class="even">
+<td>Scroll wheel (not over ride)</td>
+<td>Zoom in/out</td>
+</tr>
+<tr class="odd">
+<td>Key 1</td>
+<td>Overview: bird’s-eye view of entire park</td>
+</tr>
+<tr class="even">
+<td>Key 2</td>
+<td>Ferris Wheel close-up</td>
+</tr>
+<tr class="odd">
+<td>Key 3</td>
+<td>Carousel close-up</td>
+</tr>
+<tr class="even">
+<td>Key 4</td>
+<td>Roller Coaster — full loop visible</td>
+</tr>
+<tr class="odd">
+<td>Key 5</td>
+<td>Tagada close-up</td>
+</tr>
+<tr class="even">
+<td>Key 6</td>
+<td>Stage close-up</td>
+</tr>
+<tr class="odd">
+<td>Key C</td>
+<td>Enter first-person view (FPV) aboard nearest ride</td>
+</tr>
+<tr class="even">
+<td>ESC</td>
+<td>Exit FPV or shooting gallery aim mode</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="rides-1" class="level4">
+<h4 class="anchored" data-anchor-id="rides-1">Rides</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Left-click on ride’s control panel</td>
+<td>Start/stop that ride (speed eases in/out)</td>
+</tr>
+<tr class="even">
+<td>Scroll wheel while hovering over ride</td>
+<td>Adjust ride speed (range: 0.2× – 1.5×)</td>
+</tr>
+<tr class="odd">
+<td>Bottom hotbar buttons</td>
+<td>Enter FPV mode for the labelled ride directly</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="lighting-and-environment" class="level4">
+<h4 class="anchored" data-anchor-id="lighting-and-environment">Lighting and Environment</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Left-click on lamppost</td>
+<td>Toggle lamppost (3 states: Auto/Manual-off/Manual-on)</td>
+</tr>
+<tr class="even">
+<td>Left-click on stage spotlight</td>
+<td>Toggle spotlight (same 3-state cycle)</td>
+</tr>
+<tr class="odd">
+<td>Space</td>
+<td>Pause/resume day/night auto-advance</td>
+</tr>
+<tr class="even">
+<td>Time slider (HUD)</td>
+<td>Set time of day (0–24 h)</td>
+</tr>
+<tr class="odd">
+<td>Colour picker (HUD)</td>
+<td>Change colour of all ride decoration lights</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="shooting-gallery" class="level4">
+<h4 class="anchored" data-anchor-id="shooting-gallery">Shooting Gallery</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Left-click on shooting booth</td>
+<td>Enter FPV aim mode (pointer lock)</td>
+</tr>
+<tr class="even">
+<td>Mouse movement (in aim mode)</td>
+<td>Rotate aim reticle</td>
+</tr>
+<tr class="odd">
+<td>Left-click (in aim mode)</td>
+<td>Shoot — hit targets score points</td>
+</tr>
+<tr class="even">
+<td>ESC (in aim mode)</td>
+<td>Exit shooting gallery</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="hud-overview" class="level3">
+<h3 class="anchored" data-anchor-id="hud-overview">8.3 HUD Overview</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Element</th>
+<th>Location</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Time arc</td>
+<td>Top-right</td>
+<td>Semicircular arc showing sun/moon position</td>
+</tr>
+<tr class="even">
+<td>Digital clock</td>
+<td>Top-right</td>
+<td>Current in-game time as HH:MM</td>
+</tr>
+<tr class="odd">
+<td>Time slider</td>
+<td>Top-right</td>
+<td>Drag to manually set the hour</td>
+</tr>
+<tr class="even">
+<td>Auto-advance toggle</td>
+<td>Top-right</td>
+<td>Button to pause/resume automatic time</td>
+</tr>
+<tr class="odd">
+<td>FPS counter</td>
+<td>Bottom-right</td>
+<td>Real-time frames-per-second display</td>
+</tr>
+<tr class="even">
+<td>Colour picker</td>
+<td>Left panel</td>
+<td>Changes emissive colour of all ride bulbs</td>
+</tr>
+<tr class="odd">
+<td>Ride hotbar</td>
+<td>Bottom centre</td>
+<td>Row of buttons to enter FPV per ride</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="usage-tips" class="level3">
+<h3 class="anchored" data-anchor-id="usage-tips">8.4 Usage Tips</h3>
+<ol type="1">
+<li>Start with key <strong>1</strong> to see the entire park from above.</li>
+<li>Set time to <strong>21–22</strong> to activate night fireworks and night lighting.</li>
+<li>Click a <strong>control panel</strong> to start a ride, then press <strong>C</strong> for FPV.</li>
+<li>Use the <strong>colour picker at night</strong> with rides running for the best visual effect.</li>
+<li>Press <strong>Space</strong> to freeze time and inspect a specific lighting condition.</li>
+<li><strong>Scroll over a ride</strong> to slow it down for a closer look at animations.</li>
+</ol>
+<hr>
+</section>
+</section>
+<section id="performance-notes" class="level2">
+<h2 class="anchored" data-anchor-id="performance-notes">9. Performance Notes</h2>
+<section id="a.1-expected-frame-rate" class="level3">
+<h3 class="anchored" data-anchor-id="a.1-expected-frame-rate">A.1 Expected Frame Rate</h3>
+<p>Tests on a MacBook Pro M2 Pro:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Scene Condition</th>
+<th>Approximate FPS</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Daytime, all rides stopped, overview</td>
+<td>~60 FPS</td>
+</tr>
+<tr class="even">
+<td>Daytime, all rides running</td>
+<td>~60 FPS</td>
+</tr>
+<tr class="odd">
+<td>Night, all rides running, lampposts on</td>
+<td>~55–60 FPS</td>
+</tr>
+<tr class="even">
+<td>Night, all rides running, fireworks active</td>
+<td>~50–60 FPS</td>
+</tr>
+<tr class="odd">
+<td>FPV inside roller coaster</td>
+<td>~60 FPS</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="a.2-draw-call-budget" class="level3">
+<h3 class="anchored" data-anchor-id="a.2-draw-call-budget">A.2 Draw Call Budget</h3>
+<p>Three.js issues approximately <strong>200–400 draw calls</strong> per frame. Main contributors: GLB ride models (40–80), NPC meshes (50), environment props (60–100), custom shader materials (3), shadow map pass (+100–200).</p>
+</section>
+<section id="a.3-triangle-budget" class="level3">
+<h3 class="anchored" data-anchor-id="a.3-triangle-budget">A.3 Triangle Budget</h3>
+<p>Approximately <strong>355,000 triangles</strong> total (roller coaster GLB: ~120k, Ferris wheel: ~40k, NPC visitors: ~50k, carousel horses: ~20k, environment: ~80k, procedural geometry: ~30k).</p>
+</section>
+<section id="a.4-gpu-bottlenecks" class="level3">
+<h3 class="anchored" data-anchor-id="a.4-gpu-bottlenecks">A.4 GPU Bottlenecks</h3>
+<ul>
+<li><strong>PCF shadow map (4096²)</strong> : ~64 MB. Main GPU memory consumer.</li>
+<li><strong>UnrealBloomPass</strong>: Two full-resolution Gaussian blur passes + composite.</li>
+<li><strong>Water shader</strong>: 5,120 quads (30,720 vertices) with 4 sine-wave evaluations per vertex.</li>
+<li><strong>Fireworks GPU particles</strong>: ~300 particles per burst, short-lived (&lt;3 s).</li>
+</ul>
+</section>
+<section id="a.5-gpu-memory-estimate" class="level3">
+<h3 class="anchored" data-anchor-id="a.5-gpu-memory-estimate">A.5 GPU Memory Estimate</h3>
+<p>Approximately <strong>272 MB</strong> total (4 HDR textures: ~128 MB, shadow map: ~64 MB, PBR textures: ~30 MB, GLB geometry: ~20 MB, framebuffer + bloom targets: ~30 MB).</p>
+<hr>
+<p><em>End of Report</em></p>
+</section>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
