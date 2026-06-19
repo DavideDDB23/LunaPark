@@ -123,57 +123,174 @@ export async function buildFence() {
   fenceLights.name = 'fenceLights';
   group.add(fenceLights);
 
-  const lightGeo = new THREE.SphereGeometry(0.175, 10, 10);
+  // 1940 wire segments, 258 bulbs max
+  const wireGeo = new THREE.CylinderGeometry(0.012, 0.012, 1.0, 5);
+  const wireMat = new THREE.MeshStandardMaterial({
+    color: 0x151515,
+    roughness: 0.8,
+    metalness: 0.2
+  });
+  const wireInst = new THREE.InstancedMesh(wireGeo, wireMat, 1940);
+  wireInst.castShadow = true;
+  group.add(wireInst);
 
-  for (let i = 0; i < count; i += 2) {
-    const t = start + i * SEG_LEN;
+  const socketGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.1, 6);
+  const socketMat = new THREE.MeshStandardMaterial({
+    color: 0x222222,
+    roughness: 0.7,
+    metalness: 0.2
+  });
+  const socketInst = new THREE.InstancedMesh(socketGeo, socketMat, 258);
+  socketInst.castShadow = true;
+  group.add(socketInst);
 
-    const northMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
-    const nl = new THREE.Mesh(lightGeo, northMat);
-    nl.position.set(t, fenceTop, -HALF);
-    fenceLights.add(nl);
+  const lightGeo = new THREE.SphereGeometry(0.075, 8, 8);
+  const bulbs = [];
 
-    const eastMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
-    const el = new THREE.Mesh(lightGeo, eastMat);
-    el.position.set(HALF, fenceTop, t);
-    fenceLights.add(el);
+  // Helper variables for placing cylinders in 3D
+  const _dir = new THREE.Vector3();
+  const _mid = new THREE.Vector3();
+  const _up = new THREE.Vector3(0, 1, 0);
+  const _q = new THREE.Quaternion();
+  const _sc = new THREE.Vector3();
+  const _m = new THREE.Matrix4();
 
-    const westMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
-    const wl = new THREE.Mesh(lightGeo, westMat);
-    wl.position.set(-HALF, fenceTop, t);
-    fenceLights.add(wl);
+  function placeCylinderBetween(instMesh, idx, p1, p2, radius) {
+    _dir.subVectors(p2, p1);
+    const len = _dir.length();
+    _dir.normalize();
 
-    if (Math.abs(t) >= 12) {
-      const southMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xffaa44, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.1 });
-      const sl = new THREE.Mesh(lightGeo, southMat);
-      sl.position.set(t, fenceTop, HALF);
-      fenceLights.add(sl);
+    _mid.addVectors(p1, p2).multiplyScalar(0.5);
+    _q.setFromUnitVectors(_up, _dir);
+    _sc.set(radius, len, radius);
+
+    _m.compose(_mid, _q, _sc);
+    instMesh.setMatrixAt(idx, _m);
+  }
+
+  function getPointAt(wallType, s, constantVal) {
+    // Each segment is 4 units wide. Find local t ∈ [0, 1] relative to left post.
+    const pLeft = Math.floor(s / 4.0) * 4.0;
+    const t_local = (s - pLeft) / 4.0;
+
+    // Hanging sine wave (0 at posts, 1 at peak sag in center)
+    const wave = Math.sin(t_local * Math.PI);
+
+    // Dynamic sag varying per loop + noise, scaled by wave to attach perfectly to posts
+    const sag = 0.35 + 0.1 * Math.sin(s * 0.15);
+    const noise = 0.03 * Math.sin(s * 1.7) + 0.015 * Math.cos(s * 3.1);
+    const y = fenceTop - (sag + noise) * wave;
+
+    // Horizontal sway, also scaled by wave to connect exactly on posts
+    const sway = (0.05 * Math.sin(s * 0.9) + 0.02 * Math.cos(s * 2.3)) * wave;
+
+    const pt = new THREE.Vector3();
+    if (wallType === 'north' || wallType === 'south1' || wallType === 'south2') {
+      pt.set(s, y, constantVal + sway);
+    } else {
+      pt.set(constantVal + sway, y, s);
+    }
+    return pt;
+  }
+
+  let wireIdx = 0;
+  let socketIdx = 0;
+  const fenceColor = new THREE.Color(0xffaa44);
+
+  function createWallLights(wallType, sStart, sEnd, constantVal) {
+    const length = Math.abs(sEnd - sStart);
+
+    // 1. Generate wire segments
+    const wireStep = 0.4;
+    const numSteps = Math.ceil(length / wireStep);
+    for (let i = 0; i < numSteps; i++) {
+      const s1 = sStart + i * (length / numSteps);
+      const s2 = sStart + (i + 1) * (length / numSteps);
+      const p1 = getPointAt(wallType, s1, constantVal);
+      const p2 = getPointAt(wallType, s2, constantVal);
+      
+      placeCylinderBetween(wireInst, wireIdx++, p1, p2, 1.0);
+    }
+
+    // 2. Generate bulbs
+    const bulbSpacing = 3.0;
+    const numBulbs = Math.floor(length / bulbSpacing);
+    for (let i = 0; i < numBulbs; i++) {
+      const s = sStart + (i + 0.5) * (length / numBulbs) + 0.3 * Math.sin(i * 2.3);
+      const sClamped = Math.max(sStart + 0.2, Math.min(sEnd - 0.2, s));
+      const p = getPointAt(wallType, sClamped, constantVal);
+
+      // Place socket
+      const sm = new THREE.Matrix4();
+      const sp = new THREE.Vector3(p.x, p.y - 0.05, p.z);
+      const sq = new THREE.Quaternion();
+      const ss = new THREE.Vector3(1, 1, 1);
+      sm.compose(sp, sq, ss);
+      socketInst.setMatrixAt(socketIdx++, sm);
+
+      // Place bulb
+      const bulbMat = new THREE.MeshStandardMaterial({
+        color: fenceColor,
+        emissive: fenceColor,
+        emissiveIntensity: 0.0,
+        roughness: 0.5,
+        metalness: 0.1
+      });
+      const bulbMesh = new THREE.Mesh(lightGeo, bulbMat);
+      bulbMesh.position.set(p.x, p.y - 0.12, p.z);
+      fenceLights.add(bulbMesh);
+
+      bulbs.push({
+        mat: bulbMat,
+        phase: i * 0.7
+      });
     }
   }
 
-  const fenceColor = new THREE.Color(0xffaa44);
+  // 1. North Wall: x goes from -HALF to HALF
+  createWallLights('north', -HALF, HALF, -HALF);
+
+  // 2. East Wall: z goes from -HALF to HALF
+  createWallLights('east', -HALF, HALF, HALF);
+
+  // 3. West Wall: z goes from -HALF to HALF
+  createWallLights('west', -HALF, HALF, -HALF);
+
+  // 4. South Wall Part 1: x goes from 12 to HALF
+  createWallLights('south1', 12, HALF, HALF);
+
+  // 5. South Wall Part 2: x goes from -HALF to -12
+  createWallLights('south2', -HALF, -12, HALF);
+
+  wireInst.count = wireIdx;
+  wireInst.instanceMatrix.needsUpdate = true;
+
+  socketInst.count = socketIdx;
+  socketInst.instanceMatrix.needsUpdate = true;
+
   eventBus.on('color-change', (hex) => {
     const target = new THREE.Color(hex);
     new TWEEN.Tween(fenceColor)
       .to(target, 500)
       .easing(Easings.COLOR)
       .onUpdate(() => {
-        const bulbs = fenceLights.children;
-        for (let i = 0; i < bulbs.length; i++) {
-          const b = bulbs[i];
-          b.material.color.copy(fenceColor);
-          b.material.emissive.copy(fenceColor);
+        for (const b of bulbs) {
+          b.mat.color.copy(fenceColor);
+          b.mat.emissive.copy(fenceColor);
         }
       })
       .start();
   });
 
+  let nightMix = 0;
+
   group.userData.tick = (delta, time) => {
     const night = isNightNow(group);
-    const bulbs = fenceLights.children;
-    for (let i = 0; i < bulbs.length; i++) {
-      const b = bulbs[i];
-      b.material.opacity = night ? 0.5 + 0.5 * Math.sin(time * 2 + i) : 0;
+    nightMix += ((night ? 1.0 : 0.0) - nightMix) * (1.0 - Math.exp(-3.0 * delta));
+
+    for (const b of bulbs) {
+      const twinkle = 0.5 + 1.5 * Math.sin(time * 3.0 + b.phase);
+      b.mat.emissiveIntensity = nightMix * twinkle * 2.5;
     }
   };
 
