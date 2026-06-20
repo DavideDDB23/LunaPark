@@ -461,7 +461,8 @@ async function init() {
   const helpOverlay = document.getElementById('helpOverlay');
   const helpOverlayClose = document.getElementById('helpOverlayClose');
   if (helpToggleBtn && helpOverlay) {
-    helpToggleBtn.addEventListener('click', () => {
+    helpToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       helpOverlay.classList.toggle('open');
     });
     if (helpOverlayClose) {
