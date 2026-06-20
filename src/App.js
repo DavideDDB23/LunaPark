@@ -446,6 +446,17 @@ async function init() {
     }
   });
 
+  const speedBtn = document.getElementById('speedBtn');
+  const speedPanel = document.getElementById('speedPanel');
+  if (speedBtn && speedPanel) {
+    const speedIcon = speedBtn.querySelector('.accordion-icon');
+    speedBtn.addEventListener('click', () => {
+      const open = speedPanel.style.display !== 'none';
+      speedPanel.style.display = open ? 'none' : 'block';
+      speedIcon.textContent = open ? '+' : '−';
+    });
+  }
+
   const helpBtn = document.getElementById('helpBtn');
   const helpPanel = document.getElementById('helpPanel');
   if (helpBtn && helpPanel) {
@@ -453,7 +464,7 @@ async function init() {
     helpBtn.addEventListener('click', () => {
       const open = helpPanel.style.display !== 'none';
       helpPanel.style.display = open ? 'none' : 'block';
-      if (helpIcon) helpIcon.textContent = open ? '+' : '−';
+      helpIcon.textContent = open ? '+' : '−';
     });
   }
 

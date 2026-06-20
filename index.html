@@ -341,41 +341,41 @@
       line-height: 1;
     }
 
-    #helpPanel {
-      display: flex !important; /* Force display flex to override inline style */
+    #speedPanel, #helpPanel {
+      display: flex !important;
       flex-direction: column;
-      gap: 12px;
       padding-right: 4px;
-      
-      /* Closed state by default */
+
       max-height: 0;
       opacity: 0;
       margin-top: 0;
       overflow: hidden;
       pointer-events: none;
-      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
-                  opacity 0.2s ease, 
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.2s ease,
                   margin-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    /* Open state when inline style contains "display: block" */
-    #helpPanel[style*="display: block"] {
-      max-height: 200px;
+    #speedPanel { gap: 4px; }
+    #helpPanel  { gap: 12px; }
+
+    #speedPanel[style*="display: block"], #helpPanel[style*="display: block"] {
+      max-height: 300px;
       opacity: 1;
       margin-top: 10px;
       pointer-events: auto;
       overflow-y: auto;
     }
-    #helpPanel::-webkit-scrollbar {
+    #speedPanel::-webkit-scrollbar, #helpPanel::-webkit-scrollbar {
       width: 4px;
     }
-    #helpPanel::-webkit-scrollbar-track {
+    #speedPanel::-webkit-scrollbar-track, #helpPanel::-webkit-scrollbar-track {
       background: transparent;
     }
-    #helpPanel::-webkit-scrollbar-thumb {
+    #speedPanel::-webkit-scrollbar-thumb, #helpPanel::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.15);
       border-radius: 4px;
     }
-    #helpPanel::-webkit-scrollbar-thumb:hover {
+    #speedPanel::-webkit-scrollbar-thumb:hover, #helpPanel::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 160, 28, 0.5);
     }
     .help-section {
@@ -690,6 +690,31 @@
 
       <div class="hud-footer">
         <div class="accordion-item">
+          <button id="speedBtn" class="accordion-header">
+            <span>Ride Speed</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div id="speedPanel" style="display: none;">
+            <div class="hud-controls-grid" id="rideSpeeds">
+              <label>Sky Wheel:</label>
+              <input data-ride="ferrisWheel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+              <span class="control-value ride-speed-val">1.00</span>
+              <label>Carousel:</label>
+              <input data-ride="carousel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+              <span class="control-value ride-speed-val">1.00</span>
+              <label>Tagada:</label>
+              <input data-ride="tagada" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+              <span class="control-value ride-speed-val">1.00</span>
+              <label>Twister:</label>
+              <input data-ride="coaster" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+              <span class="control-value ride-speed-val">1.00</span>
+              <label>Railway:</label>
+              <input data-ride="train" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+              <span class="control-value ride-speed-val">1.00</span>
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item">
           <button id="helpBtn" class="accordion-header">
             <span>Help & Keybindings</span>
             <span class="accordion-icon">+</span>
@@ -715,26 +740,6 @@
                 <li><kbd>F</kbd>: Launch Fireworks Show</li>
                 <li><kbd>ESC</kbd>: Exit Active View</li>
               </ul>
-            </div>
-            <div class="help-section">
-              <strong>Ride Speed</strong>
-              <div class="hud-controls-grid" id="rideSpeeds" style="margin-top:6px;">
-                <label>Sky Wheel:</label>
-                <input data-ride="ferrisWheel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-                <span class="control-value ride-speed-val">1.00</span>
-                <label>Carousel:</label>
-                <input data-ride="carousel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-                <span class="control-value ride-speed-val">1.00</span>
-                <label>Tagada:</label>
-                <input data-ride="tagada" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-                <span class="control-value ride-speed-val">1.00</span>
-                <label>Twister:</label>
-                <input data-ride="coaster" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-                <span class="control-value ride-speed-val">1.00</span>
-                <label>Railway:</label>
-                <input data-ride="train" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-                <span class="control-value ride-speed-val">1.00</span>
-              </div>
             </div>
           </div>
         </div>
