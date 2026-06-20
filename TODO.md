@@ -154,18 +154,15 @@ A heads-up display showing the current time of day. Already partially designed �
 
 ## 🔴 NIGHT LIGHTING
 
-The night scene is too dark between attractions — needs ambient fill and moonlight.
-
-- [x] **Moonlight**: add blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity ~0.05–0.1 ✅ (intensity 0.40, `DayNightCycle.js:96-99`)
-- [x] **Night hemisphere fill**: raise hemisphere intensity 0.22 → ~0.35 at night ✅ (`DayNightCycle.js:102`, night = 0.35)
-- [x] **Exposure**: raise night tone-mapping 0.36 → ~0.45–0.50 ✅ (night = 0.48, `DayNightCycle.js:117`)
-- [x] **Background/environment intensity**: raise at night for sky/reflections ✅ (bg=0.34, env=0.42)
-- [x] **Path spotlights**: add 2–4 spotlights at key path intersections ✅ (6 spotlights in `PathLights.js`)
-- [x] **Lamppost radius**: increase 70 → ~90 for better coverage overlap ✅ (distance=90 in `Lampposts.js:120`)
-- [x] **Water night tint**: brighten river shader night color so it's visible after dark ✅ (`uNight` uniform in `Water.js`)
-- [x] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist. (Implemented via 3-state click cycle: Auto -> Manual opposite state -> Manual matching state -> Auto, with confirmation blink)
-- [x] ~~**Test**: add layer 0 to ride lights — already tried, too much lag~~ ❌ Discarded
-- [x] **Illuminare la recinzione perimetrale**: aggiungere lampioni aggiuntivi lungo il perimetro o fili di luci (puntiformi/emissive) sulla recinzione per renderla visibile di notte ✅ **Fatto: string lights emissive lungo la fence**
+- [x] **Moonlight**: blue `DirectionalLight` (`0x4466aa`) opposite the sun, intensity 6.0 at zenith ✅ (`DayNightCycle.js:117`)
+- [x] **Night hemisphere fill**: intensity baseline 1.20, sky `0x6a8aba` / ground `0x3a3a4a` ✅
+- [x] **Tone mapping exposure**: night min 0.80, smoothstep to 1.0 by day ✅
+- [x] **Background intensity**: night min 0.65 ✅
+- [x] **Environment intensity**: night min 0.75 ✅
+- [x] **Lamppost radius**: distance=90 for coverage overlap ✅ (`Lampposts.js`)
+- [x] **Water night tint**: `uNight` uniform in `Water.js` brightens river at night ✅
+- [x] **Fix spotlight toggle in auto time mode**: 3-state click cycle (Auto → Manual opposite → Manual matching → Auto) ✅
+- [x] **Fence string lights**: emissive bulbs along perimeter fence, day/night + color picker aware ✅
 
 ---
 
@@ -178,6 +175,12 @@ A small HUD panel overlaid on the scene with:
 - [x] "?" help button that opens a list of all keyboard/mouse controls
 - [x] Auto day/night toggle button
 - [x] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency) ✅
+
+---
+
+## 🔴 RIVER NIGHT GLOW
+
+- [ ] River shader: di notte brilla di luce propria (troppo riflettente/luminosa con l'aumento della luce ambientale e lunare) — rivedere uniformi `uNight`/`uSunDir` in `Water.js`
 
 ---
 
@@ -298,10 +301,10 @@ The examiner will ask you to demo the project live and then ask technical questi
 [ ] Technical report PDF (luna_park_report.pdf) — NOT STARTED
 [ ] Stage: add visible support poles for the cyan/magenta volumetric beams (currently floating at y=14)
 [ ] Roller coaster: evaluate moving the stop to the short straight low-to-ground track section (currently at computed uCar station)
-[ ] Shooting gallery: replace booth GLB with a different model
+[ ] Shooting gallery: replace booth GLB + fix yaw lock
+[ ] River night glow: water shader too bright at night after ambient boost
 [ ] Deploy GitHub Pages + test live URL
-[ ] Add external landscape / scenery around the park perimeter (REPLACE 3D with image)
-[ ] Fence lights: make them follow the color picker (currently hardcoded yellow/orange)
+[ ] Add external landscape / scenery around the park perimeter
 [ ] Submission formalities (email, tag, check)
 [ ] Oral exam prep + backup video
 ```
