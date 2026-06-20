@@ -35,7 +35,6 @@ TODO_files/
 tests/out/
 
 # Generated report build artifacts (from docs/report/report.qmd)
-docs/report/report.pdf
 docs/report/REPORT.html
 docs/report/REPORT_files/
 
