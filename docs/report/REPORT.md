@@ -676,7 +676,7 @@ python3 -m http.server 8080
 | Input | Action |
 |---|---|
 | Left-click on ride's control panel | Start/stop that ride (speed eases in/out) |
-| Scroll wheel while hovering over ride | Adjust ride speed (range: 0.2× – 1.5×) |
+| HUD ride speed sliders | Adjust ride speed (range: 0.2× – 1.5×) |
 | Bottom hotbar buttons | Enter FPV mode for the labelled ride directly |
 
 #### Lighting and Environment
@@ -693,7 +693,7 @@ python3 -m http.server 8080
 
 | Input | Action |
 |---|---|
-| Left-click on shooting booth | Enter FPV aim mode (pointer lock) |
+| Key T (near shooting booth) | Enter FPV aim mode (pointer lock) |
 | Mouse movement (in aim mode) | Rotate aim reticle |
 | Left-click (in aim mode) | Shoot — hit targets score points |
 | ESC (in aim mode) | Exit shooting gallery |
