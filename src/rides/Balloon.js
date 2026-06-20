@@ -53,8 +53,8 @@ const BALLOON_ZONES = [
   { cx: 0, cz: -32, hw: 14, hd: 10, baseY: 50, minY: 44 },
 ];
 
-// 2D value noise: hash deterministico + interpolazione smoothstep.
-// Restituisce valori in [-1, 1], continuo nello spazio (x,y).
+// 2D value noise: deterministic hash + smoothstep interpolation.
+// Returns values in [-1, 1], continuous in space (x,y).
 function hash2D(ix, iy) {
   let h = ix * 374761393 + iy * 668265263;
   h = (h ^ (h >>> 13)) * 1274126177;
@@ -264,7 +264,7 @@ function buildOneBalloon(model, index) {
     // Cruise speed scaled by wind: 1.5 units/s at wind=1
     const ws = 0.4 + windSpeed * 0.8;
     const speed = 1.5 * ws * ease;
-    const MAX_OMEGA = 0.5; // rad/s — raggio di curvatura minimo = speed/MAX_OMEGA ≈ 3 unità
+    const MAX_OMEGA = 0.5; // rad/s — minimum radius of curvature = speed/MAX_OMEGA ≈ 3 units
 
     // Distance from the zone centre (used to bias the balloon back toward home)
     const fromCenterX = b.position.x - zone.cx;
@@ -314,11 +314,11 @@ function buildOneBalloon(model, index) {
     b.userData.headingX = newHx;
     b.userData.headingZ = newHz;
 
-    // Avanza nella direzione del heading
+    // Advances in the direction of the heading
     b.position.x += b.userData.headingX * speed * delta;
     b.position.z += b.userData.headingZ * speed * delta;
 
-    // Y: oscillazione lenta fissa + jitter leggero scalato dal vento
+    // Y: slow fixed oscillation + light jitter scaled by wind
     const yJitter = noise2D(time * 0.2, index * 50) * 0.5 * ws;
     b.position.y = Math.max(zone.minY, baseY + Math.sin(time * 0.3 + index) * 1.5 + yJitter);
     b.rotation.z = Math.sin(time * 0.5 + windSpeed + index) * 0.08;

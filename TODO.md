@@ -79,11 +79,11 @@ Each ride has a small 3D control panel placed next to it.
 - [x] Clicking a panel starts or stops its ride
 - [x] Starting a ride: speed eases in gradually over ~1.5 seconds
 - [x] Stopping a ride: speed eases out gradually over ~2 seconds
-- [x] **Verificare e unificare i tempi di RAMP_UP/RAMP_DOWN** in tutti i pannelli. Attualmente:
+- [x] **Verify and unify RAMP_UP/RAMP_DOWN times** across all panels. Currently:
   - `ControlPanel.js` default: 0.5s up, 0.5s down
-  - `Train.js`: passa `rampUp: 1.5, rampDown: 2.0` ✅
-  - `FerrisWheel.js`: dichiara `RAMP_UP=1.5, RAMP_DOWN=2.0` ma **NON** li passa al costruttore — usa i default 0.5s (bug!) ✅ **FIXED**
-  - `Coaster.js`, `Tagada.js`, `Carousel.js`: usano i default 0.5s — deciso di lasciare 0.5s per coerenza col comportamento rapido di toggle
+  - `Train.js`: passes `rampUp: 1.5, rampDown: 2.0` ✅
+  - `FerrisWheel.js`: declares `RAMP_UP=1.5, RAMP_DOWN=2.0` but does **NOT** pass them to the constructor — uses defaults 0.5s (bug!) ✅ **FIXED**
+  - `Coaster.js`, `Tagada.js`, `Carousel.js`: use defaults 0.5s — decided to keep 0.5s for consistency with fast toggle behavior
 
 ---
 
@@ -134,9 +134,9 @@ A heads-up display showing the current time of day. Already partially designed �
 
 ## 🔴 NPC MODEL CLEANUP
 
-- [ ] **Rimuovere modelli che camminano storti all'indietro** — priorità massima
+- [ ] **Remove models walking crookedly backwards** — high priority
 - [ ] **Rimuovere modelli con caschetto da lavoro** — modifica semplice (cambio outfit/colore)
-- [ ] **Rimuovere modelli che danno problemi con le sedute delle giostre** — priorità più bassa
+- [ ] **Remove models causing seating issues on rides** — low priority
 
 ---
 
@@ -169,7 +169,7 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] **Water night tint**: `uNight` uniform in `Water.js` brightens river at night ✅
 - [x] **Fix spotlight toggle in auto time mode**: 3-state click cycle (Auto → Manual opposite → Manual matching → Auto) ✅
 - [x] **Fence string lights**: emissive bulbs along perimeter fence, day/night + color picker aware ✅
-- [ ] **Water night tint**: fiume troppo luminoso, sembra emettere luce propria (diminuire o aggiungere faretti su fondale/sponde)
+- [ ] **Water night tint**: river too bright, seems self-luminous (diminish or add spotlights on bed/shores)
 
 ---
 
@@ -260,7 +260,7 @@ The report is submitted alongside the code. Sections required:
 - [x] **Improve structure**: currently all procedural (BoxGeometry/CylinderGeometry) — find a GLB model of a carnival shooting booth (loaded stylized booth GLB and programmatically hid sign text)
 - [x] **Implement shooting mode**: the pointer-lock aim system already exists (`ShootingGallery.js`) — verify it works correctly and improve the experience (implemented smooth FPV flight transition, pointer lock camera rotation, custom HUD overlays, Option A moving targets with distance multipliers, and physical pendulum spin damping animation)
 - [ ] **Replace booth GLB**: find/import a different carnival booth model to replace `stylized_carnival_booth.glb`
-- [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). ❌ **Reverted (approccio iniziale non riuscito bene — da rifare con approccio diverso: lock yaw a `euler.y` finché non esce da aim mode)**
+- [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). ❌ **Reverted (initial approach failed — rewrite with different approach: lock yaw to `euler.y` until exiting aim mode)**
 
 ---
 
@@ -274,7 +274,7 @@ The report is submitted alongside the code. Sections required:
 - [ ] `luna_park_report.pdf` committed in the repository root
 - [ ] **Browser console check**: open the live page and check for any JS warnings/errors, leftover `console.log`, or dead code paths — cleanup before submission
 - [ ] No `node_modules` or build artifacts in the repository
-- [x] Remove leftover `test_coaster.js` from repository root ✅ **RIMOSSO**
+- [x] Remove leftover `test_coaster.js` from repository root ✅ **REMOVED**
 
 ---
 
