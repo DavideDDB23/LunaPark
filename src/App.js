@@ -625,7 +625,7 @@ async function init() {
 
   Object.assign(world, {
     river, vegetation, visitors, stage, ferrisWheel, carousel, tagada, coaster,
-    lamps, stalls, fireworks, balloons, train, shootingGallery,
+    lamps, stalls, fireworks, balloons, train, shootingGallery, fence,
     gate: environmentGroup.getObjectByName('entranceGate'),
     timeInput: document.getElementById('timeOfDay'),
     timeVal: document.getElementById('timeVal'),
@@ -698,6 +698,7 @@ function animate() {
 
   if (cameraManager) cameraManager.tick(delta);
   if (world.lamps?.userData.tick) world.lamps.userData.tick(delta, time);
+  if (world.fence?.userData.tick) world.fence.userData.tick(delta, time);
 
   composer.render();
 
