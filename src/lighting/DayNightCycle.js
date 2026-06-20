@@ -114,10 +114,10 @@ export class DayNightCycle {
     const moonHeight = Math.max(0, -sunY); // moon rises as the sun sets
     this.moon.position.set(-sunX * distance, Math.max(0.05, moonHeight) * distance, -sunZ * distance);
     this.moon.target.position.set(0, 0, 0);
-    this.moon.intensity = THREE.MathUtils.smoothstep(moonHeight, 0.0, 0.3) * 1.0;
+    this.moon.intensity = THREE.MathUtils.smoothstep(moonHeight, 0.0, 0.3) * 6.0;
 
     // ── Hemisphere fill ───────────────────────────────────────────
-    this.hemi.intensity = 0.60 + 0.50 * sunHeight;
+    this.hemi.intensity = 1.20 + 0.50 * sunHeight;
     const twilight = Math.pow(1.0 - Math.min(1.0, sunHeight * 2.0), 2.0) * (sunY > -0.05 ? 1 : 0);
     if (sunHeight > 0.1) {
       this.hemi.color.setHex(0x87ceeb);
@@ -126,19 +126,19 @@ export class DayNightCycle {
       this.hemi.color.setHex(0xff9970);
       this.hemi.groundColor.setHex(0x3a2a1f);
     } else {
-      this.hemi.color.setHex(0x2a3a64);
-      this.hemi.groundColor.setHex(0x12121f);
+      this.hemi.color.setHex(0x6a8aba);
+      this.hemi.groundColor.setHex(0x3a3a4a);
     }
 
     // ── Tone-mapping exposure and HDR background intensity ────────
     // Keep the HDR's beautiful look but dim it at night, keeping it legible.
-    const exposure = THREE.MathUtils.lerp(0.48, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.4));
+    const exposure = THREE.MathUtils.lerp(0.80, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.4));
     this.renderer.toneMappingExposure = exposure;
 
-    const bgIntensity = THREE.MathUtils.lerp(0.34, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.1, 0.35));
+    const bgIntensity = THREE.MathUtils.lerp(0.65, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.1, 0.35));
     this.scene.backgroundIntensity = bgIntensity;
     if ('environmentIntensity' in this.scene) {
-      this.scene.environmentIntensity = THREE.MathUtils.lerp(0.42, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.3));
+      this.scene.environmentIntensity = THREE.MathUtils.lerp(0.75, 1.0, THREE.MathUtils.smoothstep(sunHeight, -0.05, 0.3));
     }
 
     // ── Lamppost lights — on at night ─────────────────────────────
