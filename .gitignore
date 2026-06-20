@@ -16,34 +16,28 @@ yarn-error.log*
 # OS
 Thumbs.db
 
-# AI tooling
-.antigravity/
-.claude/
-.opencode/
-
-# Playwright
-.playwright-cli/
-.playwright-mcp/
-
-# Git worktrees (local dev only)
-.worktrees/
-
 # Local debug & scratch scripts
 debug.js
 scratch/
 
-# Blender / DCC source files (runtime uses only GLB/OBJ/JPG/PNG/HDR)
+# Blender / DCC source files (runtime uses only GLB/GLTF/OBJ/JPG/PNG/HDR)
 *.blend
 *.blend1
 *.usdc
 *.usda
 *.mtlx
 *.tres
+*.fbx
 
 # Generated artifacts
 TODO.html
 TODO_files/
 tests/out/
+
+# Generated report build artifacts (from docs/report/report.qmd)
+docs/report/report.pdf
+docs/report/REPORT.html
+docs/report/REPORT_files/
 
 # Ad-hoc screenshots
 screenshot-*.png
