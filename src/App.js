@@ -457,15 +457,18 @@ async function init() {
     });
   }
 
-  const helpBtn = document.getElementById('helpBtn');
-  const helpPanel = document.getElementById('helpPanel');
-  if (helpBtn && helpPanel) {
-    const helpIcon = helpBtn.querySelector('.accordion-icon');
-    helpBtn.addEventListener('click', () => {
-      const open = helpPanel.style.display !== 'none';
-      helpPanel.style.display = open ? 'none' : 'block';
-      helpIcon.textContent = open ? '+' : '−';
+  const helpToggleBtn = document.getElementById('helpToggleBtn');
+  const helpOverlay = document.getElementById('helpOverlay');
+  const helpOverlayClose = document.getElementById('helpOverlayClose');
+  if (helpToggleBtn && helpOverlay) {
+    helpToggleBtn.addEventListener('click', () => {
+      helpOverlay.classList.toggle('open');
     });
+    if (helpOverlayClose) {
+      helpOverlayClose.addEventListener('click', () => {
+        helpOverlay.classList.remove('open');
+      });
+    }
   }
 
   Object.assign(world, {
