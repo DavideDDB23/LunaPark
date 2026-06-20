@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { loadVisitorTemplates, makeRider } from './Passengers.js';
-import { riverCenter, riverHalfWidth } from '../environment/River.js';
 import { NavGrid, BRIDGE_HALF_X, idx, N, CELL, cellToWorld } from '../utils/NavGrid.js';
 
 /* ──────────────────────────────────────────────────────────────────────────

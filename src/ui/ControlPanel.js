@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 
-export class ControlPanel {
+class ControlPanel {
   constructor({ initialRunning = true, onToggle, rampUp = 0.5, rampDown = 0.5 } = {}) {
     this.group = new THREE.Group();
     this.group.name = 'controlPanel';
@@ -345,4 +345,8 @@ export class ControlPanel {
 
     this.screenTexture.needsUpdate = true;
   }
+}
+
+export function buildControlPanel(config) {
+  return new ControlPanel(config);
 }

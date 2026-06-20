@@ -1,4 +1,4 @@
-import { riverCenter, riverHalfWidth } from '../environment/River.js';
+import { riverCenter, riverHalfWidth } from './riverConstants.js';
 
 const HALF = 90;
 export const CELL = 2.0;

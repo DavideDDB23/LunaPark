@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 
 const PRESETS = {
 
@@ -106,7 +106,7 @@ export class CameraManager {
     let closestRide = null;
     let closestDist = Infinity;
     for (const ride of rides) {
-      ride.group.getWorldPosition(this._tmpVec);
+      ride.getWorldPosition(this._tmpVec);
       const dist = referencePos.distanceTo(this._tmpVec);
       if (dist < 80 && dist < closestDist) {
         closestDist = dist;
@@ -115,7 +115,10 @@ export class CameraManager {
     }
     if (!closestRide) return;
 
-    const target = closestRide.getFpvTarget();
+    const controller = closestRide.userData?.controller;
+    if (!controller) return;
+
+    const target = controller.getFpvTarget();
     if (!target) return;
 
     // Save camera position and target before entering FPV
@@ -129,12 +132,12 @@ export class CameraManager {
 
     this._fpvTarget = target;
     this._fpvRide = closestRide;
-    this._fpvOffset.copy(closestRide.getFpvOffset());
+    this._fpvOffset.copy(controller.getFpvOffset());
 
     // Hide riders of this ride to prevent clipping
     this._hiddenRiders = [];
-    if (closestRide.getRiders) {
-      const riders = closestRide.getRiders();
+    if (controller.getRiders) {
+      const riders = controller.getRiders();
       if (riders && riders.length > 0) {
         for (const rider of riders) {
           if (rider && rider.pivot) {
@@ -153,7 +156,7 @@ export class CameraManager {
     const rides = this.getRides();
     if (!rides || rides.length === 0) return;
 
-    const ride = rides.find(r => r.group?.userData?.rideId === rideId);
+    const ride = rides.find(r => r.userData?.rideId === rideId);
     if (!ride) {
       console.warn('[CameraManager] No ride with id', rideId);
       return;
@@ -168,7 +171,13 @@ export class CameraManager {
       this._cleanupFPV();
     }
 
-    const target = ride.getFpvTarget();
+    const controller = ride.userData?.controller;
+    if (!controller) {
+      console.warn('[CameraManager] Ride', rideId, 'has no controller');
+      return;
+    }
+
+    const target = controller.getFpvTarget();
     if (!target) {
       console.warn('[CameraManager] Ride', rideId, 'has no FPV target');
       return;
@@ -185,11 +194,11 @@ export class CameraManager {
 
     this._fpvTarget = target;
     this._fpvRide = ride;
-    this._fpvOffset.copy(ride.getFpvOffset());
+    this._fpvOffset.copy(controller.getFpvOffset());
 
     this._hiddenRiders = [];
-    if (ride.getRiders) {
-      const riders = ride.getRiders();
+    if (controller.getRiders) {
+      const riders = controller.getRiders();
       if (riders && riders.length > 0) {
         for (const rider of riders) {
           if (rider && rider.pivot) {
@@ -229,7 +238,7 @@ export class CameraManager {
       // Fallback
       this.state = 'orbit';
       if (this._fpvRide) {
-        this._fpvRide.group.getWorldPosition(this._tmpVec);
+        this._fpvRide.getWorldPosition(this._tmpVec);
         this.controls.target.copy(this._tmpVec);
       }
       this.controls.enabled = true;
@@ -270,6 +279,7 @@ export class CameraManager {
     window.removeEventListener('pointerup', this._onPointerUp);
   }
 
+  /** Called when flight completes naturally (tween.onComplete). Snaps to destination. */
   _finishFlight() {
     if (this._flyTween) {
       this._flyTween.stop();
@@ -278,6 +288,7 @@ export class CameraManager {
 
     this.camera.position.copy(this._flyTo);
     this.controls.target.copy(this._lookTo);
+    this._flyProgress = null;
 
     if (this.controls._sphericalDelta) {
       this.controls._sphericalDelta.set(0, 0, 0);
@@ -291,6 +302,34 @@ export class CameraManager {
 
     this.camera.up.set(0, 1, 0); // Restore default up vector
 
+    this.controls.enabled = true;
+    this.state = 'orbit';
+  }
+
+  /**
+   * Called when the user presses Escape during a flight. Freezes the camera at the
+   * current interpolated pose instead of teleporting to the destination.
+   */
+  _cancelFlight() {
+    if (this._flyTween) {
+      this._flyTween.stop();
+      this._flyTween = null;
+    }
+    // Camera already sits at the interpolated position (updated each frame by onUpdate).
+    // Copy the current camera position into the orbit controls target so OrbitControls
+    // resumes smoothly from here.
+    if (this._flyProgress) {
+      const t = this._flyProgress.t;
+      this.controls.target.lerpVectors(this._lookFrom, this._lookTo, t);
+    }
+    this._flyProgress = null;
+
+    if (this.controls._sphericalDelta) this.controls._sphericalDelta.set(0, 0, 0);
+    if (this.controls._panOffset) this.controls._panOffset.set(0, 0, 0);
+
+    this.controls.update();
+    this.controls.saveState();
+    this.camera.up.set(0, 1, 0);
     this.controls.enabled = true;
     this.state = 'orbit';
   }
@@ -317,12 +356,12 @@ export class CameraManager {
     this._lookFrom.copy(fromLook);
     this._lookTo.copy(toLook);
 
-    const progress = { t: 0 };
-    this._flyTween = new TWEEN.Tween(progress)
+    this._flyProgress = { t: 0 };
+    this._flyTween = new TWEEN.Tween(this._flyProgress)
       .to({ t: 1 }, FLY_DURATION * 1000)
       .easing(Easings.FLY)
       .onUpdate(() => {
-        const t = progress.t;
+        const t = this._flyProgress.t;
         this.camera.position.lerpVectors(this._flyFrom, this._flyTo, t);
         this.controls.target.lerpVectors(this._lookFrom, this._lookTo, t);
         this.camera.lookAt(this.controls.target);
@@ -341,21 +380,24 @@ export class CameraManager {
   _tickFPV() {
     if (!this._fpvRide || !this._fpvTarget) { this.exitFPV(); return; }
 
-    if (this._fpvRide.getFpvCameraPos) {
-      this._fpvRide.getFpvCameraPos(this._fpvTarget, this.camera.position);
+    const controller = this._fpvRide.userData?.controller;
+    if (!controller) { this.exitFPV(); return; }
+
+    if (controller.getFpvCameraPos) {
+      controller.getFpvCameraPos(this._fpvTarget, this.camera.position);
     } else {
       this._fpvTarget.getWorldPosition(this._tmpVec);
       this.camera.position.copy(this._tmpVec).add(this._fpvOffset);
     }
 
-    if (this._fpvRide.getFpvUp) {
-      this._fpvRide.getFpvUp(this._fpvTarget, this.camera.up);
+    if (controller.getFpvUp) {
+      controller.getFpvUp(this._fpvTarget, this.camera.up);
     } else {
       this.camera.up.set(0, 1, 0);
     }
 
-    if (this._fpvRide.getFpvLookTarget) {
-      this._fpvRide.getFpvLookTarget(this._fpvTarget, this._lookTo);
+    if (controller.getFpvLookTarget) {
+      controller.getFpvLookTarget(this._fpvTarget, this._lookTo);
       this.camera.lookAt(this._lookTo);
     } else {
       this._fpvTarget.getWorldPosition(this._tmpVec);
@@ -373,7 +415,7 @@ export class CameraManager {
       this.flyToPreset(parseInt(key));
     } else if (key === 'Escape') {
       if (this.state === 'fpv') this.exitFPV();
-      else if (this.state === 'flying') this._finishFlight();
+      else if (this.state === 'flying') this._cancelFlight();
     }
   }
 

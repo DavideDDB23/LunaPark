@@ -1,10 +1,12 @@
-export function getWindSpeed() {
+import * as THREE from 'three';
+
+function getWindSpeed() {
   const el = document.getElementById('wind');
   return el ? parseFloat(el.value) : 1.0;
 }
 
 let lastArcHour = -1;
-export function drawTimeArc(hour) {
+function drawTimeArc(hour) {
   if (Math.abs(hour - lastArcHour) < 0.02) return;
   lastArcHour = hour;
   const cv = document.getElementById('timeArc');
@@ -65,7 +67,7 @@ export function drawTimeArc(hour) {
   ctx.fillText(label, cx, cy + 17);
 }
 
-export function setupTimeOfDayUI(dayNight) {
+function setupTimeOfDayUI(dayNight) {
   const timeInput = document.getElementById('timeOfDay');
   const timeVal = document.getElementById('timeVal');
   if (!timeInput || !timeVal) return;
@@ -84,4 +86,12 @@ export function setupTimeOfDayUI(dayNight) {
   });
   timeVal.textContent = fmt(parseFloat(timeInput.value));
   drawTimeArc(parseFloat(timeInput.value));
+}
+
+export function buildHud(dayNight) {
+  setupTimeOfDayUI(dayNight);
+  return {
+    getWindSpeed,
+    drawTimeArc
+  };
 }

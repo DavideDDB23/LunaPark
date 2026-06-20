@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from './utils/Easings.js';
+import { Easings } from './utils/easings.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -34,13 +34,13 @@ import { DayNightCycle, isNightNow } from './lighting/DayNightCycle.js';
 import { CameraManager } from './controls/CameraManager.js';
 import { eventBus } from './utils/EventBus.js';
 import { InteractionManager } from './controls/InteractionManager.js';
-import { getWindSpeed, drawTimeArc, setupTimeOfDayUI } from './ui/Hud.js';
-import { setupRideHotbar } from './ui/RideHotbar.js';
+import { buildHud } from './ui/Hud.js';
+import { buildRideHotbar } from './ui/RideHotbar.js';
 
 const canvas = document.getElementById('c');
 const loaderEl = document.getElementById('loader');
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -106,177 +106,15 @@ const fpvTmpVec = new THREE.Vector3();
 const fpvTmpQuat = new THREE.Quaternion();
 const world = {};
 let balloons = []; // populated in init(), referenced by the CameraManager rides callback
+let hud;
 
 cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
   const rides = [];
-  const tmpVec = new THREE.Vector3();
-  const fw = environmentGroup.getObjectByName('ferrisWheel');
-  if (fw) rides.push({
-    group: fw,
-    getFpvTarget: () => {
-      const c = fw.userData.controller;
-      let best = null, bestY = -Infinity;
-      for (const gm of c.gondolaMounts) {
-        gm.gondolaMesh.getWorldPosition(tmpVec);
-        if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
-      }
-      return best?.cameraRig || null;
-    },
-    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
-    getRiders: () => {
-      const c = fw.userData.controller;
-      let best = null, bestY = -Infinity;
-      for (const gm of c.gondolaMounts) {
-        gm.gondolaMesh.getWorldPosition(tmpVec);
-        if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
-      }
-      return best ? best.passengers : [];
-    },
-    getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTarget.getWorldPosition(targetVec);
-    },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's -Z (= gondola's +Z = radial outward = view direction)
-      fpvTmpVec.set(0, 0, -10);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      // Rig is child of gondolaMesh. Read gondolaMesh's world up so the camera
-      // follows the gondola's orientation (gondola is world-stable, so up = world Y).
-      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  environmentGroup.traverse((node) => {
+    if (node.userData && node.userData.controller) {
+      rides.push(node);
     }
   });
-  const cr = environmentGroup.getObjectByName('carousel');
-  if (cr) rides.push({
-    group: cr,
-    getFpvTarget: () => cr.userData.controller.horses[0]?.cameraRig || null,
-    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
-    getRiders: () => {
-      const r = cr.userData.controller.horses[0]?.rider;
-      return r ? [r] : [];
-    },
-    getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTarget.getWorldPosition(targetVec);
-    },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's -Z (= container's +X = tangential forward = travel direction)
-      fpvTmpVec.set(0, 0, -10);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      // Rig is child of horseContainer. Read container's world up so the camera
-      // follows the carousel rotation (rotatingAssembly yaw + per-horse Y-bob).
-      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
-    }
-  });
-  const tg = environmentGroup.getObjectByName('tagada');
-  if (tg) rides.push({
-    group: tg,
-    getFpvTarget: () => tg.userData.controller.seats[0]?.cameraRig || null,
-    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
-    getRiders: () => {
-      const r = tg.userData.controller.seats[0]?.rider;
-      return r ? [r] : [];
-    },
-    getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTarget.getWorldPosition(targetVec);
-    },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's +Z. Rig has no Y-flip, so its +Z = seat-local +Z,
-      // pointing toward the disc centre (matching the rider's gaze).
-      fpvTmpVec.set(0, 0, 10);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      // Rig is child of seatGroup. Read seatGroup's world up so the camera
-      // follows the disc tilt (armTilt applied to ancestor of discMeshGroup).
-      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
-    }
-  });
-  const co = environmentGroup.getObjectByName('coaster');
-  if (co) rides.push({
-    group: co,
-    getFpvTarget: () => co.userData.controller.cars[0]?.cameraRig || null,
-    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
-    getRiders: () => co.userData.controller.cars[0].riders,
-    // FPV via camera-rig: rig is a child of cars[0].dolly (built in Coaster.js),
-    // positioned at the head of the front-row passenger with rotation.y = PI
-    // so its local -Z aligns with the dolly's +Z (direction of travel).
-    // Rig inherits dolly's full transform (roll, pitch, yaw) automatically.
-    getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTarget.getWorldPosition(targetVec);
-    },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's -Z (= dolly's +Z = forward direction of travel)
-      fpvTmpVec.set(0, 0, -10);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      // Rig is child of dolly. Read dolly's world up so the camera follows
-      // the dolly's banking (roll) as it traverses the track.
-      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
-    }
-  });
-  const tr = environmentGroup.getObjectByName('train');
-  if (tr) rides.push({
-    group: tr,
-    getFpvTarget: () => tr.userData.controller.cars[0]?.cameraRig || null,
-    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
-    getRiders: () => tr.userData.controller.riders ? tr.userData.controller.riders.slice(0, 1) : [],
-    getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTarget.getWorldPosition(targetVec);
-    },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      // 10m along the rig's -Z. Rig has Y-rotation = PI, so its -Z = wrapper's +Z
-      // (= direction of travel, where the existing look target offset pointed).
-      fpvTmpVec.set(0, 0, -10);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
-    },
-    getFpvUp: (fpvTarget, upVec) => {
-      // Rig is child of car mesh. Read car's world up so the camera follows
-      // the curve-banking tilt (cars[i].mesh.rotateZ applied in tick).
-      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
-      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
-    }
-  });
-  if (balloons && balloons[0]) {
-    const b1 = balloons[0];
-    rides.push({
-      group: b1,
-      getFpvTarget: () => b1.userData.cameraRig,
-      getFpvOffset: () => new THREE.Vector3(0, 0, 0),
-      getRiders: () => (b1.userData.riders || []).map(r => ({ pivot: r.pivot })),
-      getFpvCameraPos: (fpvTarget, targetVec) => {
-        fpvTarget.getWorldPosition(targetVec);
-      },
-      getFpvLookTarget: (fpvTarget, targetVec) => {
-        // 10m along the rig's -Z. Rig has no Y-flip, so its -Z gives a stable
-        // horizontal gaze direction in the basket frame. The balloon doesn't
-        // yaw, so this direction is fixed in world space (modulo pitch/roll
-        // from b.rotation.x/z in tick).
-        fpvTmpVec.set(0, 0, -10);
-        fpvTarget.localToWorld(fpvTmpVec);
-        targetVec.copy(fpvTmpVec);
-      },
-      getFpvUp: (fpvTarget, upVec) => {
-        // Rig is child of node. Read node's world up (parent of rig is the
-        // GLB sub-root, but node itself is parent of rig; b.rotation.x/z tilt
-        // is applied to the b group, which is the GRANDPARENT of the rig).
-        // Use b's world up to capture the basket pitch/roll.
-        fpvTarget.parent.parent.getWorldQuaternion(fpvTmpQuat);
-        upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
-      }
-    });
-  }
   return rides;
 });
 
@@ -368,9 +206,8 @@ async function init() {
   const fireworks = buildFireworks();
   scene.add(fireworks);
 
-  const balloonData = await buildBalloon();
-  const balloonContainer = balloonData.group;
-  balloons = balloonData.balloons;
+  const balloonContainer = await buildBalloon();
+  balloons = balloonContainer.userData.controller.balloons;
   environmentGroup.add(balloonContainer);
 
   const shootingGallery = await buildShootingGallery({ camera, renderer, controls });
@@ -415,7 +252,7 @@ async function init() {
     environmentGroup.add(s);
 
     const ctrl = group && group.userData.controller;
-    if (ctrl && ctrl.panel) {
+    if (ctrl && ctrl.panel && panel) {
       const gp = group.position;
       ctrl.panel.position.set(panel[0] - gp.x, -gp.y, panel[2] - gp.z);
       ctrl.panel.rotation.set(0, faceYaw(panel[0]), 0);
@@ -451,7 +288,7 @@ async function init() {
     },
   });
 
-  setupTimeOfDayUI(dayNight);
+  hud = buildHud(dayNight);
   dayNight.setHour(12);
 
   const interactionManager = new InteractionManager(camera, renderer, scene, controls);
@@ -476,7 +313,7 @@ async function init() {
   interactionManager.registerClickable(stage.userData.spotLight);
   cameraManager.setInteractiveObjects(interactionManager.interactiveObjects);
 
-  setupRideHotbar({
+  buildRideHotbar({
     rides: [
       { id: 'ferris',   name: 'Ruota',          icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7.05 5.05l9.9 9.9M7.05 14.95l9.9-9.9"/><circle cx="12" cy="10" r="1.2" fill="currentColor"/></svg>' },
       { id: 'carousel', name: 'Carosello',      icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v4"/><path d="M3 9h18v2a9 9 0 0 1-18 0V9z"/><path d="M12 7v4"/></svg>' },
@@ -650,7 +487,7 @@ function animate() {
   TWEEN.update();
   const delta = Math.min(clock.getDelta(), 0.05);
   const time = clock.getElapsedTime();
-  const wind = getWindSpeed();
+  const wind = hud.getWindSpeed();
   if (!cameraManager || cameraManager.state !== 'flying') {
     controls.update(delta);
   }
@@ -667,7 +504,7 @@ function animate() {
       const m = Math.floor((nextHour - h) * 60);
       world.timeVal.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
-    drawTimeArc(nextHour);
+    hud.drawTimeArc(nextHour);
   }
 
   if (world.river) world.river.userData.update(delta, time);
@@ -690,10 +527,10 @@ function animate() {
   if (world.shootingGallery?.userData.tick) world.shootingGallery.userData.tick(delta, time);
 
   for (const sign of rideSigns) {
-    if (sign.userData.tick) sign.userData.tick(time, delta);
+    if (sign.userData.tick) sign.userData.tick(delta, time);
   }
   for (const hint of rideHints) {
-    hint.userData.tick(time, camera, delta);
+    hint.userData.tick(delta, time, camera);
   }
 
   if (cameraManager) cameraManager.tick(delta);

@@ -52,8 +52,9 @@ const fragmentShader = /* glsl */ `
     vec3 colB = texture2D(uTexB, uv).rgb;
     vec3 col = mix(colA, colB, clamp(uMix, 0.0, 1.0));
     gl_FragColor = vec4(col, 1.0);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
+    // Tone mapping and color-space conversion are handled by EffectComposer's
+    // OutputPass (ACESFilmicToneMapping + SRGBColorSpace) — do NOT include them
+    // here or the sky will be double-tone-mapped and appear washed out.
   }
 `;
 

@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { loadGLB } from '../utils/loaders.js';
-import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from './River.js';
+import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/riverConstants.js';
 
 const WATER_LEVEL = 0.25;
 const FISH_URL = 'assets/models/environment/fish.glb';
@@ -385,6 +385,11 @@ export async function buildFish(water) {
 
   group.userData.fishes = fishes; // debug: expose for camera tracking / forced jumps
 
+  // Pre-allocated temps for droplet orientation math (avoids per-particle GC pressure)
+  const _dropDir  = new THREE.Vector3();
+  const _dropQuat = new THREE.Quaternion();
+  const _Y_UP     = new THREE.Vector3(0, 1, 0);
+
   group.userData.tick = (delta, time, _windSpeed) => {
     // Clamp delta to prevent physics glitches during lag spikes
     const dt = Math.min(delta, 0.05);
@@ -429,9 +434,9 @@ export async function buildFish(water) {
         // Motion stretched droplet particles
         const speed = Math.sqrt(part.vx * part.vx + part.vy * part.vy + part.vz * part.vz);
         if (speed > 0.01) {
-          const dir = new THREE.Vector3(part.vx, part.vy, part.vz).normalize();
-          const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-          part.mesh.quaternion.copy(quat);
+          _dropDir.set(part.vx, part.vy, part.vz).normalize();
+          _dropQuat.setFromUnitVectors(_Y_UP, _dropDir);
+          part.mesh.quaternion.copy(_dropQuat);
 
           const stretch = 1.0 + speed * 0.18;
           const thickness = 1.0 / Math.sqrt(stretch);

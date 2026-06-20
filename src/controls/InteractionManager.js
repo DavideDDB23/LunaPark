@@ -22,6 +22,11 @@ export class InteractionManager {
     this.interactiveObjects.push(object);
   }
 
+  unregisterClickable(object) {
+    const idx = this.interactiveObjects.indexOf(object);
+    if (idx !== -1) this.interactiveObjects.splice(idx, 1);
+  }
+
   initListeners() {
     const dom = this.renderer.domElement;
 

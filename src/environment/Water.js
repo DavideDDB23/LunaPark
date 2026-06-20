@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from './River.js';
+import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/riverConstants.js';
 
 const RIVER_Y = 0.25;
 
@@ -298,4 +298,4 @@ export function buildWater() {
   return group;
 }
 
-export { RIVER_Y };
+

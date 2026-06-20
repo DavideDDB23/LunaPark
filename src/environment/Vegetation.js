@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadObjMtl } from '../utils/loaders.js';
-import { riverCenter, riverHalfWidth } from './River.js';
+import { riverCenter, riverHalfWidth } from '../utils/riverConstants.js';
 
 const TREE_MODELS = [
   'BirchTree_1', 'BirchTree_2', 'BirchTree_4',

@@ -1,11 +1,51 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { ControlPanel } from '../ui/ControlPanel.js';
+import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { loadGLB } from '../utils/loaders.js';
-import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
+import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight, positionRiderOnHip } from '../people/Passengers.js';
+import { RideBase } from './RideBase.js';
+import { createEmissiveBulb, createPointLight, nightMixLerp } from '../utils/rideUtils.js';
+
+class TrainController extends RideBase {
+  constructor(group, cars, riders) {
+    super(group, { running: true });
+    this.cars = cars;
+    this.riders = riders;
+    this.uLead = 0;
+  }
+
+  getFpvTarget() {
+    return this.cars[0]?.cameraRig || null;
+  }
+
+  getFpvCameraPos(target, out) {
+    target.getWorldPosition(out);
+  }
+
+  getFpvLookTarget(target, out) {
+    const fpvTmpVec = new THREE.Vector3(0, 0, -10);
+    target.localToWorld(fpvTmpVec);
+    out.copy(fpvTmpVec);
+  }
+
+  getFpvUp(target, out) {
+    const fpvTmpQuat = new THREE.Quaternion();
+    target.parent.getWorldQuaternion(fpvTmpQuat);
+    out.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  }
+
+  getFpvOffset() {
+    return new THREE.Vector3(0, 0, 0);
+  }
+
+  getRiders() {
+    return this.riders ? this.riders.slice(0, 1) : [];
+  }
+}
+
 
 // ── CatmullRom control points for the train ring ─
 const CONTROL_POINTS = [
@@ -449,16 +489,8 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
       const sy = 78.0; // raised to sit on the seat cushion (profile minY = 77.7)
       const sz = -20.0; // shifted forward so legs hang down in front of seat cushion (originally -35.0 / -50.0)
 
-      rider.fig.updateMatrixWorld(true);
-      const hipBone = rider.fig.getObjectByName('Hips');
-      if (hipBone) {
-        const hp = hipBone.getWorldPosition(new THREE.Vector3());
-        rider.fig.worldToLocal(hp);
-        hp.multiplyScalar(rider.scale);
-        rider.pivot.position.set(sx - hp.x, sy - hp.y, sz - hp.z);
-      } else {
-        rider.pivot.position.set(sx, sy - riderHeight * 0.28, sz);
-      }
+      const scale = riderHeight / tmpl.height;
+      positionRiderOnHip(rider, tmpl, new THREE.Vector3(sx, sy, sz), scale);
 
       wrapper.add(rider.pivot);
       riders.push(rider);
@@ -469,57 +501,59 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
   }
 
   // ── Control Panel ──
-  const panel = new ControlPanel({
+  const panel = buildControlPanel({
     initialRunning: true,
-    onToggle: (isRunning) => { running = isRunning; },
+    onToggle: (isRunning) => { controller.running = isRunning; },
     rampUp: 1.5,
     rampDown: 2.0,
   });
   group.add(panel.group);
 
-  let speedScale = 1;
-  let uLead = 0;
-  let nightMix = 0;
+  const controller = new TrainController(group, cars, riders);
+  controller.panel = panel.group;
 
-  group.userData.controller = {
-    panel: panel.group,
-    toggle() { panel.toggle(); },
-    get speedMultiplier() { return speedScale; },
-    set speedMultiplier(v) { speedScale = v; },
-    cars: cars,
-    riders: riders,
+  // Bridge controller state to ControlPanel
+  panel.group.updateState = (running) => {
+    if (panel.running !== running) {
+      panel.toggle();
+    }
   };
 
-  eventBus.on('speed-scroll', ({ rideId, delta }) => {
-    if (rideId === 'train') speedScale = Math.max(0.2, Math.min(1.5, speedScale + delta));
+  controller.addEventBusListener('speed-scroll', ({ rideId, delta }) => {
+    if (rideId === 'train') {
+      controller.speedMultiplier = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
+    }
   });
 
   let lightColor = new THREE.Color(0xffcc66);
-  eventBus.on('color-change', (hex) => {
+  controller.addEventBusListener('color-change', (hex) => {
     const target = new THREE.Color(hex);
-    new TWEEN.Tween(lightColor)
+    const tween = new TWEEN.Tween(lightColor)
       .to(target, 500)
-      .easing(Easings.COLOR)
-      .start();
+      .easing(Easings.COLOR);
+    controller.trackTween(tween);
+    tween.start();
   });
 
   const _lookTarget = new THREE.Vector3();
+  const _crossVec   = new THREE.Vector3();
 
   group.userData.tick = (delta, time) => {
     const dt = Math.min(delta, 0.05);
     const panelEase = panel.tick(dt);
     
-    nightMix += ((isNightNow(group) ? 1 : 0) - nightMix) * (1 - Math.exp(-3 * dt));
+    controller.nightMix = nightMixLerp(controller.nightMix, isNightNow(group), dt, 3);
+    const nightMix = controller.nightMix;
 
     if (panelEase > 0.01) {
-      const speed = TRAIN_SPEED * speedScale * panelEase;
-      uLead = (uLead + (speed / trackLength) * dt) % 1;
-      if (uLead < 0) uLead += 1;
+      const speed = TRAIN_SPEED * controller.speedMultiplier * panelEase;
+      controller.uLead = (controller.uLead + (speed / trackLength) * dt) % 1;
+      if (controller.uLead < 0) controller.uLead += 1;
     }
 
     // Position each wagon along curve
     for (let i = 0; i < cars.length; i++) {
-      const carU = (uLead - (cars[i].offset / trackLength) + 1) % 1;
+      const carU = (controller.uLead - (cars[i].offset / trackLength) + 1) % 1;
       const pos = curve.getPointAt(carU);
       const tangent = curve.getTangentAt(carU);
       
@@ -529,7 +563,7 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
 
       // Tilt
       const nextTangent = curve.getTangentAt((carU + 0.001) % 1);
-      const cross = new THREE.Vector3().crossVectors(tangent, nextTangent);
+      const cross = _crossVec.crossVectors(tangent, nextTangent);
       cars[i].mesh.rotateZ(cross.y * 2);
     }
 
@@ -568,6 +602,9 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     }
   };
 
+  controller.applyBloomLayers();
+
+  group.userData.controller = controller;
   return group;
 }
 

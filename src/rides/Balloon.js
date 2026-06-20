@@ -2,6 +2,47 @@ import * as THREE from 'three';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
+import { buildControlPanel } from '../ui/ControlPanel.js';
+import { RideBase } from './RideBase.js';
+import { isNightNow } from '../lighting/DayNightCycle.js';
+import { createPointLight, createEmissiveBulb, nightMixLerp } from '../utils/rideUtils.js';
+
+class BalloonController extends RideBase {
+  constructor(group, balloons) {
+    super(group, { running: true });
+    this.balloons = balloons;
+  }
+
+  getFpvTarget() {
+    // Have the Balloon controller use balloons[0] internally for FPV.
+    return this.balloons[0]?.userData.fpvTarget?.getObjectByName('cameraRig') || null;
+  }
+
+  getFpvCameraPos(target, out) {
+    target.getWorldPosition(out);
+  }
+
+  getFpvLookTarget(target, out) {
+    const fpvTmpVec = new THREE.Vector3(0, 0, -10);
+    target.localToWorld(fpvTmpVec);
+    out.copy(fpvTmpVec);
+  }
+
+  getFpvUp(target, out) {
+    const fpvTmpQuat = new THREE.Quaternion();
+    target.parent.parent.getWorldQuaternion(fpvTmpQuat);
+    out.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  }
+
+  getFpvOffset() {
+    return new THREE.Vector3(0, 0, 0);
+  }
+
+  getRiders() {
+    return (this.balloons[0]?.userData.riders || []).map(r => ({ pivot: r.pivot }));
+  }
+}
+
 
 const BALLOON_URL = 'assets/models/rides/balloon.glb';
 const TARGET_HEIGHT = 48;
@@ -207,9 +248,9 @@ function buildOneBalloon(model, index) {
 
   let nightFactor = 0;
 
-  // Stato per il movimento "random walk con heading": la mongolfiera ha una
-  // direzione (heading) e una velocità angolare (ω) che variano dolcemente.
-  // Non si ferma mai: il target serve solo come bias verso il centro.
+  // State for "random walk with heading": the balloon has a heading direction
+  // and an angular velocity (ω) that vary smoothly over time.
+  // It never stops; the home zone target acts only as a bias toward the centre.
   const initialAngle = (index * 2.094) % (Math.PI * 2);
   b.userData.headingX = Math.cos(initialAngle);
   b.userData.headingZ = Math.sin(initialAngle);
@@ -220,52 +261,52 @@ function buildOneBalloon(model, index) {
     nightFactor = data.nightFactor;
   });
 
-  b.userData.tick = (delta, time, windSpeed = 1) => {
-    // Velocità di crociera scalata dal vento: 1.5 unità/s a wind=1
+  b.userData.tick = (delta, time, windSpeed = 1, ease = 1.0) => {
+    // Cruise speed scaled by wind: 1.5 units/s at wind=1
     const ws = 0.4 + windSpeed * 0.8;
-    const speed = 1.5 * ws;
+    const speed = 1.5 * ws * ease;
     const MAX_OMEGA = 0.5; // rad/s — raggio di curvatura minimo = speed/MAX_OMEGA ≈ 3 unità
 
-    // Distanza dal centro della zona (per il bias verso casa)
+    // Distance from the zone centre (used to bias the balloon back toward home)
     const fromCenterX = b.position.x - zone.cx;
     const fromCenterZ = b.position.z - zone.cz;
     const fromCenter = Math.hypot(fromCenterX, fromCenterZ);
     const maxR = Math.max(zone.hw, zone.hd);
     const ratio = fromCenter / maxR;
 
-    // Jitter periodico sulla velocità angolare per variare la direzione
-    // (~ogni 3-6 secondi, più frequente con più vento)
+    // Periodic jitter on angular velocity to vary the heading direction
+    // (~every 3–6 seconds, more frequent at higher wind)
     const jitterInterval = 4.5 / (0.5 + windSpeed * 0.6);
     if (time >= b.userData.omegaJitterTime) {
-      // Aggiungi una coppia casuale: cambia direzione di sterzata
+      // Apply a random impulse to change the steering direction
       b.userData.omega += (Math.random() * 2 - 1) * 0.6;
       b.userData.omegaJitterTime = time + jitterInterval * (0.7 + Math.random() * 0.6);
     }
 
-    // Bias verso il centro quando siamo oltre il 65% del raggio:
-    // se ci stiamo allontanando dal centro, sterza per curvare verso casa
+    // Bias toward centre when beyond 65% of the zone radius:
+    // if we are drifting away, steer to curve back home.
     if (ratio > 0.65 && fromCenter > 0.001) {
-      const tdx = -fromCenterX / fromCenter; // direzione "verso il centro"
+      const tdx = -fromCenterX / fromCenter; // direction toward centre
       const tdz = -fromCenterZ / fromCenter;
-      // Prodotto scalare heading · toward_center: < 0 = ci stiamo allontanando
+      // Dot product heading · toward_center: negative means we are moving away
       const dot = b.userData.headingX * tdx + b.userData.headingZ * tdz;
       if (dot < 0.4) {
-        // Cross product (heading × toward_center) per determinare se girare
-        // a destra o sinistra. cross = hx*tz - hz*tx
+        // Cross product (heading × toward_center) to determine left vs. right turn:
+        // cross = hx*tz - hz*tx
         const cross = b.userData.headingX * tdz - b.userData.headingZ * tdx;
-        // cross < 0 → sterzare a destra; cross > 0 → sterzare a sinistra
+        // cross < 0 → steer right; cross > 0 → steer left
         const steerSign = cross > 0 ? 1 : -1;
         b.userData.omega += steerSign * 1.2 * delta;
       }
     }
 
-    // Smorzamento della velocità angolare (evita che diverga)
+    // Dampen angular velocity (prevents unbounded growth)
     b.userData.omega *= 0.94;
     // Clamp
     if (b.userData.omega > MAX_OMEGA) b.userData.omega = MAX_OMEGA;
     if (b.userData.omega < -MAX_OMEGA) b.userData.omega = -MAX_OMEGA;
 
-    // Ruota heading dell'angolo ω * delta (passo di integrazione)
+    // Rotate heading by ω * delta (Euler integration step)
     const dTheta = b.userData.omega * delta;
     const cosT = Math.cos(dTheta);
     const sinT = Math.sin(dTheta);
@@ -323,7 +364,10 @@ export async function buildBalloon() {
     gltf = await loadGLB(BALLOON_URL);
   } catch (err) {
     console.error('[Balloon] Failed to load GLB:', err);
-    return { group, balloons: [] };
+    // Return group fallback to prevent app crashes
+    const fallbackController = new BalloonController(group, []);
+    group.userData.controller = fallbackController;
+    return group;
   }
   const model = gltf.scene;
   sanitizeMaterials(model);
@@ -390,5 +434,40 @@ export async function buildBalloon() {
     balloons[0].userData.rideName = 'Mongolfiera';
   }
 
-  return { group, balloons };
+  // ── Control Panel ──
+  const controlPanel = buildControlPanel({
+    initialRunning: true,
+    onToggle: (isRunning) => { controller.running = isRunning; }
+  });
+  controlPanel.group.position.set(-40, 0, 30);
+  group.add(controlPanel.group);
+  group.updateMatrixWorld(true);
+  controlPanel.group.lookAt(-40, 0, 42);
+  controlPanel.group.rotateY(Math.PI);
+
+  const controller = new BalloonController(group, balloons);
+  controller.panel = controlPanel.group;
+
+  // Bridge controller state to ControlPanel
+  controlPanel.group.updateState = (running) => {
+    if (controlPanel.running !== running) {
+      controlPanel.toggle();
+    }
+  };
+
+  group.userData.tick = (delta, time, wind) => {
+    const ease = controlPanel.tick(delta, controller.speedMultiplier);
+    controller.nightMix = nightMixLerp(controller.nightMix, isNightNow(group), delta, 2.2);
+
+    for (const b of balloons) {
+      if (b.userData.tick) {
+        b.userData.tick(delta, time, wind, ease);
+      }
+    }
+  };
+
+  controller.applyBloomLayers();
+
+  group.userData.controller = controller;
+  return group;
 }

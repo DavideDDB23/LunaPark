@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';

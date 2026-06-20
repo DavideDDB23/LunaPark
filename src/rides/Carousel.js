@@ -1,11 +1,53 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
 import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.js';
-import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
-import { ControlPanel } from '../ui/ControlPanel.js';
+import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight, positionRiderOnHip } from '../people/Passengers.js';
+import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
+import { RideBase } from './RideBase.js';
+import { createEmissiveBulb, createPointLight, nightMixLerp } from '../utils/rideUtils.js';
+import { createStripedTexture } from '../utils/textures.js';
+
+class CarouselController extends RideBase {
+  constructor(group, rotatingAssembly, horses) {
+    super(group, { running: true });
+    this.rotatingAssembly = rotatingAssembly;
+    this.horses = horses;
+    this.angle = 0;
+    this.maxSpeed = PLATFORM_OMEGA;
+  }
+
+  getFpvTarget() {
+    return this.horses[0]?.cameraRig || null;
+  }
+
+  getFpvCameraPos(target, out) {
+    target.getWorldPosition(out);
+  }
+
+  getFpvLookTarget(target, out) {
+    const fpvTmpVec = new THREE.Vector3(0, 0, -10);
+    target.localToWorld(fpvTmpVec);
+    out.copy(fpvTmpVec);
+  }
+
+  getFpvUp(target, out) {
+    const fpvTmpQuat = new THREE.Quaternion();
+    target.parent.getWorldQuaternion(fpvTmpQuat);
+    out.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  }
+
+  getFpvOffset() {
+    return new THREE.Vector3(0, 0, 0);
+  }
+
+  getRiders() {
+    const r = this.horses[0]?.rider;
+    return r ? [r] : [];
+  }
+}
 
 const HORSE_MODEL_URL = 'assets/models/rides/carousel_horse.glb';
 
@@ -14,35 +56,6 @@ const PLATFORM_OMEGA = 0.8;      // rad/s platform rotation at full speed
 const HORSE_BOB_FREQ = 1.5;      // Bob cycles/s
 const BOB_AMP = 0.9;            // Bob amplitude in meters
 const HORSE_BASE_Y = 2.53;       // Default height on pole
-
-// Procedural texture for the canopy (stripes of deep red and cream white separated by gold lines)
-function createStripedTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  
-  const stripeWidth = 256 / 16;
-  for (let i = 0; i < 16; i++) {
-    ctx.fillStyle = (i % 2 === 0) ? '#a82c2c' : '#fcfaf2';
-    ctx.fillRect(i * stripeWidth, 0, stripeWidth, 256);
-  }
-  
-  // Gold dividers
-  ctx.strokeStyle = '#d4af37';
-  ctx.lineWidth = 3;
-  for (let i = 0; i <= 16; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * stripeWidth, 0);
-    ctx.lineTo(i * stripeWidth, 256);
-    ctx.stroke();
-  }
-  
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  return texture;
-}
 
 export async function buildCarousel({ position = [40, 0, -40], camera, renderer, anisotropy = 8 } = {}) {
   // Load horse GLB and visitor templates in parallel
@@ -98,7 +111,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     roughness: 0.15
   });
 
-  const canopyStripes = createStripedTexture();
+  const canopyStripes = createStripedTexture(['#a82c2c', '#fcfaf2'], 16);
   const canopyMat = new THREE.MeshStandardMaterial({
     map: canopyStripes,
     roughness: 0.8,
@@ -177,18 +190,11 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
 
   // Build emissive bulbs for night lighting
   const bulbs = [];
-  const bulbGeo = new THREE.SphereGeometry(0.12, 8, 8);
-  const bulbMat = new THREE.MeshStandardMaterial({
-    color: 0xffdd88,
-    emissive: 0xffdd88,
-    emissiveIntensity: 0.0, // off by day
-    roughness: 0.1
-  });
 
   // Bulbs along canopy rim
   for (let i = 0; i < 16; i++) {
     const angle = (i / 16) * Math.PI * 2;
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    const bulb = createEmissiveBulb(0xffdd88, 0.12, 0.0);
     bulb.position.set(13.22 * Math.cos(angle), 0.3 + 0.3 + 5.5 + 1.0, 13.22 * Math.sin(angle));
     rotatingAssembly.add(bulb);
     bulbs.push(bulb);
@@ -197,7 +203,7 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   const ridePointLights = [];
   
   // Central Pillar Light
-  const centerLight = new THREE.PointLight(0xffdd88, 0, 45, 1.2);
+  const centerLight = createPointLight(0xffdd88, 0, 45, 1.2);
   centerLight.position.set(0, 3.5, 0);
   centerLight.layers.set(2);
   rotatingAssembly.add(centerLight);
@@ -206,33 +212,14 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   // Canopy Rim Lights (reduced to 2 for performance, using light layers)
   for (let i = 0; i < 2; i++) {
     const angle = (i / 2) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xffdd88, 0, 45, 1.5);
+    const pl = createPointLight(0xffdd88, 0, 45, 1.5);
     pl.position.set(13.22 * Math.cos(angle), 7.1, 13.22 * Math.sin(angle));
     pl.layers.set(2);
     rotatingAssembly.add(pl);
     ridePointLights.push(pl);
   }
 
-  const mainColor = new THREE.Color(0xffdd88);
-  eventBus.on('color-change', (hex) => {
-    const target = new THREE.Color(hex);
-    new TWEEN.Tween(mainColor)
-      .to(target, 500)
-      .easing(Easings.COLOR)
-      .onUpdate(() => {
-        bulbMat.color.copy(mainColor);
-        bulbMat.emissive.copy(mainColor);
-        ridePointLights.forEach(pl => pl.color.copy(mainColor));
-      })
-      .start();
-  });
-
-  // ── Extra night lighting: warm festoon swags + canopy-seam bulbs + column bulbs + platform neon ──
-  // (the classic "carousel ablaze with lights" look — warm/gold to suit its royal theme, on the
-  //  rotatingAssembly so they turn with the ride). Animated to a smoothed night mix in the tick.
-  const warmBulbMat = () => new THREE.MeshStandardMaterial({ color: 0xfff1c0, emissive: 0xfff1c0, emissiveIntensity: 0, roughness: 0.3 });
   const cFestoon = [], cSeam = [], cColumn = [];
-  const smallBulbGeo = new THREE.SphereGeometry(0.13, 8, 8);
   const festoonWireMat = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7, metalness: 0.3 });
   const rimR = 13.22, rimY = 0.3 + 0.3 + 5.5 + 1.0, apexY = 8.85 + 1.75; // rim y = 7.1, apex y = 10.6
   // Festoon swags drooping between the 16 rim points.
@@ -244,18 +231,18 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     for (let k = 0; k <= segs; k++) { const t = k / segs; const p = new THREE.Vector3().lerpVectors(A, B, t); p.y -= Math.sin(Math.PI * t) * sag; pts.push(p); }
     const wire = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), segs * 2, 0.02, 5, false), festoonWireMat);
     rotatingAssembly.add(wire);
-    for (let k = 1; k < segs; k++) { const b = new THREE.Mesh(smallBulbGeo, warmBulbMat()); b.position.copy(pts[k]); rotatingAssembly.add(b); cFestoon.push(b); }
+    for (let k = 1; k < segs; k++) { const b = createEmissiveBulb(0xfff1c0, 0.13, 0.0); b.position.copy(pts[k]); rotatingAssembly.add(b); cFestoon.push(b); }
   }
   // Bulbs running up each of the 16 canopy gore seams (apex → rim).
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
     const rim = new THREE.Vector3(Math.cos(a) * 13.0, rimY + 0.05, Math.sin(a) * 13.0);
     const apex = new THREE.Vector3(0, apexY, 0);
-    for (const tt of [0.3, 0.55, 0.8]) { const b = new THREE.Mesh(smallBulbGeo, warmBulbMat()); b.position.copy(apex.clone().lerp(rim, tt)); rotatingAssembly.add(b); cSeam.push(b); }
+    for (const tt of [0.3, 0.55, 0.8]) { const b = createEmissiveBulb(0xfff1c0, 0.13, 0.0); b.position.copy(apex.clone().lerp(rim, tt)); rotatingAssembly.add(b); cSeam.push(b); }
   }
   // Two vertical bulb strips up the mirror column.
   for (const sideA of [0, Math.PI]) {
-    for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(smallBulbGeo, warmBulbMat()); b.position.set(Math.cos(sideA) * 2.06, 0.9 + k * 1.0, Math.sin(sideA) * 2.06); rotatingAssembly.add(b); cColumn.push(b); }
+    for (let k = 0; k < 6; k++) { const b = createEmissiveBulb(0xfff1c0, 0.13, 0.0); b.position.set(Math.cos(sideA) * 2.06, 0.9 + k * 1.0, Math.sin(sideA) * 2.06); rotatingAssembly.add(b); cColumn.push(b); }
   }
   // Glowing gold neon band at the platform edge.
   const cNeonMat = new THREE.MeshStandardMaterial({ color: 0xffd76a, emissive: 0xffd76a, emissiveIntensity: 0, roughness: 0.3 });
@@ -263,27 +250,13 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   platNeon.rotation.x = Math.PI / 2; platNeon.position.y = 0.42;
   rotatingAssembly.add(platNeon);
   // Warm real light filling the canopy underside at night (pure ambiance, not recoloured).
-  const carouselCanopyLight = new THREE.PointLight(0xffd9a0, 0, 30, 2.0);
+  const carouselCanopyLight = createPointLight(0xffd9a0, 0, 30, 2.0);
   carouselCanopyLight.position.set(0, 6.4, 0);
   carouselCanopyLight.layers.set(2);
   rotatingAssembly.add(carouselCanopyLight);
 
-  // The festoon/seam/column bulbs and the platform neon follow the picker too.
+  const mainColor = new THREE.Color(0xffdd88);
   const warmColor = new THREE.Color(0xfff1c0);
-  eventBus.on('color-change', (hex) => {
-    const target = new THREE.Color(hex);
-    new TWEEN.Tween(warmColor)
-      .to(target, 500)
-      .easing(Easings.COLOR)
-      .onUpdate(() => {
-        const tint = (m) => { m.color.copy(warmColor); m.emissive.copy(warmColor); };
-        cFestoon.forEach(b => tint(b.material));
-        cSeam.forEach(b => tint(b.material));
-        cColumn.forEach(b => tint(b.material));
-        tint(cNeonMat);
-      })
-      .start();
-  });
 
   // Model offset rotation: Sketchfab GLB horses are facing -X, so we add Math.PI * 0.5 to rotate them forward (tangential)
   const MODEL_ROTATION_OFFSET = Math.PI * 0.5;
@@ -339,42 +312,13 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
       rider.index = i;
       
       // Position rider realistically on the horse saddle:
-      // Since rider origin is at the feet, we offset the pivot so that the rider's
-      // hips (approx 28% of height) align with the horse's saddle
       const saddleHeight = 0.48 * (targetHorseY / 2.4);
-      const riderY = saddleHeight - currentHeight * 0.28;
-      const riderZ = -0.10 * (targetHorseY / 2.4);
-      rider.pivot.position.set(-0.3, riderY, riderZ); // offset toward tail, away from pole axis
-      
-      // Update skeleton matrix to compute correct bone positions
-      rider.fig.updateMatrixWorld(true);
-      
       const scale = currentHeight / tmpl.height;
       const targetHipX = 0.32 + 0.35 * scale;
-      
-      const hipBone = rider.fig.getObjectByName('Hips');
-      if (hipBone) {
-        const localHip = new THREE.Vector3();
-        hipBone.getWorldPosition(localHip);
-        rider.fig.worldToLocal(localHip);
-        
-        // Scale the local hip offset by the rider's scale factor
-        const scaledHip = localHip.clone().multiplyScalar(scale);
-        
-        // Since rider.fig has rotation.y = -Math.PI / 2 (aligning rider +Z with horse -X),
-        // we rotate scaledHip vector by -Math.PI / 2 around Y axis to get its position in pivot space
-        const hipInPivot = scaledHip.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
-        
-        // We want the Hips bone (hips/pelvis) to sit exactly at (targetHipX, saddleHeight, 0.0) in the horse container space.
-        // Therefore, we position the pivot such that: pivot.position + hipInPivot = (targetHipX, saddleHeight, 0.0)
-        rider.pivot.position.set(targetHipX - hipInPivot.x, saddleHeight - hipInPivot.y, -hipInPivot.z);
-        
-      } else {
-        const riderY = saddleHeight - currentHeight * 0.28;
-        rider.pivot.position.set(targetHipX, riderY, 0.0);
-      }
-      
+
       rider.pivot.rotation.y = - Math.PI / 2; // Face forward along with horse (aligns rider +Z with horse -X)
+      positionRiderOnHip(rider, tmpl, new THREE.Vector3(targetHipX, saddleHeight, 0.0), scale);
+
       rider.height = currentHeight;
       horseContainer.add(rider.pivot);
 
@@ -415,39 +359,50 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   }
 
   // ── Control Panel (semaphore + lever) ──
-  const controlPanel = new ControlPanel({ initialRunning: true });
+  const controlPanel = buildControlPanel({ initialRunning: true });
   controlPanel.group.position.set(-15, 0, 15); // Southwest of carousel, toward park center (mirrors FerrisWheel panel)
   group.add(controlPanel.group);
   controlPanel.group.lookAt(0, 1.35, 0); // controls face the park center (where the operator approaches from)
 
   // ── Controller / State ──
-  const controller = {
-    rotatingAssembly,
-    horses,
-    panel: controlPanel.group,
-    speedMultiplier: 1.0,
-    nightMix: 0,
-    get running() { return controlPanel.running; },
-    set running(v) { controlPanel.running = v; },
-    angle: 0,
-    maxSpeed: PLATFORM_OMEGA,
-    toggle() { controlPanel.toggle(); },
-    start() { controlPanel.running = true; },
-    stop() { controlPanel.running = false; },
-    setSpeed(v) { this.maxSpeed = Math.max(0, v); },
-  };
+  const controller = new CarouselController(group, rotatingAssembly, horses);
+  controller.panel = controlPanel.group;
+
+  controller.addEventBusListener('color-change', (hex) => {
+    const target = new THREE.Color(hex);
+    const tween1 = new TWEEN.Tween(mainColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        bulbs.forEach(b => { b.material.color.copy(mainColor); b.material.emissive.copy(mainColor); });
+        ridePointLights.forEach(pl => pl.color.copy(mainColor));
+      });
+    controller.trackTween(tween1);
+    tween1.start();
+
+    const tween2 = new TWEEN.Tween(warmColor)
+      .to(target, 500)
+      .easing(Easings.COLOR)
+      .onUpdate(() => {
+        const tint = (m) => { m.color.copy(warmColor); m.emissive.copy(warmColor); };
+        cFestoon.forEach(b => tint(b.material));
+        cSeam.forEach(b => tint(b.material));
+        cColumn.forEach(b => tint(b.material));
+        tint(cNeonMat);
+      });
+    controller.trackTween(tween2);
+    tween2.start();
+  });
 
   group.userData.tick = (delta, time) => {
     // Gradual start/stop transitions driven by the shared ControlPanel
-    const ease = controlPanel.tick(delta, controller.speedMultiplier);
+    const { ease, speedMult } = controller.tickSpeed(controlPanel, delta);
 
     // 1. Platform rotation
-    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
     controller.angle += controller.maxSpeed * ease * speedMult * delta;
     rotatingAssembly.rotation.y = - controller.angle;
 
     // 2. Horse bobbing (each horse has phase offset) and rider updates
-    const speed = controller.maxSpeed * ease;
     const platformY = 0.6;
     const maxWorldHeadY = 6.8;
     for (const h of horses) {
@@ -502,15 +457,15 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     }
 
     // Smoothed festoon / seam / column / neon light show (nicer fades than the hard on/off above)
-    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
+    controller.nightMix = nightMixLerp(controller.nightMix, isNight, delta, 2.2);
     const nf = controller.nightMix;
     for (let i = 0; i < cFestoon.length; i++) {
-      const ch = 0.5 + 0.5 * Math.sin(time * 5.0 - i * 0.5);
-      cFestoon[i].material.emissiveIntensity = nf * (0.5 + ch * 2.4);
+      const chase = 0.5 + 0.5 * Math.sin(time * 5.0 - i * 0.5);
+      cFestoon[i].material.emissiveIntensity = nf * (0.5 + chase * 2.4);
     }
     for (let i = 0; i < cSeam.length; i++) {
-      const ch = 0.5 + 0.5 * Math.sin(time * 4.0 - i * 0.3);
-      cSeam[i].material.emissiveIntensity = nf * (0.4 + ch * 2.0);
+      const chase = 0.5 + 0.5 * Math.sin(time * 4.0 - i * 0.3);
+      cSeam[i].material.emissiveIntensity = nf * (0.4 + chase * 2.0);
     }
     for (let i = 0; i < cColumn.length; i++) {
       const p = 0.5 + 0.5 * Math.sin(time * 3.0 + i * 0.7);
@@ -519,29 +474,9 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
     cNeonMat.emissiveIntensity = nf * (1.2 + 0.6 * Math.sin(time * 2.2));
     carouselCanopyLight.intensity = nf * 2.2;
 
-    // 4. Panel feedback update (handled by ControlPanel.tick)
-    if (ease === 0) {
-      controller.speedMultiplier = 1.0;
-    }
   };
 
-
-  group.traverse((o) => {
-    if (o.isMesh) {
-      let isPanel = false;
-      let curr = o;
-      while (curr) {
-        if (curr === controlPanel.group) {
-          isPanel = true;
-          break;
-        }
-        curr = curr.parent;
-      }
-      if (!isPanel) {
-        o.layers.enable(2);
-      }
-    }
-  });
+  controller.applyBloomLayers();
 
   group.userData.controller = controller;
   return group;

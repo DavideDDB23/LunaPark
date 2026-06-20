@@ -4,7 +4,7 @@ import { loadGLB } from '../utils/loaders.js';
 
 const HUMANS_DIR = 'assets/models/people/';
 
-export let passengerWorldHeight = 3.28; // Default fallback height in world units
+let passengerWorldHeight = 3.28; // Default fallback height in world units
 
 export function setPassengerWorldHeight(h) {
   passengerWorldHeight = h;
@@ -366,6 +366,32 @@ const POSES = {};
 for (const k in POSE_DEFS) {
   POSES[k] = { ...REST_UPPER };
   for (const b in POSE_DEFS[k]) POSES[k][b] = POSE_DEFS[k][b];
+}
+
+export function positionRiderOnHip(rider, template, targetHipPos, scale) {
+  rider.fig.updateMatrixWorld(true);
+  const hipBone = rider.fig.getObjectByName('Hips');
+  if (hipBone) {
+    const localHip = new THREE.Vector3();
+    hipBone.getWorldPosition(localHip);
+    rider.fig.worldToLocal(localHip);
+    const scaledHip = localHip.clone().multiplyScalar(scale);
+    const hipInParent = scaledHip.clone().applyQuaternion(rider.pivot.quaternion);
+    rider.pivot.position.set(
+      targetHipPos.x - hipInParent.x,
+      targetHipPos.y - hipInParent.y,
+      targetHipPos.z - hipInParent.z
+    );
+  } else {
+    const riderHeight = template.height * scale;
+    const fallbackLocalHip = new THREE.Vector3(0, riderHeight * 0.28, 0);
+    const hipInParent = fallbackLocalHip.applyQuaternion(rider.pivot.quaternion);
+    rider.pivot.position.set(
+      targetHipPos.x - hipInParent.x,
+      targetHipPos.y - hipInParent.y,
+      targetHipPos.z - hipInParent.z
+    );
+  }
 }
 
 export function makeRider(template, height, { pool, facingY = 0, phase = 0, standing = false, seatedStyle = 'chair' }) {

@@ -4,22 +4,13 @@ import { buildRocks } from './Rocks.js';
 import { buildFish } from './Fish.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
+import { RIVER_X_MIN, RIVER_X_MAX, riverCenter, riverHalfWidth } from '../utils/riverConstants.js';
 
-export const RIVER_X_MIN = -100;
-export const RIVER_X_MAX = 100;
 export const SPOTLIGHT_X_COORDS = [-85, -73, -61, -49, -37, -25, -13, 13, 25, 37, 49, 61, 73, 85];
-
-export function riverCenter(x) {
-  return 14 * Math.sin(x * 0.04) + 3 * Math.sin(x * 0.11);
-}
-
-export function riverHalfWidth(x) {
-  return 6 + 2 * Math.sin(x * 0.07 + 0.3);
-}
 
 export function distanceFromRiver(x, z) {
   return Math.abs(z - riverCenter(x)) - riverHalfWidth(x);
-}
+} (refactor: extract RideBase, rideUtils, textures, riverConstants; remove ExternalScenery; restructure rides, App.js, CameraManager)
 
 function buildRiverBed() {
   const segments = 200;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadColorTexture, loadLinearTexture, loadGLB, sanitizeMaterials } from '../utils/loaders.js';
-import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from './River.js';
+import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/riverConstants.js';
 
 const TEX_BASE = 'assets/textures/asphalt/';
 const BRIDGE_URL = 'assets/models/environment/bridge.glb';

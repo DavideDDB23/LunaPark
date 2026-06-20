@@ -72,8 +72,8 @@ void main() {
   gl_Position = projectionMatrix * mvPosition;
   
   float sizeMod = 1.0;
-  if (aType == 1.0) sizeMod = 0.35; // trails are smaller
-  if (aType == 2.0) {
+  if (aType > 0.5 && aType < 1.5) sizeMod = 0.35; // trails are smaller (aType == 1)
+  if (aType > 1.5) {                               // strobe effect (aType == 2)
     // strobe effect
     sizeMod = 0.8 + 0.8 * sin(age * 40.0);
   }
@@ -352,7 +352,6 @@ export function buildFireworks() {
     showMode = true;
     showPhase = 0;
     showTimer = 0;
-    console.log("🎆 Fireworks Show Started!");
   });
 
   function getFreeBurst() {

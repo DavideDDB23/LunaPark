@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isNightNow } from '../lighting/DayNightCycle.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reusable carnival marquee sign for the rides.
@@ -15,7 +16,7 @@ import * as THREE from 'three';
 
 // Per-ride colour themes. Every value is a CSS colour string except the THREE-side
 // hex numbers (neon / bulb / crown) used by the emissive 3D materials.
-export const SIGN_THEMES = {
+const SIGN_THEMES = {
   coaster: {
     bgInner: '#2a0f4e', bgOuter: '#0a0316', glow: '#a855f7',
     plate: 'rgba(10,3,22,0.55)', border: '#d4af37',
@@ -70,7 +71,7 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-export function makeRideSignTexture({ title, subtitle = '★ LUNA PARK ★', theme, anisotropy = 8 }) {
+function makeRideSignTexture({ title, subtitle = '★ LUNA PARK ★', theme, anisotropy = 8 }) {
   const W = 2048, H = 420;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -336,14 +337,8 @@ export function buildRideSign({
 
   // ── Animation: bulb chase + neon pulse, brighter at night ──
   let nightMix = 0;
-  let sunRef = null;
-  group.userData.tick = (time = 0, delta = 0.016) => {
-    // find the sun once (for day/night)
-    if (!sunRef) {
-      let root = group; while (root.parent) root = root.parent;
-      sunRef = root.getObjectByName('sun');
-    }
-    const isNight = sunRef ? (sunRef.position.y < 5.0 || sunRef.intensity < 0.5) : false;
+  group.userData.tick = (delta = 0.016, time = 0) => {
+    const isNight = isNightNow(group);
     nightMix += ((isNight ? 1 : 0) - nightMix) * (1 - Math.exp(-2.2 * delta));
     const nf = nightMix;
 

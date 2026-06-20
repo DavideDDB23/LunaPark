@@ -24,15 +24,15 @@
 //   2. Gondola counter-rotation — THE key feature. Each gondola is a child of a "mount"
 //      that orbits with the ring; the gondola itself is rotated by exactly -α about the
 //      axle so its WORLD orientation is frozen at its upright bind pose. It stays level no
-//      matter where it is on the wheel. (See gondolaMounts[i].gondolaMesh in the console.)
+//      matter where it is on the wheel.
 //   3. Passenger sway — 2 figures per gondola, each leaning on a phase-offset sine.
 
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
 import { loadGLB } from '../utils/loaders.js';
-import { ControlPanel } from '../ui/ControlPanel.js';
+import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import {
   loadVisitorTemplates,
@@ -44,13 +44,66 @@ import {
   ACTIONS_STANDING,
   setPassengerWorldHeight
 } from '../people/Passengers.js';
+import { RideBase } from './RideBase.js';
+import { createEmissiveBulb, createPointLight, nightMixLerp } from '../utils/rideUtils.js';
+
+class FerrisWheelController extends RideBase {
+  constructor(group, gondolaMounts, wheelSpin, spinHub) {
+    super(group, { running: true });
+    this.gondolaMounts = gondolaMounts;
+    this.wheelSpin = wheelSpin;
+    this.spinHub = spinHub;
+    this.angle = 0;
+    this.maxSpeed = MAX_SPEED;
+  }
+
+  getFpvTarget() {
+    let best = null, bestY = -Infinity;
+    const tmpVec = new THREE.Vector3();
+    for (const gm of this.gondolaMounts) {
+      gm.gondolaMesh.getWorldPosition(tmpVec);
+      if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
+    }
+    return best?.cameraRig || null;
+  }
+
+  getFpvCameraPos(target, out) {
+    target.getWorldPosition(out);
+  }
+
+  getFpvLookTarget(target, out) {
+    const fpvTmpVec = new THREE.Vector3(0, 0, -10);
+    target.localToWorld(fpvTmpVec);
+    out.copy(fpvTmpVec);
+  }
+
+  getFpvUp(target, out) {
+    const fpvTmpQuat = new THREE.Quaternion();
+    target.parent.getWorldQuaternion(fpvTmpQuat);
+    out.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  }
+
+  getFpvOffset() {
+    return new THREE.Vector3(0, 0, 0);
+  }
+
+  getRiders() {
+    let best = null, bestY = -Infinity;
+    const tmpVec = new THREE.Vector3();
+    for (const gm of this.gondolaMounts) {
+      gm.gondolaMesh.getWorldPosition(tmpVec);
+      if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
+    }
+    return best ? best.passengers : [];
+  }
+}
 
 const MODEL_URL = 'assets/models/rides/ferris_wheel.glb';
 
 const TARGET_HEIGHT = 55;          // world units, top-of-wheel to base
 const MAX_SPEED = 0.30;            // rad/s of the ring at full speed
-const RAMP_UP = 1.5;               // s, ease-in   (TODO spec)
-const RAMP_DOWN = 2.0;             // s, ease-out  (TODO spec)
+const RAMP_UP = 1.5;               // s, ease-in
+const RAMP_DOWN = 2.0;             // s, ease-out
 const PASSENGERS_PER_GONDOLA = 2;
 const SWAY_AMP = 0.05;             // rad — gentle seated body lean
 const SWAY_FREQ = 0.8;             // Hz-ish
@@ -136,7 +189,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   const ridePointLights = [];
   
   // Axle Center Light for massive ground/structure glow
-  const hubLight = new THREE.PointLight(0xffdd88, 0, 90, 1.2);
+  const hubLight = createPointLight(0xffdd88, 0, 90, 1.2);
   hubLight.position.set(0, 0, 0);
   hubLight.layers.set(2);
   wheelSpin.add(hubLight);
@@ -145,7 +198,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   // Rim Lights
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xffdd88, 0, 40, 1.5);
+    const pl = createPointLight(0xffdd88, 0, 40, 1.5);
     pl.position.set(20 * Math.cos(angle), 20 * Math.sin(angle), 0);
     pl.layers.set(2);
     wheelSpin.add(pl);
@@ -303,23 +356,19 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   const ferrisRimBulbs = [];
   const ferrisSpokeBulbs = [];
   const SPOKE_COLORS = [0xff4d6d, 0x4dd2ff, 0xffe27a, 0x8aff7a, 0xc77dff];
-  const mkBulb = (color, geo) => new THREE.Mesh(geo,
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0, roughness: 0.3 }));
-  const rimGeo = new THREE.SphereGeometry(0.28, 10, 8);
   for (const rr of [rimR + 0.6, rimR - 0.6]) {
     for (let i = 0; i < 48; i++) {
       const a = (i / 48) * Math.PI * 2;
-      const b = mkBulb(0xfff1c0, rimGeo);
+      const b = createEmissiveBulb(0xfff1c0, 0.28, 0);
       b.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0.1);
       bulbSpin.add(b); ferrisRimBulbs.push(b);
     }
   }
-  const spokeGeo = new THREE.SphereGeometry(0.22, 8, 8);
   for (let s = 0; s < gondolaMounts.length; s++) {
     const a = (s / gondolaMounts.length) * Math.PI * 2;
     for (let k = 1; k <= 6; k++) {
       const r = rimR * (k / 7);
-      const b = mkBulb(SPOKE_COLORS[s % SPOKE_COLORS.length], spokeGeo);
+      const b = createEmissiveBulb(SPOKE_COLORS[s % SPOKE_COLORS.length], 0.22, 0);
       b.position.set(Math.cos(a) * r, Math.sin(a) * r, 0.05);
       bulbSpin.add(b); ferrisSpokeBulbs.push(b);
     }
@@ -328,10 +377,20 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   const ferrisBeacon = new THREE.Mesh(new THREE.SphereGeometry(1.0, 18, 14), ferrisBeaconMat);
   bulbSpin.add(ferrisBeacon);
 
+  const controlPanel = buildControlPanel({ initialRunning: true, rampUp: RAMP_UP, rampDown: RAMP_DOWN });
+  controlPanel.group.position.set(radiusFinal * 0.36, 0, radiusFinal * 0.61);
+  group.add(controlPanel.group);
+  group.updateMatrixWorld(true);
+  controlPanel.group.lookAt(position[0], position[1], position[2]); // face the wheel centre horizontally (prevents post tilt)
+  controlPanel.group.rotateY(Math.PI); // face away from the wheel (di spalle)
+
+  const controller = new FerrisWheelController(group, gondolaMounts, wheelSpin, spinHub);
+  controller.panel = controlPanel.group;
+
   const ferrisColor = new THREE.Color(0xffe27a);
-  eventBus.on('color-change', (hex) => {
+  controller.addEventBusListener('color-change', (hex) => {
     const target = new THREE.Color(hex);
-    new TWEEN.Tween(ferrisColor)
+    const tween = new TWEEN.Tween(ferrisColor)
       .to(target, 500)
       .easing(Easings.COLOR)
       .onUpdate(() => {
@@ -340,43 +399,17 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
         ferrisSpokeBulbs.forEach(b => { b.material.color.copy(ferrisColor); b.material.emissive.copy(ferrisColor); });
         ferrisBeaconMat.color.copy(ferrisColor);
         ferrisBeaconMat.emissive.copy(ferrisColor);
-      })
-      .start();
+      });
+    controller.trackTween(tween);
+    tween.start();
   });
-
-  // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
-  const controlPanel = new ControlPanel({ initialRunning: true, rampUp: RAMP_UP, rampDown: RAMP_DOWN });
-  controlPanel.group.position.set(radiusFinal * 0.36, 0, radiusFinal * 0.61);
-  group.add(controlPanel.group);
-  group.updateMatrixWorld(true);
-  controlPanel.group.lookAt(position[0], position[1], position[2]); // face the wheel centre horizontally (prevents post tilt)
-  controlPanel.group.rotateY(Math.PI); // face away from the wheel (di spalle)
-
-  // ── Controller / state machine ──
-  const controller = {
-    gondolaMounts,
-    wheelSpin,
-    spinHub,
-    panel: controlPanel.group,
-    speedMultiplier: 1.0,
-    get running() { return controlPanel.running; },
-    set running(v) { controlPanel.running = v; },
-    angle: 0,
-    maxSpeed: MAX_SPEED,
-    nightMix: 0,
-    toggle() { controlPanel.toggle(); },
-    start() { controlPanel.running = true; },
-    stop() { controlPanel.running = false; },
-    setSpeed(v) { this.maxSpeed = Math.max(0, v); },
-  };
 
   const counterQuat = new THREE.Quaternion();
 
   group.userData.tick = (delta, time) => {
     // Ease the speed factor using our reusable ControlPanel's tick
-    const ease = controlPanel.tick(delta, controller.speedMultiplier);
+    const { ease, speedMult } = controller.tickSpeed(controlPanel, delta);
 
-    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
     controller.angle += controller.maxSpeed * ease * speedMult * delta;
     wheelSpin.rotation.z = controller.angle;
 
@@ -387,12 +420,8 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
       gm.pivot.quaternion.copy(counterQuat).multiply(gm.baseQuat);
       for (const r of gm.passengers) {
         updateRider(r, time + r.phase);      // state-machine: blends between varied actions
-        r.pivot.rotation.z = r.restZ + Math.sin(time * SWAY_FREQ * Math.PI * 2 + r.phase) * SWAY_AMP;
+        r.pivot.rotation.z = r.restZ + Math.sin(time * SWAY_FREQ * Math.PI * 2 + r.phase) * SWAY_AMP * ease;
       }
-    }
-
-    if (ease === 0) {
-      controller.speedMultiplier = 1.0;
     }
 
     const isNight = isNightNow(group);
@@ -409,7 +438,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
     // ── Spinning bulb rig — wheel outlined in lights, chasing rim + pulsing spokes ──
     bulbSpin.rotation.z = controller.angle;
-    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
+    controller.nightMix = nightMixLerp(controller.nightMix, isNight, delta, 2.2);
     const nf = controller.nightMix;
     for (let i = 0; i < ferrisRimBulbs.length; i++) {
       const chase = 0.5 + 0.5 * Math.sin(time * 5.0 - i * 0.4);
@@ -421,22 +450,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     }
   };
 
-  group.traverse((o) => {
-    if (o.isMesh) {
-      let isPanel = false;
-      let curr = o;
-      while (curr) {
-        if (curr === controlPanel.group) {
-          isPanel = true;
-          break;
-        }
-        curr = curr.parent;
-      }
-      if (!isPanel) {
-        o.layers.enable(2);
-      }
-    }
-  });
+  controller.applyBloomLayers();
 
   group.userData.controller = controller;
   return group;

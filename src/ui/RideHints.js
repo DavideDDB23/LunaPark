@@ -63,7 +63,7 @@ export function buildRideHint({
   const _camPos = new THREE.Vector3();
   const _myPos = new THREE.Vector3();
 
-  sprite.userData.tick = (time, camera, delta = 0.016) => {
+  sprite.userData.tick = (delta = 0.016, time, camera) => {
     sprite.getWorldPosition(_myPos);
     camera.getWorldPosition(_camPos);
     const d = _camPos.distanceTo(_myPos);

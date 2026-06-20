@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { loadObjMtl } from '../utils/loaders.js';
-import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from './River.js';
+import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from '../utils/riverConstants.js';
 
 const ROCK_MODELS = ['Rock_1', 'Rock_3', 'Rock_5', 'Rock_6', 'Rock_Moss_1', 'Rock_Moss_3'];
 const BASE_URL = 'assets/models/environment/';

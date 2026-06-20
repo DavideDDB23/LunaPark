@@ -1,10 +1,58 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs } from '../people/Passengers.js';
-import { ControlPanel } from '../ui/ControlPanel.js';
+import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs, positionRiderOnHip } from '../people/Passengers.js';
+import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
+import { RideBase } from './RideBase.js';
+import { createPlatformTexture, createCanopyTexture } from '../utils/textures.js';
+import { createEmissiveBulb, createPointLight, nightMixLerp } from '../utils/rideUtils.js';
+
+class TagadaController extends RideBase {
+  constructor(group, armPivot, discMeshGroup, seats) {
+    super(group, { running: true });
+    this.armPivot = armPivot;
+    this.discMeshGroup = discMeshGroup;
+    this.seats = seats;
+    this.spinAngle = 0;
+    this.pitchAngle = 0;
+    this.rollAngle = 0;
+    this.bumpAngle = 0;
+    this.armYawAngle = 0;
+    this.maxSpeed = MAX_SPIN_SPEED;
+  }
+
+  getFpvTarget() {
+    return this.seats[0]?.cameraRig || null;
+  }
+
+  getFpvCameraPos(target, out) {
+    target.getWorldPosition(out);
+  }
+
+  getFpvLookTarget(target, out) {
+    const fpvTmpVec = new THREE.Vector3(0, 0, 10);
+    target.localToWorld(fpvTmpVec);
+    out.copy(fpvTmpVec);
+  }
+
+  getFpvUp(target, out) {
+    const fpvTmpQuat = new THREE.Quaternion();
+    target.parent.getWorldQuaternion(fpvTmpQuat);
+    out.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  }
+
+  getFpvOffset() {
+    return new THREE.Vector3(0, 0, 0);
+  }
+
+  getRiders() {
+    const r = this.seats[0]?.rider;
+    return r ? [r] : [];
+  }
+}
+
 
 // Ride Animation Constants
 const MAX_SPIN_SPEED = 2.0;       // rad/s platform rotation at full speed
@@ -30,96 +78,7 @@ const TAGADA_ACTIONS = ['cheer', 'wave', 'cheer', 'wave', 'lookUp', 'relax', 're
 // Jewel-tone seat palette (alternates around the disc)
 const SEAT_COLORS = [0xe53935, 0x1e88e5, 0xffb300, 0x8e24aa, 0x00acc1, 0x43a047, 0xf4511e, 0x3949ab];
 
-// ── Glossy sunburst platform texture ────────────────────────────────────────
-function createPlatformTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 1024;
-  const ctx = canvas.getContext('2d');
-  const C = 512;
 
-  // Radial gradient base (bright royal blue → deep blue, so the deck reads in daylight)
-  const g = ctx.createRadialGradient(C, C, 40, C, C, 512);
-  g.addColorStop(0, '#3f6fd1');
-  g.addColorStop(0.55, '#2a4ea0');
-  g.addColorStop(1, '#1c3370');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 1024, 1024);
-
-  // Sunburst rays — alternating bright gold / crimson wedges
-  const rays = 36;
-  for (let i = 0; i < rays; i++) {
-    const a0 = (i / rays) * Math.PI * 2;
-    const a1 = ((i + 1) / rays) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(C, C);
-    ctx.arc(C, C, 500, a0, a1);
-    ctx.closePath();
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(247,201,72,0.85)' : 'rgba(206,58,78,0.55)';
-    ctx.fill();
-  }
-
-  // Concentric carnival rings with metallic borders
-  const rings = [
-    { r: 500, c: '#c0143c' }, { r: 470, c: '#e8c25a' },
-    { r: 360, c: '#1565c0' }, { r: 330, c: '#f5f5f5' },
-    { r: 235, c: '#c0143c' }, { r: 205, c: '#e8c25a' },
-    { r: 110, c: '#11203f' },
-  ];
-  for (const ring of rings) {
-    ctx.beginPath();
-    ctx.arc(C, C, ring.r, 0, Math.PI * 2);
-    ctx.lineWidth = 14;
-    ctx.strokeStyle = ring.c;
-    ctx.stroke();
-    // bright chrome inner edge
-    ctx.beginPath();
-    ctx.arc(C, C, ring.r - 8, 0, Math.PI * 2);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.stroke();
-  }
-
-  // Star studs on the gold ring
-  ctx.fillStyle = '#fff4cf';
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const x = C + Math.cos(a) * 415, y = C + Math.sin(a) * 415;
-    ctx.beginPath();
-    for (let k = 0; k < 5; k++) {
-      const aa = a + (k / 5) * Math.PI * 2;
-      ctx.lineTo(x + Math.cos(aa) * 9, y + Math.sin(aa) * 9);
-      const ab = a + ((k + 0.5) / 5) * Math.PI * 2;
-      ctx.lineTo(x + Math.cos(ab) * 4, y + Math.sin(ab) * 4);
-    }
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.anisotropy = 8;
-  return tex;
-}
-
-// ── Striped canopy (parasol) fabric texture ─────────────────────────────────
-function createCanopyTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024; canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  const stripes = 12;
-  for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? '#c81d3a' : '#f3ead2';
-    ctx.fillRect((i / stripes) * 1024, 0, 1024 / stripes, 256);
-  }
-  // subtle vertical shading for fabric depth
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, 'rgba(255,255,255,0.18)');
-  g.addColorStop(1, 'rgba(0,0,0,0.30)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 1024, 256);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.anisotropy = 8;
-  return tex;
-}
 
 export async function buildTagada({ position = [-40, 0, 40], camera, renderer, anisotropy = 8 } = {}) {
   // Load 8 random visitor templates for the seats
@@ -213,11 +172,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   group.add(motorCap);
 
   // Marquee crown — a ring of chase bulbs on top of the outer base skirt
-  const crownBulbGeo = new THREE.SphereGeometry(0.13, 12, 10);
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;
-    const m = neon(0xfff1c0);
-    const bulb = new THREE.Mesh(crownBulbGeo, m);
+    const bulb = createEmissiveBulb(0xfff1c0, 0.13, 0.3);
     // Position on top of the base skirt (skirt top is at y = 1.55)
     bulb.position.set(Math.cos(a) * 10.8, 1.55, Math.sin(a) * 10.8);
     group.add(bulb);
@@ -416,10 +373,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   }
 
   // Rim bulbs around the platform edge (alternating chase)
-  const rimBulbGeo = new THREE.SphereGeometry(0.12, 12, 10);
   for (let i = 0; i < 28; i++) {
     const a = (i / 28) * Math.PI * 2;
-    const bulb = new THREE.Mesh(rimBulbGeo, neon(i % 2 ? 0xfff1c0 : 0x12c2ff));
+    const bulb = createEmissiveBulb(i % 2 ? 0xfff1c0 : 0x12c2ff, 0.12, 0.3);
     bulb.position.set((discRadius + 0.2) * Math.cos(a), 0.42, (discRadius + 0.2) * Math.sin(a));
     discMeshGroup.add(bulb);
     rimBulbs.push(bulb);
@@ -467,12 +423,12 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     canopy.add(rib);
     // small bulbs running up the rib + a larger one at the hem
     for (const tt of [0.35, 0.6, 0.82]) {
-      const rb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), neon(0xfff1c0));
+      const rb = createEmissiveBulb(0xfff1c0, 0.08, 0.3);
       rb.position.copy(apex.clone().lerp(hem, tt));
       canopy.add(rb);
       canopyBulbs.push(rb);
     }
-    const bulb = new THREE.Mesh(rimBulbGeo, neon(0xfff1c0));
+    const bulb = createEmissiveBulb(0xfff1c0, 0.12, 0.3);
     bulb.position.copy(hem); bulb.position.y -= 0.05;
     canopy.add(bulb);
     canopyBulbs.push(bulb);
@@ -504,7 +460,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   canopy.add(finialStar);
 
   // Warm light under the canopy that switches on at night to glow the deck + riders.
-  const canopyLight = new THREE.PointLight(0xffd9a0, 0.0, 26, 2.0);
+  const canopyLight = createPointLight(0xffd9a0, 0.0, 26, 2.0);
   canopyLight.position.set(0, canopyBaseY - 0.6, 0);
   canopyLight.layers.set(2);
   canopy.add(canopyLight);
@@ -525,7 +481,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   // Festoon swags — drooping strings of coloured bulbs looping between each hem point.
   const festoonBulbs = [];
   const festoonColors = [0xff4d6d, 0x4dd2ff, 0xffe27a, 0x8aff7a, 0xc77dff];
-  const festoonBulbGeo = new THREE.SphereGeometry(0.12, 8, 8);
   const festoonWireMat = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7, metalness: 0.3 });
   for (let i = 0; i < CANOPY_GORES; i++) {
     const a1 = (i / CANOPY_GORES) * Math.PI * 2;
@@ -544,7 +499,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, segs * 2, 0.022, 5, false), festoonWireMat);
     canopy.add(wire);
     for (let k = 1; k < segs; k++) {
-      const b = new THREE.Mesh(festoonBulbGeo, neon(festoonColors[(i + k) % festoonColors.length]));
+      const b = createEmissiveBulb(festoonColors[(i + k) % festoonColors.length], 0.12, 0.3);
       b.position.copy(pts[k]);
       canopy.add(b);
       festoonBulbs.push(b);
@@ -657,21 +612,10 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
       // head above hips (right-side-up) and facing +Z (toward the disc centre).
       // Unlike the Coaster (which inverts the cart 180° around X), the Tagada
       // seat frame matches the model's default orientation — no flip needed.
-      rider.fig.updateMatrixWorld(true);
-
-      const hipBone = rider.fig.getObjectByName('Hips');
       const targetZ = 0.54; // hips at the front edge of the cushion so legs hang freely in front
       const scale = riderHeight / template.height;
 
-      if (hipBone) {
-        const localHip = new THREE.Vector3();
-        hipBone.getWorldPosition(localHip);
-        rider.fig.worldToLocal(localHip);
-        const scaledHip = localHip.clone().multiplyScalar(scale);
-        rider.pivot.position.set(0.0 - scaledHip.x, seatSurfaceY - scaledHip.y, targetZ - scaledHip.z);
-      } else {
-        rider.pivot.position.set(0.0, seatSurfaceY - riderHeight * 0.28, targetZ);
-      }
+      positionRiderOnHip(rider, template, new THREE.Vector3(0.0, seatSurfaceY, targetZ), scale);
 
       rider.restX = rider.pivot.position.x;
       rider.restY = rider.pivot.position.y;
@@ -703,22 +647,13 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
 
   // 8. Emissive Blinking Bulbs for night lighting
   const bulbs = [];
-  const bulbGeo = new THREE.SphereGeometry(0.1, 8, 8);
   const bulbColors = [0xff00ff, 0x00ffff, 0xffff00, 0xff3300, 0x33ff00];
 
   const bulbCount = 16;
   for (let i = 0; i < bulbCount; i++) {
     const angle = (i / bulbCount) * Math.PI * 2;
     const color = bulbColors[i % bulbColors.length];
-
-    const bulbMat = new THREE.MeshStandardMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 0.0, // off by day
-      roughness: 0.1
-    });
-
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    const bulb = createEmissiveBulb(color, 0.1, 0.0);
     // Positioned on the chrome outer rim just below handrail height
     bulb.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
     bulb.layers.enable(2);
@@ -729,7 +664,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   const ridePointLights = [];
   
   // Central Disc Light
-  const centerLight = new THREE.PointLight(0xff00ff, 0, 45, 1.2);
+  const centerLight = createPointLight(0xff00ff, 0, 45, 1.2);
   centerLight.position.set(0, 1.5, 0);
   centerLight.layers.set(2);
   discMeshGroup.add(centerLight);
@@ -738,7 +673,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   // Rim Lights (reduced to 2 for performance, using light layers)
   for (let i = 0; i < 2; i++) {
     const angle = (i / 2) * Math.PI * 2;
-    const pl = new THREE.PointLight(0xff00ff, 0, 45, 1.5);
+    const pl = createPointLight(0xff00ff, 0, 45, 1.5);
     pl.position.set((discRadius + 0.06) * Math.cos(angle), 0.3, (discRadius + 0.06) * Math.sin(angle));
     pl.layers.set(2);
     discMeshGroup.add(pl);
@@ -746,9 +681,29 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
   }
 
   const tagadaColor = new THREE.Color(0xff00ff);
-  eventBus.on('color-change', (hex) => {
+
+  // 9. ── Control Panel ────────────────────────────────────────────────────────
+  const controlPanel = buildControlPanel({ initialRunning: true });
+  controlPanel.group.position.set(12, 0, -12);
+  group.add(controlPanel.group);
+  group.updateMatrixWorld(true);
+  controlPanel.group.lookAt(position[0], position[1], position[2]);
+  controlPanel.group.rotateY(Math.PI);
+
+  // 10. ── Controller ──────────────────────────────────────────────────────────
+  const controller = new TagadaController(group, armPivot, discMeshGroup, seats);
+  controller.panel = controlPanel.group;
+
+  // Bridge controller state to ControlPanel
+  controlPanel.group.updateState = (running) => {
+    if (controlPanel.running !== running) {
+      controlPanel.toggle();
+    }
+  };
+
+  controller.addEventBusListener('color-change', (hex) => {
     const target = new THREE.Color(hex);
-    new TWEEN.Tween(tagadaColor)
+    const tween = new TWEEN.Tween(tagadaColor)
       .to(target, 500)
       .easing(Easings.COLOR)
       .onUpdate(() => {
@@ -762,39 +717,13 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
         seatLeds.forEach(b => tint(b.material));
         armStrips.forEach(b => tint(b.material));
         ridePointLights.forEach(pl => pl.color.copy(tagadaColor));
-      })
-      .start();
+      });
+    controller.trackTween(tween);
+    tween.start();
   });
 
-  // 9. ── Control Panel ────────────────────────────────────────────────────────
-  const controlPanel = new ControlPanel({ initialRunning: true });
-  controlPanel.group.position.set(12, 0, -12);
-  group.add(controlPanel.group);
-  group.updateMatrixWorld(true);
-  controlPanel.group.lookAt(position[0], position[1], position[2]);
-  controlPanel.group.rotateY(Math.PI);
-
-  // 10. ── Controller ──────────────────────────────────────────────────────────
-  const controller = {
-    armPivot,
-    discMeshGroup,
-    seats,
-    panel: controlPanel.group,
-    speedMultiplier: 1.0,
-    get running() { return controlPanel.running; },
-    set running(v) { controlPanel.running = v; },
-    spinAngle: 0, pitchAngle: 0, rollAngle: 0, bumpAngle: 0, armYawAngle: 0,
-    nightMix: 0,
-    maxSpeed: MAX_SPIN_SPEED,
-    toggle() { controlPanel.toggle(); },
-    start() { controlPanel.running = true; },
-    stop() { controlPanel.running = false; },
-    setSpeed(v) { this.maxSpeed = Math.max(0, v); },
-  };
-
   group.userData.tick = (delta, time) => {
-    const ease = controlPanel.tick(delta, controller.speedMultiplier);
-    const speedMult = controller.speedMultiplier !== undefined ? controller.speedMultiplier : 1.0;
+    const { ease, speedMult } = controller.tickSpeed(controlPanel, delta);
     controller.spinAngle += controller.maxSpeed * ease * speedMult * delta;
     controller.pitchAngle += PITCH_FREQ * ease * speedMult * delta;
     controller.rollAngle += ROLL_FREQ * ease * speedMult * delta;
@@ -871,7 +800,7 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
 
     // ── Light show: smooth day↔night, with chase / pulse patterns ─────────────
     const isNight = isNightNow(group);
-    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * delta));
+    controller.nightMix = nightMixLerp(controller.nightMix, isNight, delta, 2.2);
     const nf = controller.nightMix;
 
     // Bulbs + ride point lights
@@ -890,9 +819,6 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
       ridePointLights.forEach((pl) => { pl.intensity = 0.0; });
     }
 
-    if (ease === 0) {
-      controller.speedMultiplier = 1.0;
-    }
     // Canopy hem bulbs — rotating chase
     for (let i = 0; i < canopyBulbs.length; i++) {
       const chase = 0.5 + 0.5 * Math.sin(time * 7.0 - i * (Math.PI * 2 / canopyBulbs.length) * 3);
@@ -935,28 +861,9 @@ export async function buildTagada({ position = [-40, 0, 40], camera, renderer, a
     gem.rotation.y += delta * 1.1 * ease;
   };
 
-  // Click-to-toggle is handled centrally by the InteractionManager (main.js registers this ride's
-  // controlPanel and fires controller.toggle() on 'interact-click'). The old per-ride raycast
-  // listener was removed — having both fired toggle() twice per click, cancelling out (the panel
-  // appeared dead). The `camera`/`renderer` args are kept for signature compatibility.
   void camera; void renderer;
 
-  group.traverse((o) => {
-    if (o.isMesh) {
-      let isPanel = false;
-      let curr = o;
-      while (curr) {
-        if (curr === controlPanel.group) {
-          isPanel = true;
-          break;
-        }
-        curr = curr.parent;
-      }
-      if (!isPanel) {
-        o.layers.enable(2);
-      }
-    }
-  });
+  controller.applyBloomLayers();
 
   group.userData.controller = controller;
   return group;

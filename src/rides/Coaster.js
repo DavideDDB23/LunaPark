@@ -27,13 +27,58 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
 import { loadGLB } from '../utils/loaders.js';
-import { ControlPanel } from '../ui/ControlPanel.js';
+import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/Easings.js';
+import { Easings } from '../utils/easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import {
   loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight,
 } from '../people/Passengers.js';
+import { RideBase } from './RideBase.js';
+import { createPointLight, createEmissiveBulb, nightMixLerp } from '../utils/rideUtils.js';
+
+class CoasterController extends RideBase {
+  constructor(group, cars, curve, uCar) {
+    super(group, { running: true });
+    this.cars = cars;
+    this.curve = curve;
+    this.u = uCar;
+    this.cheerMix = 0;
+    this.state = 'STATION_STOP';
+    this.stopTimer = STATION_PAUSE;
+    this.lastSpeed = 0.0;
+    this.vBrakeStart = 0.0;
+  }
+
+  getFpvTarget() {
+    return this.cars[0]?.cameraRig || null;
+  }
+
+  getFpvCameraPos(target, out) {
+    target.getWorldPosition(out);
+  }
+
+  getFpvLookTarget(target, out) {
+    const fpvTmpVec = new THREE.Vector3(0, 0, -10);
+    target.localToWorld(fpvTmpVec);
+    out.copy(fpvTmpVec);
+  }
+
+  getFpvUp(target, out) {
+    const fpvTmpQuat = new THREE.Quaternion();
+    target.parent.getWorldQuaternion(fpvTmpQuat);
+    out.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
+  }
+
+  getFpvOffset() {
+    return new THREE.Vector3(0, 0, 0);
+  }
+
+  getRiders() {
+    return this.cars[0]?.riders || [];
+  }
+}
+
 
 const MODEL_URL = 'assets/models/rides/coaster_track.glb';
 const TARGET_LONG = 94;      // world units — longest horizontal extent after auto-fit. Enlarged so
@@ -136,7 +181,7 @@ function extractCenterline(model) {
 
   // Rings 1..n-1: parallel-transport previous up, then pick closest spoke
   for (let r = 1; r < n; r++) {
-    const prevT = rawPts[r].clone().sub(rawPts[r - 2 < 0 ? n + (r - 2) : r - 2]).normalize();
+    const prevT = rawPts[r].clone().sub(rawPts[(r - 2 + n) % n]).normalize();
     const currT = rawPts[(r + 1) % n].clone().sub(rawPts[r - 1]).normalize();
     const qTrans = new THREE.Quaternion().setFromUnitVectors(prevT, currT);
     const projectedPrevU = rawUps[r - 1].clone().applyQuaternion(qTrans);
@@ -320,16 +365,16 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   );
 
   // ── Seat the template cart on the curve, capture its on-rail local pose ──
-  // Forziamo uCar = 0 (stazione, rettilineo) per ottenere un quaternione
-  // di rotazione nativa senza counter-bank dalla curva.
+  // Force uCar = 0 (station, straight track) to obtain a native rotation quaternion
+  // without counter-bank from the curve.
   let uCar = 0;
 
   const dolly0 = new THREE.Group();
   dolly0.name = 'coaster_t0_c0';
   group.add(dolly0); // Add directly to group to avoid scale inheritance from rideScaled
 
-  // ── FIX DEFINITIVO: Allineamento Dolly e Vagoni (Rimozione Counter-Bank) ──
-  // Rimuoviamo temporaneamente il Y_STRETCH per calcolare la posa pura sul binario
+  // ── DEFINITIVE FIX: Dolly and Cart Alignment (Counter-Bank Removal) ──
+  // Temporarily remove Y_STRETCH to calculate the pure pose on the track
   const originalYScale = rideScaled.scale.y;
   rideScaled.scale.y = rideScaled.scale.x;
   rideScaled.updateMatrixWorld(true);
@@ -344,16 +389,16 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   dolly0.quaternion.copy(rideScaled.quaternion).multiply(_q0);
   dolly0.updateMatrixWorld(true);
 
-  // Attach: riposiziona il cart sotto dolly0 mantenendo la posa world.
-  // Salviamo la rotazione nativa stand-up PRIMA dell'attach per non ereditare
-  // il counter-bank della curva nella posizione locale.
+  // Attach: reposition the cart under dolly0 while preserving the world pose.
+  // Save the native stand-up rotation BEFORE attach to avoid inheriting
+  // the curve counter-bank in the local position.
   const standUpQuat = templateCartNode.quaternion.clone();
   dolly0.attach(templateCartNode);
 
-  // Ripristiniamo la rotazione nativa pura (stand-up, senza counter-bank).
+  // Restore the pure native rotation (stand-up, without counter-bank).
   templateCartNode.quaternion.copy(standUpQuat);
 
-  // Centriamo fisicamente il vagone sul binario (mantenendo l'altezza Y delle ruote)
+  // Physically center the cart on the track (preserving the Y height of the wheels)
   templateCartNode.position.x = 0;
   templateCartNode.position.z = 0;
 
@@ -365,7 +410,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const carLocalQuat = templateCartNode.quaternion.clone();
   const carLocalScale = templateCartNode.scale.clone();
 
-  // Ripristiniamo l'altezza vertiginosa del coaster
+  // Restore the dramatic height of the coaster
   rideScaled.scale.y = originalYScale;
   rideScaled.updateMatrixWorld(true);
 
@@ -449,7 +494,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     clone.position.copy(carLocalPos);
     clone.quaternion.copy(carLocalQuat);
     clone.scale.copy(carLocalScale);
-    clone.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    clone.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
     dolly.add(clone);
     group.add(dolly); // Add directly to group to avoid scale inheritance
 
@@ -521,8 +566,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     const cameraRig = new THREE.Group();
     cameraRig.name = 'cameraRig';
 
-    // Posizionata geometricamente al centro esatto della cabina
-    // usando i riferimenti puri, e all'altezza occhi del passeggero.
+    // Positioned at the geometric centre of the cabin using pure local references,
+    // at passenger eye height.
     const r1 = firstCar.riders[1];
     cameraRig.position.set(
       (r0.pivot.position.x + r1.pivot.position.x) / 2,
@@ -530,18 +575,18 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       (r0.pivot.position.z + r1.pivot.position.z) / 2
     );
 
-    // Ruotata per farle guardare esattamente in avanti lungo i binari
+    // Rotated to face exactly forward along the track
     cameraRig.rotation.y = Math.PI;
 
-    // CRITICO: La telecamera DEVE essere figlia del dolly matematico,
-    // MAI del cartBody, altrimenti subisce le rotazioni della mesh e si ribalta!
+    // CRITICAL: the camera MUST be a child of the mathematical dolly,
+    // NEVER of cartBody — otherwise it inherits mesh rotations and will flip!
     firstCar.dolly.add(cameraRig);
     firstCar.cameraRig = cameraRig;
   }
 
   // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
   // Smooth start/stop acceleration (rampUp: 1.0s, rampDown: 1.5s)
-  const controlPanel = new ControlPanel({ initialRunning: true });
+  const controlPanel = buildControlPanel({ initialRunning: true });
   group.add(controlPanel.group);
   group.updateMatrixWorld(true);
 
@@ -617,37 +662,29 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     trackMesh.material = [railMat, orig];
   }
   const coasterColor = new THREE.Color(0x3dd2ff);
-  eventBus.on('color-change', (hex) => {
+
+  // ── Controller / station state-machine ──
+  const controller = new CoasterController(group, cars, curve, uCar);
+  controller.panel = controlPanel.group;
+
+  // Bridge controller state to ControlPanel
+  controlPanel.group.updateState = (running) => {
+    if (controlPanel.running !== running) {
+      controlPanel.toggle();
+    }
+  };
+
+  controller.addEventBusListener('color-change', (hex) => {
     const target = new THREE.Color(hex);
-    new TWEEN.Tween(coasterColor)
+    const tween = new TWEEN.Tween(coasterColor)
       .to(target, 500)
       .easing(Easings.COLOR)
       .onUpdate(() => {
         for (const m of railGlowMats) m.emissive.copy(coasterColor);
-      })
-      .start();
+      });
+    controller.trackTween(tween);
+    tween.start();
   });
-
-  // ── Controller / station state-machine ──
-  const controller = {
-    cars,
-    curve,
-    u: uCar,
-    panel: controlPanel.group,
-    nightMix: 0,
-    cheerMix: 0,
-    get running() { return controlPanel.running; },
-    set running(v) { controlPanel.running = v; },
-    speedScale: 1.0,
-    state: 'STATION_STOP',
-    stopTimer: STATION_PAUSE,
-    lastSpeed: 0.0,
-    vBrakeStart: 0.0,
-    toggle() { controlPanel.toggle(); },
-    start() { controlPanel.running = true; },
-    stop() { controlPanel.running = false; },
-    setSpeed(v) { this.speedScale = Math.max(0, v); },
-  };
 
   const _pt = new THREE.Vector3();
   const _ptF = new THREE.Vector3();
@@ -655,8 +692,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   const _q = new THREE.Quaternion();
 
   group.userData.tick = (delta, _time) => {
-    const dt = Math.min(0.1, delta);
-    const ease = controlPanel.tick(delta, controller.speedScale);
+    const dt = Math.min(0.05, delta); // consistent with App.js delta cap
+    const ease = controlPanel.tick(delta, controller.speedMultiplier);
     controller.ease = ease;
 
     if (ease > 0.0001) {
@@ -694,7 +731,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
 
       controller.lastSpeed = v;
       if (controller.state !== 'STATION_STOP') {
-        const du = (v * ease * controller.speedScale / trackLenWorld) * dt;
+        const du = (v * ease * controller.speedMultiplier / trackLenWorld) * dt;
         controller.u = (controller.u + du) % 1;
       }
     }
@@ -781,20 +818,16 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
 
     // 5. ── Night light show: the rail itself glows + gently breathes ──
     const isNight = isNightNow(group);
-    controller.nightMix += ((isNight ? 1 : 0) - controller.nightMix) * (1 - Math.exp(-2.2 * dt));
+    controller.nightMix = nightMixLerp(controller.nightMix, isNight, dt, 2.2);
     const nf = controller.nightMix;
     const breathe = 0.5 + 0.5 * Math.sin(_time * 1.6);
     // With toneMapped = false, push the thin real rail bright so it reads clearly; breathe 1.5→2.0.
     for (let i = 0; i < railGlowMats.length; i++) {
       railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 0.5);
     }
-    // (track PointLights removed)
   };
 
   // ── Hide the GLB's built-in operator-booth sign ──
-  // The ride's name marquee is now a shared, free-standing RideSign (see js/environment/RideSign.js,
-  // placed in main.js). Keeping it out of `model` avoids the coaster's non-uniform Y_STRETCH that
-  // would otherwise distort it. Here we just hide the model's default panel art.
   const oldSign = model.getObjectByName('panel_1001');
   if (oldSign) {
     oldSign.children.forEach((child) => {
@@ -802,28 +835,9 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     });
   }
 
-  // Click-to-toggle is handled centrally by the InteractionManager (main.js
-  // registers this ride's controlPanel like the other three rides). The old
-  // private raycaster here double-raycasted every mousemove, fought over the
-  // cursor style, and let panel clicks ALSO trigger the camera click-to-fly.
   void camera; void renderer;
 
-  group.traverse((o) => {
-    if (o.isMesh) {
-      let isPanel = false;
-      let curr = o;
-      while (curr) {
-        if (curr === controlPanel.group) {
-          isPanel = true;
-          break;
-        }
-        curr = curr.parent;
-      }
-      if (!isPanel) {
-        o.layers.enable(2);
-      }
-    }
-  });
+  controller.applyBloomLayers();
 
   group.userData.controller = controller;
   return group;

@@ -47,10 +47,10 @@ const CSS_TEXT = `
 }
 `;
 
-export function setupRideHotbar({ rides, onSelect, getActiveRideId }) {
+export function buildRideHotbar({ rides, onSelect, getActiveRideId }) {
   if (!Array.isArray(rides) || rides.length === 0) return { destroy() {} };
-  if (typeof onSelect !== 'function') throw new Error('setupRideHotbar: onSelect must be a function');
-  if (typeof getActiveRideId !== 'function') throw new Error('setupRideHotbar: getActiveRideId must be a function');
+  if (typeof onSelect !== 'function') throw new Error('buildRideHotbar: onSelect must be a function');
+  if (typeof getActiveRideId !== 'function') throw new Error('buildRideHotbar: getActiveRideId must be a function');
 
   const styleEl = document.createElement('style');
   styleEl.id = 'rideHotbarStyles';
