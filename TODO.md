@@ -130,7 +130,13 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] While walking, arms swing back and forth (walk animation in JS) (speed-scaled arm swing with elbow flex)
 - [x] Various body colours / outfits so they look different from each other (14 outfits + HSL shift per NPC)
 - [x] They follow the paths — waypoints placed at path intersections and near each ride (A* pathfinding with cost-weighted grid)
-- [-] People model animation still needs refinement (arms and walking)
+---
+
+## 🔴 NPC MODEL CLEANUP
+
+- [ ] **Rimuovere modelli che camminano storti all'indietro** — priorità massima
+- [ ] **Rimuovere modelli con caschetto da lavoro** — modifica semplice (cambio outfit/colore)
+- [ ] **Rimuovere modelli che danno problemi con le sedute delle giostre** — priorità più bassa
 
 ---
 
@@ -180,7 +186,7 @@ A small HUD panel overlaid on the scene with:
 
 ## 🔴 RIVER NIGHT GLOW
 
-- [ ] River shader: di notte brilla di luce propria (troppo riflettente/luminosa con l'aumento della luce ambientale e lunare) — rivedere uniformi `uNight`/`uSunDir` in `Water.js`
+- [x] River shader: di notte brilla di luce propria — ridotto `col*0.32→col*0.08` in `Water.js:189` ✅
 
 ---
 
@@ -260,7 +266,6 @@ The report is submitted alongside the code. Sections required:
 - [x] **Implement shooting mode**: the pointer-lock aim system already exists (`ShootingGallery.js`) — verify it works correctly and improve the experience (implemented smooth FPV flight transition, pointer lock camera rotation, custom HUD overlays, Option A moving targets with distance multipliers, and physical pendulum spin damping animation)
 - [ ] **Replace booth GLB**: find/import a different carnival booth model to replace `stylized_carnival_booth.glb`
 - [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). ❌ **Reverted (approccio iniziale non riuscito bene — da rifare con approccio diverso: lock yaw a `euler.y` finché non esce da aim mode)**
-- [ ] **Roller coaster**: rimuovere le pointlight fluttuanti sotto i vagoni
 
 ---
 
@@ -272,6 +277,7 @@ The report is submitted alongside the code. Sections required:
   - Body: GitHub repo link + GitHub Pages live demo link + brief feature list
 - [ ] Tag the final commit: `v1.0-submission`
 - [ ] `luna_park_report.pdf` committed in the repository root
+- [ ] **Browser console check**: open the live page and check for any JS warnings/errors, leftover `console.log`, or dead code paths — cleanup before submission
 - [ ] No `node_modules` or build artifacts in the repository
 - [x] Remove leftover `test_coaster.js` from repository root ✅ **RIMOSSO**
 
@@ -289,22 +295,3 @@ The examiner will ask you to demo the project live and then ask technical questi
 - [ ] Be able to explain **PCF shadow maps** — what the filter does and why it avoids hard aliased edges
 - [ ] Be able to explain **the rendering equation** and how the hemisphere light approximates it
 - [ ] Record a **backup video** of the full demo at 60fps in case the live demo has technical problems
-
----
-
-## 📋 Remaining Tasks (prioritised)
-
-- [x] Remove `'photo'` action from idle position arrays in `Passengers.js`,
-      `FerrisWheel.js`, and `Coaster.js` (it clips camera into face) ✅ **RIMOSSO**
-
-```
-[ ] Technical report PDF (luna_park_report.pdf) — NOT STARTED
-[ ] Stage: add visible support poles for the cyan/magenta volumetric beams (currently floating at y=14)
-[ ] Roller coaster: evaluate moving the stop to the short straight low-to-ground track section (currently at computed uCar station)
-[ ] Shooting gallery: replace booth GLB + fix yaw lock
-[ ] River night glow: water shader too bright at night after ambient boost
-[ ] Deploy GitHub Pages + test live URL
-[ ] Add external landscape / scenery around the park perimeter
-[ ] Submission formalities (email, tag, check)
-[ ] Oral exam prep + backup video
-```

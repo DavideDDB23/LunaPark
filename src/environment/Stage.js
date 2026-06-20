@@ -714,7 +714,7 @@ export function buildStage({ anisotropy = 8 } = {}) {
       depthWrite: false
     });
     const beam = new THREE.Mesh(beamGeo, beamMat);
-    beam.position.set(i === 0 ? -5 : 5, 14, Z + 8);
+    beam.position.set(i === 0 ? -5 : 5, 6.3, Z + 12);
     beam.rotation.z = i === 0 ? -0.28 : 0.28;
     beam.rotation.x = -0.08;
     beam.userData.baseZ = beam.rotation.z;
@@ -724,7 +724,8 @@ export function buildStage({ anisotropy = 8 } = {}) {
     // Fixture housing for the volumetric beam source
     const beamHousingMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.7 });
     const fixtureGroup = new THREE.Group();
-    fixtureGroup.position.set(i === 0 ? -5 : 5, 14, Z + 8);
+    fixtureGroup.position.set(i === 0 ? -5 : 5, 6.3, Z + 12);
+    fixtureGroup.rotation.x = -Math.PI / 4;
     const housing = new THREE.Mesh(
       new THREE.CylinderGeometry(0.2, 0.25, 0.4, 12),
       beamHousingMat
