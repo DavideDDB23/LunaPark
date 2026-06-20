@@ -193,7 +193,7 @@ Clicking the panel emits `'ride-toggle'` on the event bus; the ride responds by 
 
 The shooting gallery (`ShootingGallery.js`) uses the browser's **Pointer Lock API** for a first-person aim experience:
 
-1. The user clicks the shooting booth sign or the gallery's control panel to enter aim mode.
+1. The user presses **T** near the shooting booth to enter aim mode. The same can also be achieved by clicking the gallery's ride hint sign.
 2. The camera flies to a fixed FPV position in front of the targets.
 3. `canvas.requestPointerLock()` hides and locks the cursor; subsequent mouse movements rotate the aim reticle.
 4. A large reticle HUD overlay (`<canvas>` positioned with CSS) shows a crosshair and the score.

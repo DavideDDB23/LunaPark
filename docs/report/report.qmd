@@ -243,14 +243,18 @@ Four modes: **Orbit** (default, `OrbitControls` with damping), **Click-to-fly** 
 | Left-click on ground/object | Fly camera to point (1.2 s) |
 | Left-click on ride panel | Start/stop ride |
 | Left-click on lamppost | Toggle lamppost (Auto/Off/On) |
-| Left-click in shooting booth | Enter FPV aim mode |
-| Scroll over ride | Adjust ride speed (0.2$\times$--1.5$\times$) |
+| Left-click on ride's control panel | Start/stop ride |
+| Left-click on lamppost | Toggle lamppost (Auto/Off/On) |
 | Keys 1--6 | Preset viewpoints |
-| Key C | Enter FPV aboard nearest ride |
+| Key T (near shooting gallery) | Enter FPV aim mode |
+| Key C (near ride) | Enter FPV aboard nearest ride |
+| Key F | Launch fireworks show |
 | ESC | Exit FPV / aim mode |
 | Space | Pause/resume day/night |
-| HUD slider | Set time of day |
+| HUD ride speed sliders | Adjust ride speed (0.2$\times$--1.5$\times$) |
+| HUD time slider | Set time of day |
 | HUD colour picker | Change decoration bulb colour |
+| Bottom hotbar buttons | Enter FPV for a specific ride |
 
 # Conclusion
 
