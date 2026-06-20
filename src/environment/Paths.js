@@ -24,7 +24,7 @@ export async function buildPaths({ anisotropy = 8 } = {}) {
   const group = new THREE.Group();
   group.name = 'paths';
 
-  const pathY = 0.01;
+  const pathY = 0.05;
 
   // Split NS path into North and South segments, leaving a space at Z=0 for the East-West river
   const matNS = makeAsphaltMaterial({ repeat: [1, 14], anisotropy });

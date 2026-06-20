@@ -362,7 +362,8 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   const controlPanel = buildControlPanel({ initialRunning: true });
   controlPanel.group.position.set(-15, 0, 15); // Southwest of carousel, toward park center (mirrors FerrisWheel panel)
   group.add(controlPanel.group);
-  controlPanel.group.lookAt(0, 1.35, 0); // controls face the park center (where the operator approaches from)
+  controlPanel.group.lookAt(0, 1.35, 0);
+  controlPanel.group.rotateY(Math.PI);
 
   // ── Controller / State ──
   const controller = new CarouselController(group, rotatingAssembly, horses);

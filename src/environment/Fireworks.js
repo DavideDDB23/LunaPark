@@ -346,7 +346,6 @@ export function buildFireworks() {
   let showMode = false;
   let showPhase = 0;
   let showTimer = 0;
-  let nextSporadicTime = 0;
 
   eventBus.on('trigger-fireworks-show', () => {
     showMode = true;
@@ -369,7 +368,6 @@ export function buildFireworks() {
   group.userData.tick = (delta, time) => {
     const t = performance.now() / 1000;
     
-    // Update global opacity based on night
     const opacity = 0.55 + 0.45 * nightFactor;
     for (const b of bursts) {
       b.mat.uniforms.uOpacity.value = opacity;
@@ -378,22 +376,18 @@ export function buildFireworks() {
     }
 
     if (showMode) {
-      // --- Choreographed Show ---
       showTimer -= delta;
       if (showTimer <= 0) {
         if (showPhase === 0) {
-          // Fan of 3
-          fire(-60, -120, 50, 'sphere', 0); // Gold
-          fire(  0, -120, 60, 'sphere', 1); // Silver
-          fire( 60, -120, 50, 'sphere', 0); // Gold
+          fire(-60, -120, 50, 'sphere', 0);
+          fire(  0, -120, 60, 'sphere', 1);
+          fire( 60, -120, 50, 'sphere', 0);
           showTimer = 2.5;
         } else if (showPhase === 1) {
-          // Double willow center
-          fire(-15, -130, 70, 'willow', 2); // Red
-          fire( 15, -130, 70, 'willow', 3); // Green
+          fire(-15, -130, 70, 'willow', 2);
+          fire( 15, -130, 70, 'willow', 3);
           showTimer = 3.0;
         } else if (showPhase === 2) {
-          // Arch sweeping left to right
           fire(-80, -110, 45, 'corona', 4);
           setTimeout(() => fire(-40, -110, 55, 'corona', 5), 300);
           setTimeout(() => fire(  0, -110, 65, 'corona', 4), 600);
@@ -401,35 +395,17 @@ export function buildFireworks() {
           setTimeout(() => fire( 80, -110, 45, 'corona', 4), 1200);
           showTimer = 4.0;
         } else if (showPhase === 3) {
-          // Grand Finale
           fire(-40, -140, 60, 'sphere', 0);
           fire( 40, -140, 60, 'sphere', 0);
           setTimeout(() => fire(-20, -140, 75, 'sphere', 1), 400);
           setTimeout(() => fire( 20, -140, 75, 'sphere', 1), 400);
-          setTimeout(() => fire(  0, -140, 90, 'willow', 0), 800); // Giant center willow
-          setTimeout(() => fire(  0, -140, 50, 'corona', 2), 1000); // Low center ring
+          setTimeout(() => fire(  0, -140, 90, 'willow', 0), 800);
+          setTimeout(() => fire(  0, -140, 50, 'corona', 2), 1000);
           showTimer = 8.0;
         } else {
-          // End show
           showMode = false;
-          nextSporadicTime = t + 5.0; // pause before returning to sporadic
         }
         showPhase++;
-      }
-    } else {
-      // --- Sporadic Mode ---
-      if (t > nextSporadicTime) {
-        // Wide arc around the back of the park
-        const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.8; // Behind
-        const radius = 120 + Math.random() * 40;
-        const x = Math.sin(angle) * radius;
-        const z = Math.cos(angle) * radius;
-        const y = 40 + Math.random() * 40;
-        
-        const shapes = ['sphere', 'sphere', 'corona', 'willow'];
-        fire(x, z, y, shapes[Math.floor(Math.random() * shapes.length)]);
-        
-        nextSporadicTime = t + 3.0 + Math.random() * 5.0;
       }
     }
   };

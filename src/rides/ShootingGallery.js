@@ -3,7 +3,6 @@ import { eventBus } from '../utils/EventBus.js';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { makeRider, updateRider, pose } from '../people/Passengers.js';
 import { RideBase } from './RideBase.js';
-import { buildControlPanel } from '../ui/ControlPanel.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { nightMixLerp } from '../utils/rideUtils.js';
 
@@ -23,7 +22,6 @@ class ShootingGalleryController extends RideBase {
     this.cowboyWrapper = config.cowboyWrapper;
     this.bulletGltf = config.bulletGltf;
     this.muzzleLight = config.muzzleLight;
-    this.controlPanel = config.controlPanel;
 
     // Game state
     this.score = 0;
@@ -480,7 +478,7 @@ class ShootingGalleryController extends RideBase {
     const dt = Math.min(delta, 0.05);
 
     // Gradual start/stop transitions driven by the shared ControlPanel
-    const ease = this.controlPanel ? this.controlPanel.tick(delta, this.speedMultiplier) : 1.0;
+    const ease = 1.0;
 
     // 1. Muzzle light & recoil updates
     if (this.aimMode) {
@@ -1257,17 +1255,6 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
   const muzzleLight = new THREE.PointLight(0xff9922, 0.0, 4.0, 1.5);
   group.add(muzzleLight);
 
-  // ── Control Panel (Start/Stop) Southwest of the booth ──
-  const controlPanel = buildControlPanel({
-    initialRunning: true,
-    onToggle: (isRunning) => {
-      controller.running = isRunning;
-    }
-  });
-  controlPanel.group.position.set(3.5, 0, 4.5);
-  controlPanel.group.rotation.set(0, -Math.PI / 4, 0);
-  group.add(controlPanel.group);
-
   // Controller / State
   const controller = new ShootingGalleryController(group, {
     camera,
@@ -1282,16 +1269,7 @@ export async function buildShootingGallery({ camera, renderer, controls }) {
     cowboyWrapper,
     bulletGltf,
     muzzleLight,
-    controlPanel
   });
-  controller.panel = controlPanel.group;
-
-  // Bridge controller state to ControlPanel
-  controlPanel.group.updateState = (running) => {
-    if (controlPanel.running !== running) {
-      controlPanel.toggle();
-    }
-  };
 
   group.userData.tick = (delta, time) => {
     controller.tick(delta, time);

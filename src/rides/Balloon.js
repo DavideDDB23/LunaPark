@@ -429,10 +429,8 @@ export async function buildBalloon() {
     }
   }
 
-  if (balloons[0]) {
-    balloons[0].userData.rideId = 'balloon';
-    balloons[0].userData.rideName = 'Mongolfiera';
-  }
+  group.userData.rideId = 'balloon';
+  group.userData.rideName = 'Hot Air Balloon';
 
   // ── Control Panel ──
   const controlPanel = buildControlPanel({

@@ -232,15 +232,15 @@ async function init() {
 
   {
     const fw = environmentGroup.getObjectByName('ferrisWheel');
-    if (fw) { fw.userData.rideId = 'ferris'; fw.userData.rideName = 'Ruota'; }
+    if (fw) { fw.userData.rideId = 'ferris'; fw.userData.rideName = 'Sky Wheel'; }
     const cr = environmentGroup.getObjectByName('carousel');
-    if (cr) { cr.userData.rideId = 'carousel'; cr.userData.rideName = 'Carosello'; }
+    if (cr) { cr.userData.rideId = 'carousel'; cr.userData.rideName = 'Golden Carousel'; }
     const tg = environmentGroup.getObjectByName('tagada');
-    if (tg) { tg.userData.rideId = 'tagada'; tg.userData.rideName = 'Tagada'; }
+    if (tg) { tg.userData.rideId = 'tagada'; tg.userData.rideName = 'Turbo Tagada'; }
     const co = environmentGroup.getObjectByName('coaster');
-    if (co) { co.userData.rideId = 'coaster'; co.userData.rideName = 'Montagne Russe'; }
+    if (co) { co.userData.rideId = 'coaster'; co.userData.rideName = 'Tangled Twister'; }
     const tr = environmentGroup.getObjectByName('train');
-    if (tr) { tr.userData.rideId = 'train'; tr.userData.rideName = 'Brucomela'; }
+    if (tr) { tr.userData.rideId = 'train'; tr.userData.rideName = 'Scenic Railway'; }
   }
 
   rideSigns = FRONTAGES.map(({ title, theme, groupName, sign, panel }) => {
@@ -258,14 +258,10 @@ async function init() {
       ctrl.panel.rotation.set(0, faceYaw(panel[0]), 0);
     }
 
-    // For the shooting gallery there is no panel — put the hint above the
-    // sign itself so it floats clearly above it.
-    const hintPos = groupName === 'shootingGallery'
-      ? [sign[0], 10.8, sign[2]]
-      : panel ? [panel[0], 9.2, panel[2]] : [sign[0], 9.2, sign[2]];
+    const hintPos = panel ? [panel[0], 11.5, panel[2]] : [sign[0], 11.5, sign[2]];
     const hintLines = groupName === 'shootingGallery'
       ? ['🎯  Click to Play', 'Press ESC to Exit  •  T to aim']
-      : ['Click Panel to Turn On/Off', 'Scroll on Panel: Speed'];
+      : ['Click Panel to Turn On/Off', 'Adjust Speed in HUD'];
     const hint = buildRideHint({ position: hintPos, lines: hintLines });
     hint.name = 'rideHint_' + groupName;
     environmentGroup.add(hint);
@@ -315,12 +311,12 @@ async function init() {
 
   buildRideHotbar({
     rides: [
-      { id: 'ferris',   name: 'Ruota',          icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7.05 5.05l9.9 9.9M7.05 14.95l9.9-9.9"/><circle cx="12" cy="10" r="1.2" fill="currentColor"/></svg>' },
-      { id: 'carousel', name: 'Carosello',      icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v4"/><path d="M3 9h18v2a9 9 0 0 1-18 0V9z"/><path d="M12 7v4"/></svg>' },
-      { id: 'coaster',  name: 'Montagne Russe', icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h4v-3a3 3 0 0 1 6 0v3h4v-3a3 3 0 0 1 6 0v3"/><circle cx="6" cy="14" r="1.5" fill="currentColor"/><circle cx="14" cy="14" r="1.5" fill="currentColor"/></svg>' },
-      { id: 'tagada',   name: 'Tagada',         icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>' },
-      { id: 'train',    name: 'Brucomela',      icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6" width="14" height="11" rx="2"/><circle cx="9" cy="20" r="1.5" fill="currentColor"/><circle cx="15" cy="20" r="1.5" fill="currentColor"/><path d="M5 12h14"/></svg>' },
-      { id: 'balloon',  name: 'Mongolfiera',    icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-3.5 0-6 2.5-6 6 0 4 3 8 6 8s6-4 6-8c0-3.5-2.5-6-6-6z"/><path d="M9 17l3 4 3-4"/><path d="M12 7v6"/></svg>' }
+      { id: 'ferris',   name: 'Sky Wheel',        icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7.05 5.05l9.9 9.9M7.05 14.95l9.9-9.9"/><circle cx="12" cy="10" r="1.2" fill="currentColor"/></svg>' },
+      { id: 'carousel', name: 'Golden Carousel',  icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L8 6h8l-4-4z"/><rect x="4" y="6" width="16" height="3" rx="1"/><path d="M6 9v2M10 9v2M14 9v2M18 9v2"/><path d="M6 11l-2 7h16l-2-7"/><path d="M4 18h16"/><circle cx="8" cy="14.5" r="0.8" fill="currentColor"/><circle cx="12" cy="14.5" r="0.8" fill="currentColor"/><circle cx="16" cy="14.5" r="0.8" fill="currentColor"/></svg>' },
+      { id: 'coaster',  name: 'Tangled Twister',  icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c2-4 4-6 6-6s4 4 6 4 4-6 6-6"/><path d="M2 18c2-4 4-6 6-6s4 4 6 4 4-6 6-6"/><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg>' },
+      { id: 'tagada',   name: 'Turbo Tagada',      icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>' },
+      { id: 'train',    name: 'Scenic Railway',    icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6" width="14" height="11" rx="2"/><circle cx="9" cy="20" r="1.5" fill="currentColor"/><circle cx="15" cy="20" r="1.5" fill="currentColor"/><path d="M5 12h14"/></svg>' },
+      { id: 'balloon',  name: 'Hot Air Balloon',   icon: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-3.5 0-6 2.5-6 6 0 4 3 8 6 8s6-4 6-8c0-3.5-2.5-6-6-6z"/><path d="M9 17l3 4 3-4"/><path d="M12 7v6"/></svg>' }
     ],
     onSelect: (id, opts) => {
       if (opts && opts.toggle) {
@@ -429,6 +425,22 @@ async function init() {
       autoAdvance = autoCheckbox.checked;
     });
   }
+
+  document.querySelectorAll('.ride-speed-slider').forEach((slider) => {
+    const valSpan = slider.nextElementSibling;
+    slider.addEventListener('input', () => {
+      const rideName = slider.dataset.ride;
+      const val = parseFloat(slider.value);
+      if (valSpan) valSpan.textContent = val.toFixed(2);
+      let ctrl = null;
+      if (rideName === 'ferrisWheel') ctrl = ferrisWheel.userData.controller;
+      else if (rideName === 'carousel') ctrl = carousel.userData.controller;
+      else if (rideName === 'tagada') ctrl = tagada.userData.controller;
+      else if (rideName === 'coaster') ctrl = coaster.userData.controller;
+      else if (rideName === 'train') ctrl = train.userData.controller;
+      if (ctrl) ctrl.speedMultiplier = val;
+    });
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {

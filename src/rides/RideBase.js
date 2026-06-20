@@ -50,7 +50,6 @@ export class RideBase {
   tickSpeed(controlPanel, delta) {
     const ease = controlPanel.tick(delta, this.speedMultiplier);
     const speedMult = this.speedMultiplier !== undefined ? this.speedMultiplier : 1.0;
-    if (ease === 0) this.speedMultiplier = 1.0;
     return { ease, speedMult };
   }
 
