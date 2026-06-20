@@ -133,4 +133,4 @@ LunaPark.nosync/
 - **Textures:** ambientCG (grass, asphalt, wood) — CC0
 - **HDR Sky:** Polyhaven (day, night, sunrise, sunset) — CC0
 - **Libraries:** Three.js r170 (MIT), tween.js (MIT)
-- **Full asset attribution:** see [`docs/report/report.pdf`](docs/report/report.pdf)
+- **Full asset attribution:** see [`report.pdf`](report.pdf)
