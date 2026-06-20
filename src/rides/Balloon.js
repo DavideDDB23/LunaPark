@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { eventBus } from '../utils/EventBus.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight } from '../people/Passengers.js';
-import { buildControlPanel } from '../ui/ControlPanel.js';
 import { RideBase } from './RideBase.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { createPointLight, createEmissiveBulb, nightMixLerp } from '../utils/rideUtils.js';
@@ -432,29 +431,10 @@ export async function buildBalloon() {
   group.userData.rideId = 'balloon';
   group.userData.rideName = 'Hot Air Balloon';
 
-  // ── Control Panel ──
-  const controlPanel = buildControlPanel({
-    initialRunning: true,
-    onToggle: (isRunning) => { controller.running = isRunning; }
-  });
-  controlPanel.group.position.set(-40, 0, 30);
-  group.add(controlPanel.group);
-  group.updateMatrixWorld(true);
-  controlPanel.group.lookAt(-40, 0, 42);
-  controlPanel.group.rotateY(Math.PI);
-
   const controller = new BalloonController(group, balloons);
-  controller.panel = controlPanel.group;
-
-  // Bridge controller state to ControlPanel
-  controlPanel.group.updateState = (running) => {
-    if (controlPanel.running !== running) {
-      controlPanel.toggle();
-    }
-  };
 
   group.userData.tick = (delta, time, wind) => {
-    const ease = controlPanel.tick(delta, controller.speedMultiplier);
+    const ease = controller.running ? 1.0 : 0.0;
     controller.nightMix = nightMixLerp(controller.nightMix, isNightNow(group), delta, 2.2);
 
     for (const b of balloons) {
