@@ -9,7 +9,7 @@
 
 ## Live Demo
 
-> **GitHub Pages URL:** _(to be added after deployment)_
+> **GitHub Pages URL:** https://sapienzainteractivegraphicscourse.github.io/final-project-tokteam
 
 ---
 
