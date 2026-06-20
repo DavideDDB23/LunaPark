@@ -5,6 +5,7 @@ import { riverCenter, riverHalfWidth, RIVER_X_MIN, RIVER_X_MAX } from './River.j
 const ROCK_MODELS = ['Rock_1', 'Rock_3', 'Rock_5', 'Rock_6', 'Rock_Moss_1', 'Rock_Moss_3'];
 const BASE_URL = 'assets/models/environment/';
 const BRIDGE_CLEAR = 5;
+const SPOTLIGHT_X_COORDS = [-85, -73, -61, -49, -37, -25, -13, 13, 25, 37, 49, 61, 73, 85];
 
 function rand(min, max) { return min + Math.random() * (max - min); }
 
@@ -92,16 +93,18 @@ export async function buildRocks() {
   for (let x = RIVER_X_MIN + 3; x <= RIVER_X_MAX - 3; x += STEP) {
     if (Math.abs(x) < BRIDGE_CLEAR) continue;
     
+    const nearSpotlight = SPOTLIGHT_X_COORDS.some((sx) => Math.abs(x - sx) < 1.8);
+    
     const cz = riverCenter(x);
     const hw = riverHalfWidth(x);
     
     // Left bank cluster
-    if (Math.random() < 0.95) {
+    if (Math.random() < 0.95 && !nearSpotlight) {
       spawnBankCluster(x, cz, hw, -1);
     }
     
     // Right bank cluster
-    if (Math.random() < 0.95) {
+    if (Math.random() < 0.95 && !nearSpotlight) {
       spawnBankCluster(x, cz, hw, 1);
     }
   }

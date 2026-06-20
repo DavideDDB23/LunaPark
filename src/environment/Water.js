@@ -116,6 +116,9 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uSunDir;
   uniform float uNight;       // 0 = full day, 1 = full night
   uniform vec4 uRipples[8];
+  uniform vec3 uSpotPositions[28];
+  uniform vec3 uSpotTargets[28];
+  uniform float uSpotIntensities[28];
   varying vec2 vUv;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -153,7 +156,8 @@ const fragmentShader = /* glsl */ `
     col += spec * 0.8;
 
     float fres = pow(1.0 - max(0.0, dot(normalize(vNormal), V)), 4.0);
-    col = mix(col, vec3(0.7, 0.85, 0.95), fres * 0.25);
+    vec3 skyCol = mix(vec3(0.7, 0.85, 0.95), vec3(0.005, 0.015, 0.035), clamp(uNight, 0.0, 1.0));
+    col = mix(col, skyCol, fres * 0.25);
 
     float foamStrip = smoothstep(0.78, 1.0, bank);
     float foamRipple = smoothstep(0.55, 1.0, noise(vec2(vUv.x * 200.0 + uTime * 2.0, vUv.y * 40.0)));
@@ -183,8 +187,40 @@ const fragmentShader = /* glsl */ `
     }
     col = mix(col, foamCol, clamp(totalFoam, 0.0, 1.0));
 
-    vec3 nightTint = vec3(0.05, 0.11, 0.22);
-    col = mix(col, nightTint + col * 0.08, clamp(uNight, 0.0, 1.0));
+    // Night Time
+    vec3 nightCol = col * 0.03; // Base water extremely dark, practically no light emitted
+    col = mix(col, nightCol, clamp(uNight, 0.0, 1.0));
+
+    // Spotlights illumination
+    vec3 spotLightAdded = vec3(0.0);
+    for(int i=0; i<28; i++) {
+        float intensity = uSpotIntensities[i];
+        if (intensity > 0.0) {
+            vec3 lDir = vWorldPos - uSpotPositions[i];
+            float dist = length(lDir);
+            lDir = normalize(lDir);
+            
+            vec3 tDir = normalize(uSpotTargets[i] - uSpotPositions[i]);
+            float spotEffect = dot(lDir, tDir);
+            
+            if (spotEffect > 0.85) { // cone angle
+                float spotFalloff = smoothstep(0.85, 0.95, spotEffect);
+                float atten = 1.0 / (1.0 + 0.1 * dist + 0.05 * dist * dist);
+                
+                vec3 normal = normalize(vNormal);
+                float diff = max(0.0, dot(normal, -lDir));
+                
+                vec3 V = normalize(cameraPosition - vWorldPos);
+                vec3 H = normalize(-lDir + V);
+                float spec = pow(max(0.0, dot(normal, H)), 60.0);
+                
+                // Add warm white light (softer contribution)
+                spotLightAdded += vec3(1.0, 0.95, 0.85) * (intensity * 0.008) * atten * spotFalloff * (diff + spec * 2.0);
+            }
+        }
+    }
+
+    col += spotLightAdded * clamp(uNight, 0.0, 1.0); // Only add at night
 
     gl_FragColor = vec4(col, 0.85);
   }
@@ -200,6 +236,9 @@ export function buildWater() {
       uSunDir: { value: new THREE.Vector3(0.5, 1.0, 0.3).normalize() },
       uNight: { value: 0.0 },
       uRipples: { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) },
+      uSpotPositions: { value: Array(28).fill(null).map(() => new THREE.Vector3()) },
+      uSpotTargets: { value: Array(28).fill(null).map(() => new THREE.Vector3()) },
+      uSpotIntensities: { value: Array(28).fill(0) },
     },
     vertexShader,
     fragmentShader,
@@ -212,6 +251,8 @@ export function buildWater() {
   mesh.position.y = RIVER_Y;
   mesh.name = 'river_surface';
   group.add(mesh);
+  
+  group.userData.material = material;
 
   const activeRipples = [];
 
