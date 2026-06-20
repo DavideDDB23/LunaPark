@@ -169,6 +169,7 @@ A heads-up display showing the current time of day. Already partially designed �
 - [x] **Water night tint**: `uNight` uniform in `Water.js` brightens river at night ✅
 - [x] **Fix spotlight toggle in auto time mode**: 3-state click cycle (Auto → Manual opposite → Manual matching → Auto) ✅
 - [x] **Fence string lights**: emissive bulbs along perimeter fence, day/night + color picker aware ✅
+- [ ] **Water night tint**: fiume troppo luminoso, sembra emettere luce propria (diminuire o aggiungere faretti su fondale/sponde)
 
 ---
 
@@ -181,12 +182,6 @@ A small HUD panel overlaid on the scene with:
 - [x] "?" help button that opens a list of all keyboard/mouse controls
 - [x] Auto day/night toggle button
 - [x] Improve GUI (top-left): reorganize layout, clarify labels, group controls, and review the actual control content (default values, tooltips, label consistency) ✅
-
----
-
-## 🔴 RIVER NIGHT GLOW
-
-- [x] River shader: di notte brilla di luce propria — ridotto `col*0.32→col*0.08` in `Water.js:189` ✅
 
 ---
 
