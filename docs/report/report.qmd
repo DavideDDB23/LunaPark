@@ -4,7 +4,7 @@ subtitle: "Project Report — Interactive Graphics Course"
 author:
   - name: Enrico Battistoni
   - name: Davide De Blasio
-date: June 2026
+date: 20 June 2026
 format:
   pdf:
     documentclass: article
@@ -80,22 +80,22 @@ Three.js r170 provides the scene graph abstraction and WebGL renderer. All custo
 \begin{figure}[htbp]
 \centering
 \begin{minipage}{0.47\textwidth}
-\centering\includegraphics[width=\textwidth]{screenshots/ferris_wheel.png}
+\centering\includegraphics[width=\textwidth]{screenshots/ferris_wheel.jpg}
 \subcaption{Ferris Wheel}
 \end{minipage}
 \hfill
 \begin{minipage}{0.47\textwidth}
-\centering\includegraphics[width=\textwidth]{screenshots/carousel.png}
+\centering\includegraphics[width=\textwidth]{screenshots/carousel.jpg}
 \subcaption{Carousel}
 \end{minipage}
 \vskip 0.3cm
 \begin{minipage}{0.47\textwidth}
-\centering\includegraphics[width=\textwidth]{screenshots/coaster.png}
+\centering\includegraphics[width=\textwidth]{screenshots/coaster.jpg}
 \subcaption{Roller Coaster}
 \end{minipage}
 \hfill
 \begin{minipage}{0.47\textwidth}
-\centering\includegraphics[width=\textwidth]{screenshots/tagada.png}
+\centering\includegraphics[width=\textwidth]{screenshots/tagada.jpg}
 \subcaption{Tagada}
 \end{minipage}
 \caption{The four main rides of Luna Park.}

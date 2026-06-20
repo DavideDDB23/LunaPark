@@ -5,7 +5,7 @@
 **Course:** Interactive Graphics — Prof. Marco Schaerf  
 **Institution:** Sapienza University of Rome, DIAG  
 **Academic Year:** 2025–2026  
-**Date:** June 2026
+**Date:** 20 June 2026
 
 ---
 
