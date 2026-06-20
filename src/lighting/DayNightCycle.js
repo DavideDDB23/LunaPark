@@ -114,10 +114,10 @@ export class DayNightCycle {
     const moonHeight = Math.max(0, -sunY); // moon rises as the sun sets
     this.moon.position.set(-sunX * distance, Math.max(0.05, moonHeight) * distance, -sunZ * distance);
     this.moon.target.position.set(0, 0, 0);
-    this.moon.intensity = THREE.MathUtils.smoothstep(moonHeight, 0.0, 0.3) * 0.40;
+    this.moon.intensity = THREE.MathUtils.smoothstep(moonHeight, 0.0, 0.3) * 1.0;
 
     // ── Hemisphere fill ───────────────────────────────────────────
-    this.hemi.intensity = 0.35 + 0.50 * sunHeight;
+    this.hemi.intensity = 0.60 + 0.50 * sunHeight;
     const twilight = Math.pow(1.0 - Math.min(1.0, sunHeight * 2.0), 2.0) * (sunY > -0.05 ? 1 : 0);
     if (sunHeight > 0.1) {
       this.hemi.color.setHex(0x87ceeb);
