@@ -62,36 +62,8 @@ export class InteractionManager {
       }
     };
 
-    const onWheel = (e) => {
-      this.updateNDC(e.clientX, e.clientY);
-      this.raycaster.setFromCamera(this.mouse, this.camera);
-
-      const hits = this.raycaster.intersectObjects(this.interactiveObjects, true);
-      if (hits.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        if (this.controls) this.controls.enableZoom = false;
-        // Find root ride object with controller
-        let curr = hits[0].object;
-        while (curr && !curr.userData.controller) {
-          curr = curr.parent;
-        }
-        if (curr && curr.userData.controller) {
-          const delta = e.deltaY > 0 ? -0.1 : 0.1;
-          eventBus.emit('speed-scroll', { rideId: curr.name, delta });
-        }
-      } else {
-        if (this.controls) this.controls.enableZoom = true;
-      }
-    };
-
-    // Pointer Events already cover mouse, touch and pen — registering the
-    // legacy touch* events as well made every tap fire onDown twice (the ride
-    // toggled on+off instantly and the panel appeared dead on touch screens).
     dom.addEventListener('pointermove', onMove);
     dom.addEventListener('pointerdown', onDown);
-    dom.addEventListener('wheel', onWheel, { passive: false, capture: true });
   }
 
   updateNDC(clientX, clientY) {

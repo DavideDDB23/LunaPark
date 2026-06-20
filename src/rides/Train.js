@@ -519,12 +519,6 @@ export async function buildTrain({ anisotropy = 8 } = {}) {
     }
   };
 
-  controller.addEventBusListener('speed-scroll', ({ rideId, delta }) => {
-    if (rideId === 'train') {
-      controller.speedMultiplier = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
-    }
-  });
-
   let lightColor = new THREE.Color(0xffcc66);
   controller.addEventBusListener('color-change', (hex) => {
     const target = new THREE.Color(hex);

@@ -340,7 +340,7 @@ class ControlPanel {
     // Speed percentage text at bottom
     ctx.font = 'bold 18px monospace';
     ctx.fillStyle = '#80e5ff';
-    const speedPct = Math.round(ease * this.speedMultiplier * 100);
+    const speedPct = Math.round(this.speedMultiplier * 100);
     ctx.fillText(`DRIVE SPEED: ${speedPct}%`, W / 2, 165);
 
     this.screenTexture.needsUpdate = true;

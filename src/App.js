@@ -394,24 +394,6 @@ async function init() {
     }
   });
 
-  eventBus.on('speed-scroll', ({ rideId, delta }) => {
-    if (rideId === 'coaster') {
-      const c = coaster.userData.controller;
-      const target = Math.max(0.2, Math.min(1.5, c.speedScale + delta));
-      new TWEEN.Tween(c).to({ speedScale: target }, 300).easing(Easings.SMOOTH).start();
-      return;
-    }
-    let controller = null;
-    if (rideId === 'ferrisWheel') controller = ferrisWheel.userData.controller;
-    if (rideId === 'carousel') controller = carousel.userData.controller;
-    if (rideId === 'tagada') controller = tagada.userData.controller;
-
-    if (controller) {
-      const target = Math.max(0.2, Math.min(1.5, controller.speedMultiplier + delta));
-      new TWEEN.Tween(controller).to({ speedMultiplier: target }, 300).easing(Easings.SMOOTH).start();
-    }
-  });
-
   const colorInput = document.getElementById('lightColor');
   if (colorInput) {
     colorInput.addEventListener('input', () => {
