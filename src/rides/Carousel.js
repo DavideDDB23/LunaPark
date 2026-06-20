@@ -368,6 +368,11 @@ export async function buildCarousel({ position = [40, 0, -40], camera, renderer,
   // ── Controller / State ──
   const controller = new CarouselController(group, rotatingAssembly, horses);
   controller.panel = controlPanel.group;
+  controlPanel.group.updateState = (running) => {
+    if (controlPanel.running !== running) {
+      controlPanel.toggle();
+    }
+  };
 
   controller.addEventBusListener('color-change', (hex) => {
     const target = new THREE.Color(hex);

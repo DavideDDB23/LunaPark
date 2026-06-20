@@ -386,6 +386,11 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
 
   const controller = new FerrisWheelController(group, gondolaMounts, wheelSpin, spinHub);
   controller.panel = controlPanel.group;
+  controlPanel.group.updateState = (running) => {
+    if (controlPanel.running !== running) {
+      controlPanel.toggle();
+    }
+  };
 
   const ferrisColor = new THREE.Color(0xffe27a);
   controller.addEventBusListener('color-change', (hex) => {
