@@ -37,17 +37,6 @@ bibliography: []
 lang: en
 ---
 
-\vspace{2cm}
-
-\begin{center}
-\large{\textbf{Interactive Graphics Course — Prof. Marco Schaerf}} \\
-\large{Dept. of Computer, Control and Management Engineering (DIAG)} \\
-\large{Sapienza University of Rome} \\
-\vspace{0.5cm}
-\large{Academic Year 2025--2026}
-\end{center}
-
-\newpage
 
 # Project Introduction
 
@@ -265,7 +254,7 @@ Four modes: **Orbit** (default, `OrbitControls` with damping), **Click-to-fly** 
 
 # Conclusion
 
-Developing Luna Park was a substantial effort that integrated nearly every topic from the Interactive Graphics course into a single working application. The most challenging aspects were the roller coaster's parallel transport frame (ensuring correct cart banking without Frenet-frame flipping) and the procedural NPC gait engine (eliminating foot-skate across 14 skeleton variants). We are satisfied with the result: the park is visually rich, runs at 50--60 FPS on consumer hardware, and offers a wide range of interactive experiences. The complete source code and a live demo are available at \url{https://sapienzainteractivegraphicscourse.github.io/final-project-luna-park}.
+Developing Luna Park was a substantial effort that integrated nearly every topic from the Interactive Graphics course into a single working application. The most challenging aspects were the roller coaster's parallel transport frame (ensuring correct cart banking without Frenet-frame flipping) and the procedural NPC gait engine (eliminating foot-skate across 14 skeleton variants). We are satisfied with the result: the park is visually rich, runs at 50--60 FPS on consumer hardware, and offers a wide range of interactive experiences. The complete source code and a live demo are available at \url{https://sapienzainteractivegraphicscourse.github.io/final-project-tokteam}.
 
 # References
 
