@@ -32,10 +32,9 @@ All animations are hand-written JavaScript math — no imported animation clips.
 
 ```bash
 git clone <repo-url>
-cd LunaPark.nosync
+cd LunaPark
 # No build step — serve via any HTTP server
-npx serve .
-# or: python3 -m http.server 8080
+python3 -m http.server 8080
 ```
 
 Open `http://localhost:8080` in a modern browser (Chrome/Firefox/Edge).
@@ -44,17 +43,23 @@ Open `http://localhost:8080` in a modern browser (Chrome/Firefox/Edge).
 
 ## Controls
 
+Ecco come riscrivo la sezione, unendo README + report:
+
+## Controls
+
 | Input | Action |
 |---|---|
 | Left-click on ground/ride | Fly camera to that location |
-| Left-click on ride panel | Start / stop ride |
-| Left-click on lamppost | Toggle light on/off |
+| Left-click on ride's control panel | Start / stop ride |
+| Left-click on lamppost | Toggle lamppost (Auto/Off/On) |
 | Left-click on stage spotlight | Toggle spotlight on/off |
 | Scroll wheel on ride | Adjust ride speed (0.2× – 1.5×) |
 | `1` – `6` | Fly to preset viewpoints |
 | Click ride button (bottom bar) | Enter FPV ride camera |
-| `Space` | Pause / resume auto time |
-| `ESC` | Exit FPV / active view |
+| `T` (near shooting gallery) | Enter FPV aim mode |
+| `F` | Launch fireworks show |
+| `Space` | Pause / resume day/night |
+| `ESC` | Exit FPV / aim mode |
 | Drag (left mouse) | Orbit camera |
 | Right-drag | Pan camera |
 | Scroll (not on ride) | Zoom in/out |
@@ -66,8 +71,9 @@ Open `http://localhost:8080` in a modern browser (Chrome/Firefox/Edge).
 ## Repository Structure
 
 ```
-LunaPark.nosync/
+LunaPark/
 ├── index.html                   ← Entry point
+├── report.pdf
 ├── src/
 │   ├── main.js                  ← Scene init, render loop, HUD wiring
 │   ├── App.js                   ← App bootstrap, event wiring
@@ -100,11 +106,10 @@ LunaPark.nosync/
 │       ├── EventBus.js, NavGrid.js
 │       ├── loaders.js, textures.js
 │       └── easings.js, rideUtils.js, riverConstants.js
-├── assets/
-│   ├── models/                  ← GLB models (rides, props, Quaternius pack)
-│   ├── textures/                ← PBR texture sets (grass, asphalt, wood)
-│   └── hdr/                     ← HDR sky presets (day, night, sunrise, sunset)
-└── docs/                        ← Development docs & project report
+└── assets/
+    ├── models/                  ← GLB models (rides, props, Quaternius pack)
+    ├── textures/                ← PBR texture sets (grass, asphalt, wood)
+    └── hdr/                     ← HDR sky presets (day, night, sunrise, sunset)
 ```
 
 ---
