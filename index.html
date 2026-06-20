@@ -336,13 +336,11 @@
       color: #ffa01c;
     }
     .accordion-icon {
-      font-size: 10px;
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      transform-origin: center;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
     }
-    #hud:has(#helpPanel[style*="display: block"]) .accordion-icon {
-      transform: rotate(180deg);
-    }
+
     #helpPanel {
       display: flex !important; /* Force display flex to override inline style */
       flex-direction: column;
@@ -686,31 +684,6 @@
         <span id="colorHexVal" class="color-hex-val">#FFDD88</span>
       </div>
 
-      <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px;">
-        <div style="font-weight: 700; font-size: 11px; color: #ffa01c; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px;">Ride Speed</div>
-        <div class="hud-controls-grid" id="rideSpeeds">
-          <label>Sky Wheel:</label>
-          <input data-ride="ferrisWheel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-          <span class="control-value ride-speed-val">1.00</span>
-
-          <label>Carousel:</label>
-          <input data-ride="carousel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-          <span class="control-value ride-speed-val">1.00</span>
-
-          <label>Tagada:</label>
-          <input data-ride="tagada" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-          <span class="control-value ride-speed-val">1.00</span>
-
-          <label>Twister:</label>
-          <input data-ride="coaster" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-          <span class="control-value ride-speed-val">1.00</span>
-
-          <label>Railway:</label>
-          <input data-ride="train" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
-          <span class="control-value ride-speed-val">1.00</span>
-        </div>
-      </div>
-
       <div class="time-arc-wrap">
         <canvas id="timeArc" width="240" height="130"></canvas>
       </div>
@@ -719,7 +692,7 @@
         <div class="accordion-item">
           <button id="helpBtn" class="accordion-header">
             <span>Help & Keybindings</span>
-            <span class="accordion-icon">▾</span>
+            <span class="accordion-icon">+</span>
           </button>
           <div id="helpPanel" style="display: none;">
             <div class="help-section">
@@ -742,6 +715,26 @@
                 <li><kbd>F</kbd>: Launch Fireworks Show</li>
                 <li><kbd>ESC</kbd>: Exit Active View</li>
               </ul>
+            </div>
+            <div class="help-section">
+              <strong>Ride Speed</strong>
+              <div class="hud-controls-grid" id="rideSpeeds" style="margin-top:6px;">
+                <label>Sky Wheel:</label>
+                <input data-ride="ferrisWheel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+                <span class="control-value ride-speed-val">1.00</span>
+                <label>Carousel:</label>
+                <input data-ride="carousel" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+                <span class="control-value ride-speed-val">1.00</span>
+                <label>Tagada:</label>
+                <input data-ride="tagada" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+                <span class="control-value ride-speed-val">1.00</span>
+                <label>Twister:</label>
+                <input data-ride="coaster" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+                <span class="control-value ride-speed-val">1.00</span>
+                <label>Railway:</label>
+                <input data-ride="train" type="range" min="0.2" max="1.5" step="0.05" value="1" class="ride-speed-slider" />
+                <span class="control-value ride-speed-val">1.00</span>
+              </div>
             </div>
           </div>
         </div>

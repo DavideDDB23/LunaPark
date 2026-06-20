@@ -258,7 +258,7 @@ async function init() {
       ctrl.panel.rotation.set(0, faceYaw(panel[0]), 0);
     }
 
-    const hintPos = panel ? [panel[0], 11.5, panel[2]] : [sign[0], 11.5, sign[2]];
+    const hintPos = panel ? [panel[0], 10.3, panel[2]] : [sign[0], 10.3, sign[2]];
     const hintLines = groupName === 'shootingGallery'
       ? ['🎯  Click to Play', 'Press ESC to Exit  •  T to aim']
       : ['Click Panel to Turn On/Off', 'Adjust Speed in HUD'];
@@ -467,8 +467,11 @@ async function init() {
   const helpBtn = document.getElementById('helpBtn');
   const helpPanel = document.getElementById('helpPanel');
   if (helpBtn && helpPanel) {
+    const helpIcon = helpBtn.querySelector('.accordion-icon');
     helpBtn.addEventListener('click', () => {
-      helpPanel.style.display = helpPanel.style.display === 'none' ? 'block' : 'none';
+      const open = helpPanel.style.display !== 'none';
+      helpPanel.style.display = open ? 'none' : 'block';
+      if (helpIcon) helpIcon.textContent = open ? '+' : '−';
     });
   }
 
