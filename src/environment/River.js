@@ -153,24 +153,9 @@ export async function buildRiver() {
           canisterPivot.rotation.set(pitch, -Math.PI / 2, 0);
         }
 
-        // Add a real THREE.SpotLight inside the fixture
-        // Spotlight color is a warm white (0xfffaf0), range is focused inside the river
-        const light = new THREE.SpotLight(0xfff5e6, 0, 35, Math.PI / 6, 0.6, 1.0);
-        // Position it at the center height of the canister
-        light.position.set(0, targetHeight * 0.5, 0);
-        
-        // Configure the light target explicitly and add to parent group so beams aim perfectly
-        light.target.position.set(targetX, targetY, targetZ);
-        spotlightsGroup.add(light.target);
-        
-        light.castShadow = false;
-        fixture.add(light);
-
-        // Add light target pointing along local Z axis (which is oriented toward the river)
-        const lightTarget = new THREE.Object3D();
-        lightTarget.position.set(0, 0, 10);
-        fixture.add(lightTarget);
-        light.target = lightTarget;
+        // Virtual spotlight parameters for the custom water shader (zero active three.js lights for maximum performance)
+        const lightWorldPos = new THREE.Vector3(x, 0.05 + targetHeight * 0.5, z);
+        const lightWorldTarget = new THREE.Vector3(targetX, targetY, targetZ);
 
         // Setup emissive materials clone for animating bulb glow
         const emissiveMaterials = [];
@@ -192,7 +177,9 @@ export async function buildRiver() {
 
         spotlightsList.push({
           fixture,
-          light,
+          intensity: 0.0,
+          position: lightWorldPos,
+          target: lightWorldTarget,
           emissiveMaterials
         });
       }
@@ -219,16 +206,16 @@ export async function buildRiver() {
 
     for (let i = 0; i < spotlightsList.length; i++) {
       const sp = spotlightsList[i];
-      sp.light.intensity = THREE.MathUtils.lerp(sp.light.intensity, targetIntensity, k);
+      sp.intensity = THREE.MathUtils.lerp(sp.intensity, targetIntensity, k);
       for (const mat of sp.emissiveMaterials) {
         mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetEmissive, k);
         if (mat.emissive.getHex() === 0) mat.emissive.setHex(0xfffaf0);
       }
       
       if (uSpotPos && uSpotTgt && uSpotInt) {
-        sp.fixture.getWorldPosition(uSpotPos[i]);
-        sp.light.target.getWorldPosition(uSpotTgt[i]);
-        uSpotInt[i] = sp.light.intensity;
+        uSpotPos[i].copy(sp.position);
+        uSpotTgt[i].copy(sp.target);
+        uSpotInt[i] = sp.intensity;
       }
     }
   };
