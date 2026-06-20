@@ -79,12 +79,11 @@ Each ride has a small 3D control panel placed next to it.
 - [x] Clicking a panel starts or stops its ride
 - [x] Starting a ride: speed eases in gradually over ~1.5 seconds
 - [x] Stopping a ride: speed eases out gradually over ~2 seconds
-- [ ] **Verificare e unificare i tempi di RAMP_UP/RAMP_DOWN** in tutti i pannelli. Attualmente:
+- [x] **Verificare e unificare i tempi di RAMP_UP/RAMP_DOWN** in tutti i pannelli. Attualmente:
   - `ControlPanel.js` default: 0.5s up, 0.5s down
   - `Train.js`: passa `rampUp: 1.5, rampDown: 2.0` ✅
-  - `FerrisWheel.js`: dichiara `RAMP_UP=1.5, RAMP_DOWN=2.0` ma **NON** li passa al costruttore — usa i default 0.5s (bug!)
-  - `Coaster.js`, `Tagada.js`, `Carousel.js`: usano i default 0.5s
-  - Decidere se usare 1.5s/2.0s per tutte le giostre o valori diversi per ognuna
+  - `FerrisWheel.js`: dichiara `RAMP_UP=1.5, RAMP_DOWN=2.0` ma **NON** li passa al costruttore — usa i default 0.5s (bug!) ✅ **FIXED**
+  - `Coaster.js`, `Tagada.js`, `Carousel.js`: usano i default 0.5s — deciso di lasciare 0.5s per coerenza col comportamento rapido di toggle
 
 ---
 
@@ -166,7 +165,7 @@ The night scene is too dark between attractions — needs ambient fill and moonl
 - [x] **Water night tint**: brighten river shader night color so it's visible after dark ✅ (`uNight` uniform in `Water.js`)
 - [x] **Fix spotlight toggle in auto time mode**: when time-of-day auto-advance is ON, manually toggling a spotlight (lamppost / stage faretto) is immediately overridden by the day/night cycle. Manual toggle should persist. (Implemented via 3-state click cycle: Auto -> Manual opposite state -> Manual matching state -> Auto, with confirmation blink)
 - [x] ~~**Test**: add layer 0 to ride lights — already tried, too much lag~~ ❌ Discarded
-- [ ] **Illuminare la recinzione perimetrale**: aggiungere lampioni aggiuntivi lungo il perimetro o fili di luci (puntiformi/emissive) sulla recinzione per renderla visibile di notte
+- [x] **Illuminare la recinzione perimetrale**: aggiungere lampioni aggiuntivi lungo il perimetro o fili di luci (puntiformi/emissive) sulla recinzione per renderla visibile di notte ✅ **Fatto: string lights emissive lungo la fence**
 
 ---
 
@@ -247,7 +246,7 @@ The report is submitted alongside the code. Sections required:
 
 ## 🔴 CAMERA PRESETS
 
-- [ ] **Roller Coaster preset (key 4)**: currently `pos: [0, 30, -5], target: [52, 10, 54]` — review framing, may need a more distant/angled position to show the entire loop
+- [x] **Roller Coaster preset (key 4)**: currently `pos: [0, 30, -5], target: [52, 10, 54]` — review framing, may need a more distant/angled position to show the entire loop ✅ **FIXED: pos [-25, 25, 15], target [52, 15, 54]**
 
 ---
 
@@ -257,7 +256,8 @@ The report is submitted alongside the code. Sections required:
 - [x] **Improve structure**: currently all procedural (BoxGeometry/CylinderGeometry) — find a GLB model of a carnival shooting booth (loaded stylized booth GLB and programmatically hid sign text)
 - [x] **Implement shooting mode**: the pointer-lock aim system already exists (`ShootingGallery.js`) — verify it works correctly and improve the experience (implemented smooth FPV flight transition, pointer lock camera rotation, custom HUD overlays, Option A moving targets with distance multipliers, and physical pendulum spin damping animation)
 - [ ] **Replace booth GLB**: find/import a different carnival booth model to replace `stylized_carnival_booth.glb`
-- [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). Optionally reduce `camera.far` in aim mode.
+- [ ] **Shooting performance**: clamp `aimYaw` to ±0.18 rad from the initial yaw to prevent looking behind the booth (`ShootingGallery.js:254`). ❌ **Reverted (approccio iniziale non riuscito bene — da rifare con approccio diverso: lock yaw a `euler.y` finché non esce da aim mode)**
+- [ ] **Roller coaster**: rimuovere le pointlight fluttuanti sotto i vagoni
 
 ---
 
@@ -270,7 +270,7 @@ The report is submitted alongside the code. Sections required:
 - [ ] Tag the final commit: `v1.0-submission`
 - [ ] `luna_park_report.pdf` committed in the repository root
 - [ ] No `node_modules` or build artifacts in the repository
-- [ ] Remove leftover `test_coaster.js` from repository root
+- [x] Remove leftover `test_coaster.js` from repository root ✅ **RIMOSSO**
 
 ---
 
@@ -291,23 +291,17 @@ The examiner will ask you to demo the project live and then ask technical questi
 
 ## 📋 Remaining Tasks (prioritised)
 
-- [ ] Remove `'photo'` action from idle position arrays in `Passengers.js`,
-      `FerrisWheel.js`, and `Coaster.js` (it clips camera into face)
+- [x] Remove `'photo'` action from idle position arrays in `Passengers.js`,
+      `FerrisWheel.js`, and `Coaster.js` (it clips camera into face) ✅ **RIMOSSO**
 
 ```
 [ ] Technical report PDF (luna_park_report.pdf) — NOT STARTED
-[ ] Stage: fix colored lights (cyan/magenta volumetric beams at y=14 above roof — need visible fixtures or repositioning)
-[ ] Control panel ramp-up/down: FerrisWheel.js dichiara RAMP_UP=1.5/RAMP_DOWN=2.0 ma non li passa al costruttore — usa i default 0.5s. Decidere valori per ogni giostra.
-[ ] GLTFLoader warning: "Unknown extension KHR_materials_pbrSpecularGlossiness" (Train.js:196) — register the extension or fully convert materials
+[ ] Stage: add visible support poles for the cyan/magenta volumetric beams (currently floating at y=14)
 [ ] Roller coaster: evaluate moving the stop to the short straight low-to-ground track section (currently at computed uCar station)
 [ ] Shooting gallery: replace booth GLB with a different model
-[ ] Shooting gallery: clamp aimYaw ±0.18 rad from initial yaw (`ShootingGallery.js:254`)
-[ ] Camera presets: improve roller coaster framing (key 4)
 [ ] Deploy GitHub Pages + test live URL
-[ ] Remove `test_coaster.js` from repo root (leftover)
-[ ] Illuminare la recinzione perimetrale (lampioni extra o fili di luci sulla fence)
-[ ] Add external landscape / scenery around the park perimeter
-[ ] Tagada: spring-damper rider bounce → Math.sin (Tagada.js:848-865, ~15 righe, allinea al pattern lezione)
+[ ] Add external landscape / scenery around the park perimeter (REPLACE 3D with image)
+[ ] Fence lights: make them follow the color picker (currently hardcoded yellow/orange)
 [ ] Submission formalities (email, tag, check)
 [ ] Oral exam prep + backup video
 ```

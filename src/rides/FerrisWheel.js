@@ -182,7 +182,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     // lively wavers-and-cheerers, repeating every three gondolas.
     const flavor = i % 3;
     const chatting = flavor === 0;
-    const ACTIONS_PHOTO = ['photo', 'photo', 'photo', 'lookL', 'lookR', 'lookUp', 'rest'];
+    const ACTIONS_PHOTO = ['lookL', 'lookR', 'lookUp', 'rest'];
     const passengers = [];
     for (let p = 0; p < PASSENGERS_PER_GONDOLA && visitors.length > 0; p++) {
       const tmpl = visitors[Math.floor(Math.random() * visitors.length)];
@@ -229,6 +229,18 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
     }
 
     gondolaMounts.push({ mount, pivot, gondolaMesh: gNode, baseQuat, passengers });
+
+    // ── FPV camera-rig: positioned at passenger eye height inside the gondola.
+    //    The gondola's local +Z points radially outward (the "view" direction),
+    //    so we rotate the rig by 180° around Y so its -Z (camera look) aligns
+    //    with the gondola's +Z (outward). Inherits the gondola's world-stable
+    //    orientation (counter-rotated by the wheel — no banking on a ferris wheel).
+    const cameraRig = new THREE.Group();
+    cameraRig.name = 'cameraRig';
+    cameraRig.position.set(0, 1.8, 1.0);
+    cameraRig.rotation.y = Math.PI;
+    gNode.add(cameraRig);
+    gondolaMounts[gondolaMounts.length - 1].cameraRig = cameraRig;
   }
 
   // ── Top group: ride is auto-fit-scaled inside; panel stays at world (human) scale. ──
@@ -333,7 +345,7 @@ export async function buildFerrisWheel({ position = [-50, 0, -50], camera, rende
   });
 
   // ── Control panel (semaphore + lever), human-scaled, beside the ride. ──
-  const controlPanel = new ControlPanel({ initialRunning: true });
+  const controlPanel = new ControlPanel({ initialRunning: true, rampUp: RAMP_UP, rampDown: RAMP_DOWN });
   controlPanel.group.position.set(radiusFinal * 0.36, 0, radiusFinal * 0.61);
   group.add(controlPanel.group);
   group.updateMatrixWorld(true);

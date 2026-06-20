@@ -62,7 +62,7 @@ const SEAT_HIP_Z = 0.85;      // Hip fore-aft on the cushion (cart-local; +Z = s
 // loop forces hands up procedurally while the train moves, so the idle state-machine must
 // only pick calm behaviours — otherwise hands would twitch between an idle cheer and the
 // motion-driven cheer. When the train halts, these are the behaviours riders return to.
-const COASTER_IDLE_ACTIONS = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'point', 'photo', 'relax'];
+const COASTER_IDLE_ACTIONS = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'point', 'relax'];
 const G_EFF = 9.8;           // gravity for the energy model (world-units/s²)
 const CURVE_SAMPLES = 80;    // control points kept for the CatmullRom
 const NUM_FRAMES = 4000;     // resolution of the rotation-minimizing frame field
@@ -319,20 +319,22 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     new THREE.Matrix4().multiplyMatrices(rideScaled.matrix, model.matrix)
   );
 
-  // ── Seat the template cart on the curve, capture its on-rail local pose, remove all baked carts ──
-  const cartCentroid = new THREE.Box3().setFromObject(templateCartNode).getCenter(new THREE.Vector3());
-  model.worldToLocal(cartCentroid);
-  let uCar = 0, best = Infinity;
-  for (let i = 0; i < samples.length; i++) {
-    const d = samples[i].distanceToSquared(cartCentroid);
-    if (d < best) { best = d; uCar = i / samples.length; }
-  }
+  // ── Seat the template cart on the curve, capture its on-rail local pose ──
+  // Forziamo uCar = 0 (stazione, rettilineo) per ottenere un quaternione
+  // di rotazione nativa senza counter-bank dalla curva.
+  let uCar = 0;
 
   const dolly0 = new THREE.Group();
   dolly0.name = 'coaster_t0_c0';
   group.add(dolly0); // Add directly to group to avoid scale inheritance from rideScaled
 
-  // Position and orient dolly0 in group space:
+  // ── FIX DEFINITIVO: Allineamento Dolly e Vagoni (Rimozione Counter-Bank) ──
+  // Rimuoviamo temporaneamente il Y_STRETCH per calcolare la posa pura sul binario
+  const originalYScale = rideScaled.scale.y;
+  rideScaled.scale.y = rideScaled.scale.x;
+  rideScaled.updateMatrixWorld(true);
+
+  // Position and orient dolly0 in group space
   const _pt0 = curve.getPointAt(uCar);
   _pt0.applyMatrix4(model.matrix).applyMatrix4(rideScaled.matrix);
   dolly0.position.copy(_pt0);
@@ -342,16 +344,30 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   dolly0.quaternion.copy(rideScaled.quaternion).multiply(_q0);
   dolly0.updateMatrixWorld(true);
 
-  // Attach cart template
+  // Attach: riposiziona il cart sotto dolly0 mantenendo la posa world.
+  // Salviamo la rotazione nativa stand-up PRIMA dell'attach per non ereditare
+  // il counter-bank della curva nella posizione locale.
+  const standUpQuat = templateCartNode.quaternion.clone();
   dolly0.attach(templateCartNode);
-  
-  // Force uniform scale based on horizontal scale * CART_SCALE to prevent non-uniform scale skewing on carriages and riders
+
+  // Ripristiniamo la rotazione nativa pura (stand-up, senza counter-bank).
+  templateCartNode.quaternion.copy(standUpQuat);
+
+  // Centriamo fisicamente il vagone sul binario (mantenendo l'altezza Y delle ruote)
+  templateCartNode.position.x = 0;
+  templateCartNode.position.z = 0;
+
+  // Force uniform scale based on horizontal scale * CART_SCALE
   const baseScale = templateCartNode.scale.x * CART_SCALE;
   templateCartNode.scale.set(baseScale, baseScale, baseScale);
 
   const carLocalPos = templateCartNode.position.clone();
   const carLocalQuat = templateCartNode.quaternion.clone();
   const carLocalScale = templateCartNode.scale.clone();
+
+  // Ripristiniamo l'altezza vertiginosa del coaster
+  rideScaled.scale.y = originalYScale;
+  rideScaled.updateMatrixWorld(true);
 
   // Carriage footprint along the track → spacing in normalized arc-length.
   // carLen is measured in WORLD units (the cart is unit-scaled under `group`), so the spacing
@@ -378,11 +394,6 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   });
   const carLen = _cartBox.max.z - _cartBox.min.z; // nose-to-tail length along the travel (dolly Z) axis
   const carSpacing = carLen * CAR_GAP;            // world distance between consecutive couplings
-
-  // Cart centre and lateral half-width in DOLLY-local space (from the real geometry bounding box).
-  // These are used to place passengers at the correct seat positions without depending on
-  // cartBody.matrix (whose GLTF rotation maps cart-local X to the wrong dolly axis).
-
 
   // ── World-arc-length table ───────────────────────────────────────────────────────────────────
   // The track is stretched vertically (Y_STRETCH), so equal steps in the curve's NORMALISED arc-length
@@ -446,58 +457,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   }
 
 
-  // ── Sophisticated carriage lighting ───────────────────────────────────────────────────────────
-  // The glow ADHERES to the carriage model itself: we make the cart's own materials emissive (via their
-  // texture as emissiveMap) so the real body lights up — no floating ring. Plus warm headlights / red
-  // tail-lights on the model's front & back, a warm interior lamp that lights the riders, and a soft
-  // coloured UNDER-LIGHT that pools a glow on the ground beneath each car. Body glow + under-light
-  // recolour with the rails (picker); all ramp up at night. Cart body is dark/normal by day.
-  const cartGlows = [];        // emissive accent dots (head/tail lights)
-  const cartBodyMats = [];     // the carriage's OWN materials, made emissive (recoloured with rails)
-  const cartLights = [];       // warm interior lamps (light the riders)
-  const cartUnderLights = [];  // coloured under-glow pooled on the ground (recoloured with rails)
-  const emiss = (col) => new THREE.MeshStandardMaterial({ color: 0x080808, emissive: col, emissiveIntensity: 0, roughness: 0.3, metalness: 0.2, toneMapped: false });
-  const CX = SEAT_LAT_X, CZ = SEAT_FWD_Z;     // cart footprint centre (dolly-local) — condiviso coi sedili
-  const dotGeo = new THREE.SphereGeometry(0.14, 12, 10);
-  const bodyMatMap = new Map();               // share one emissive clone per original cart material
-  for (const car of cars) {
-    const d = car.dolly;
-    const cartNode = d.children[0];           // the cart body (added before riders / lights)
-    // Make the carriage body emissive — the glow sits ON the real model.
-    cartNode.traverse((o) => {
-      if (!o.isMesh || o.isSkinnedMesh) return;
-      const orig = Array.isArray(o.material) ? o.material[0] : o.material;
-      if (!orig) return;
-      if (!bodyMatMap.has(orig)) {
-        const c = orig.clone();
-        if (c.map) c.emissiveMap = c.map;     // glow follows the body's own paint/detail
-        c.emissive = new THREE.Color(0xffffff); // white × emissiveMap ⇒ the body glows in its OWN colours
-        c.emissiveIntensity = 0.0;            // dark by day, ramps up at night
-        bodyMatMap.set(orig, c);
-        cartBodyMats.push(c);
-      }
-      o.material = bodyMatMap.get(orig);
-    });
-
-    // warm interior lamp (riders)
-    const light = new THREE.PointLight(0xffd9a0, 0.0, 6.5, 2.0);
-    light.position.set(CX, 1.15, CZ);
-    light.layers.set(2);
-    d.add(light); cartLights.push(light);
-
-    // soft coloured under-light → pools a glow on the ground below each car
-    const under = new THREE.PointLight(0x3dd2ff, 0.0, 9.0, 2.0);
-    under.position.set(CX, -0.3, CZ);
-    under.layers.set(2);
-    d.add(under); cartUnderLights.push(under);
-
-    // headlights (front, warm white) + tail-lights (back, red), sitting on the model
-    const hlMat = emiss(0xfff2d0), tlMat = emiss(0xff2630);
-    for (const sx of [-0.55, 0.55]) {
-      const hl = new THREE.Mesh(dotGeo, hlMat); hl.position.set(CX + sx, 0.72, CZ + 1.5); d.add(hl); cartGlows.push(hl);
-      const tl = new THREE.Mesh(dotGeo, tlMat); tl.position.set(CX + sx, 0.72, CZ - 1.4); d.add(tl); cartGlows.push(tl);
-    }
-  }
+  // (cart lights removed)
 
   // ── Passengers: exactly two riders per carriage, on the left & right seats ──
   // The pivot is parented to the DOLLY (not the cart body), so riders inherit the
@@ -523,10 +483,8 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       rider.height = riderHeight;   // keeps FPV head-Y math valid
 
       // Transform cart-local seat position to dolly-local via the cart body's matrix.
-      // The GLTF internal rotation is handled by cartBody.matrix, so SEAT_HALF_X
-      // in cart-local X produces the correct lateral offset in dolly space.
       const seatDolly = new THREE.Vector3(
-        s === 0 ? -SEAT_HALF_X / 4 : -SEAT_HALF_X,
+        s === 0 ? -SEAT_HALF_X / 2 : SEAT_HALF_X / 2,
         SEAT_CUSHION_Y,
         SEAT_HIP_Z
       ).applyMatrix4(cartBody.matrix);
@@ -554,6 +512,31 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       car.dolly.add(rider.pivot);   // parent to dolly — upright track orientation
       car.riders.push(rider);
     }
+  }
+
+  // ── FPV camera-rig: Centrata perfettamente nel cart e ancorata al DOLLY ──
+  {
+    const firstCar = cars[0];
+    const r0 = firstCar.riders[0];
+    const cameraRig = new THREE.Group();
+    cameraRig.name = 'cameraRig';
+
+    // Posizionata geometricamente al centro esatto della cabina
+    // usando i riferimenti puri, e all'altezza occhi del passeggero.
+    const r1 = firstCar.riders[1];
+    cameraRig.position.set(
+      (r0.pivot.position.x + r1.pivot.position.x) / 2,
+      r0.pivot.position.y + r0.height * 0.85,
+      (r0.pivot.position.z + r1.pivot.position.z) / 2
+    );
+
+    // Ruotata per farle guardare esattamente in avanti lungo i binari
+    cameraRig.rotation.y = Math.PI;
+
+    // CRITICO: La telecamera DEVE essere figlia del dolly matematico,
+    // MAI del cartBody, altrimenti subisce le rotazioni della mesh e si ribalta!
+    firstCar.dolly.add(cameraRig);
+    firstCar.cameraRig = cameraRig;
   }
 
   // ── Control panel (semaphore + lever), human-scaled, at the OUTSIDE corner of the footprint ──
@@ -641,7 +624,6 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
       .easing(Easings.COLOR)
       .onUpdate(() => {
         for (const m of railGlowMats) m.emissive.copy(coasterColor);
-        for (const l of cartUnderLights) l.color.copy(coasterColor);
       })
       .start();
   });
@@ -806,19 +788,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     for (let i = 0; i < railGlowMats.length; i++) {
       railGlowMats[i].emissiveIntensity = nf * (1.5 + breathe * 0.5);
     }
-    // Carriage lighting: body glows on the model, head/tail accents, warm interior, ground under-glow.
-    for (let i = 0; i < cartBodyMats.length; i++) {
-      cartBodyMats[i].emissiveIntensity = nf * 1.7;
-    }
-    for (let i = 0; i < cartGlows.length; i++) {
-      cartGlows[i].material.emissiveIntensity = nf * (1.4 + 0.2 * Math.sin(_time * 2.0 + i));
-    }
-    for (let i = 0; i < cartLights.length; i++) {
-      cartLights[i].intensity = nf * 6.0;
-    }
-    for (let i = 0; i < cartUnderLights.length; i++) {
-      cartUnderLights[i].intensity = nf * 5.5;
-    }
+    // (track PointLights removed)
   };
 
   // ── Hide the GLB's built-in operator-booth sign ──

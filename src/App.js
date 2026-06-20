@@ -120,9 +120,9 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
         gm.gondolaMesh.getWorldPosition(tmpVec);
         if (tmpVec.y > bestY) { bestY = tmpVec.y; best = gm; }
       }
-      return best?.gondolaMesh || null;
+      return best?.cameraRig || null;
     },
-    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const c = fw.userData.controller;
       let best = null, bestY = -Infinity;
@@ -133,172 +133,146 @@ cameraManager = new CameraManager(camera, scene, controls, renderer, () => {
       return best ? best.passengers : [];
     },
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 1.8, 1.0);
+      fpvTarget.getWorldPosition(targetVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      // 10m along the rig's -Z (= gondola's +Z = radial outward = view direction)
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 1.8, 10.0);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of gondolaMesh. Read gondolaMesh's world up so the camera
+      // follows the gondola's orientation (gondola is world-stable, so up = world Y).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const cr = environmentGroup.getObjectByName('carousel');
   if (cr) rides.push({
     group: cr,
-    getFpvTarget: () => cr.userData.controller.horses[0]?.container || null,
-    getFpvOffset: () => new THREE.Vector3(0, 2.5, 0),
+    getFpvTarget: () => cr.userData.controller.horses[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const r = cr.userData.controller.horses[0]?.rider;
       return r ? [r] : [];
     },
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      const horse = cr.userData.controller.horses[0];
-      if (!horse) return;
-      const h = horse.rider ? horse.rider.height : 3.28;
-      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
-      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
-      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
-      fpvTmpVec.set(px - 0.15, py + h * 0.82, pz);
+      fpvTarget.getWorldPosition(targetVec);
+    },
+    getFpvLookTarget: (fpvTarget, targetVec) => {
+      // 10m along the rig's -Z (= container's +X = tangential forward = travel direction)
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
-    getFpvLookTarget: (fpvTarget, targetVec) => {
-      const horse = cr.userData.controller.horses[0];
-      if (!horse) return;
-      const h = horse.rider ? horse.rider.height : 3.28;
-      const px = horse.rider ? horse.rider.pivot.position.x : 0.67;
-      const py = horse.rider ? horse.rider.pivot.position.y : 0.8;
-      const pz = horse.rider ? horse.rider.pivot.position.z : 0.0;
-      fpvTmpVec.set(px - 10.0, py + h * 0.82, pz + 2.5);
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of horseContainer. Read container's world up so the camera
+      // follows the carousel rotation (rotatingAssembly yaw + per-horse Y-bob).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const tg = environmentGroup.getObjectByName('tagada');
   if (tg) rides.push({
     group: tg,
-    getFpvTarget: () => tg.userData.controller.discMeshGroup.getObjectByName('seat_group_0') || null,
-    getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+    getFpvTarget: () => tg.userData.controller.seats[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => {
       const r = tg.userData.controller.seats[0]?.rider;
       return r ? [r] : [];
     },
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      const seat = tg.userData.controller.seats[0];
-      if (!seat) return;
-      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
-      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
-      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
-      const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
-      // Seat-local +Z is the rider's forward direction (toward disc centre), per the convention
-      // established in Tagada.js (backrest at -Z, grab bar / cushion front at +Z). The camera
-      // sits just in front of the head, slightly inward (+Z), so the FPV looks toward the centre
-      // of the ride — the same direction the rider is facing.
-      fpvTmpVec.set(px, py + h * 0.82, pz + 0.15);
-      const shake = tg.userData.controller.ease || 0;
-      const tN = performance.now() * 0.001;
-      fpvTmpVec.x += Math.sin(tN * 23.0) * 0.045 * shake;
-      fpvTmpVec.y += Math.sin(tN * 31.0 + 1.7) * 0.05 * shake;
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      const seat = tg.userData.controller.seats[0];
-      if (!seat) return;
-      const h = seat.rider ? seat.rider.height : 3.28 * 0.88;
-      const px = seat.rider ? seat.rider.pivot.position.x : 0.0;
-      const py = seat.rider ? seat.rider.pivot.position.y : 0.8 - h * 0.28;
-      const pz = seat.rider ? seat.rider.pivot.position.z : 0.54;
-      // Look inward (+Z in seat-local space = toward disc centre), matching the rider's facing.
-      fpvTmpVec.set(px, py + h * 0.82, pz + 10.0);
+      // 10m along the rig's +Z. Rig has no Y-flip, so its +Z = seat-local +Z,
+      // pointing toward the disc centre (matching the rider's gaze).
+      fpvTmpVec.set(0, 0, 10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
     getFpvUp: (fpvTarget, upVec) => {
-      // Use the seat's world Y axis as the camera up so the view stays
-      // right-side-up even when the disc tilts during the ride.
-      fpvTarget.getWorldQuaternion(fpvTmpQuat);
+      // Rig is child of seatGroup. Read seatGroup's world up so the camera
+      // follows the disc tilt (armTilt applied to ancestor of discMeshGroup).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
       upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const co = environmentGroup.getObjectByName('coaster');
   if (co) rides.push({
     group: co,
-    getFpvTarget: () => co.userData.controller.cars[0]?.dolly || null,
-    getFpvOffset: () => new THREE.Vector3(0, 1.9, 0),
+    getFpvTarget: () => co.userData.controller.cars[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => co.userData.controller.cars[0].riders,
-    // FPV anchored to the head of the front-row passenger (cars[0].riders[0]):
-    // position = pivot (hip) + head height, look = straight ahead along dolly +Z.
-    // Up follows the dolly's world quaternion so the camera banks with the carriage.
+    // FPV via camera-rig: rig is a child of cars[0].dolly (built in Coaster.js),
+    // positioned at the head of the front-row passenger with rotation.y = PI
+    // so its local -Z aligns with the dolly's +Z (direction of travel).
+    // Rig inherits dolly's full transform (roll, pitch, yaw) automatically.
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      const rider = co.userData.controller.cars[0].riders[0];
-      fpvTmpVec.copy(rider.pivot.position);
-      fpvTmpVec.y += rider.height * 0.82;
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      const rider = co.userData.controller.cars[0].riders[0];
-      fpvTmpVec.copy(rider.pivot.position);
-      fpvTmpVec.y += rider.height * 0.82;
-      fpvTmpVec.z += 10;
+      // 10m along the rig's -Z (= dolly's +Z = forward direction of travel)
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
     getFpvUp: (fpvTarget, upVec) => {
-      fpvTarget.getWorldQuaternion(fpvTmpQuat);
+      // Rig is child of dolly. Read dolly's world up so the camera follows
+      // the dolly's banking (roll) as it traverses the track.
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
       upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   const tr = environmentGroup.getObjectByName('train');
   if (tr) rides.push({
     group: tr,
-    getFpvTarget: () => tr.userData.controller.cars[0]?.mesh || null,
-    getFpvOffset: () => new THREE.Vector3(0, 1.8, -0.3),
+    getFpvTarget: () => tr.userData.controller.cars[0]?.cameraRig || null,
+    getFpvOffset: () => new THREE.Vector3(0, 0, 0),
     getRiders: () => tr.userData.controller.riders ? tr.userData.controller.riders.slice(0, 1) : [],
     getFpvCameraPos: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 136.0, -26.0); // unscaled eye height and cabin depth
-      fpvTarget.localToWorld(fpvTmpVec);
-      targetVec.copy(fpvTmpVec);
+      fpvTarget.getWorldPosition(targetVec);
     },
     getFpvLookTarget: (fpvTarget, targetVec) => {
-      fpvTmpVec.set(0, 125.0, 150.0); // look forward along the track
+      // 10m along the rig's -Z. Rig has Y-rotation = PI, so its -Z = wrapper's +Z
+      // (= direction of travel, where the existing look target offset pointed).
+      fpvTmpVec.set(0, 0, -10);
       fpvTarget.localToWorld(fpvTmpVec);
       targetVec.copy(fpvTmpVec);
     },
-    getFpvUp: (_fpvTarget, upVec) => {
-      upVec.set(0, 1, 0);
+    getFpvUp: (fpvTarget, upVec) => {
+      // Rig is child of car mesh. Read car's world up so the camera follows
+      // the curve-banking tilt (cars[i].mesh.rotateZ applied in tick).
+      fpvTarget.parent.getWorldQuaternion(fpvTmpQuat);
+      upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
     }
   });
   if (balloons && balloons[0]) {
     const b1 = balloons[0];
     rides.push({
       group: b1,
-      getFpvTarget: () => b1.userData.fpvTarget,
-      getFpvOffset: () => new THREE.Vector3(0, 1.5, 0),
+      getFpvTarget: () => b1.userData.cameraRig,
+      getFpvOffset: () => new THREE.Vector3(0, 0, 0),
       getRiders: () => (b1.userData.riders || []).map(r => ({ pivot: r.pivot })),
       getFpvCameraPos: (fpvTarget, targetVec) => {
-        const camY = b1.userData.cameraLocalY ?? 1.8;
-        fpvTmpVec.set(0, camY, 0);
+        fpvTarget.getWorldPosition(targetVec);
+      },
+      getFpvLookTarget: (fpvTarget, targetVec) => {
+        // 10m along the rig's -Z. Rig has no Y-flip, so its -Z gives a stable
+        // horizontal gaze direction in the basket frame. The balloon doesn't
+        // yaw, so this direction is fixed in world space (modulo pitch/roll
+        // from b.rotation.x/z in tick).
+        fpvTmpVec.set(0, 0, -10);
         fpvTarget.localToWorld(fpvTmpVec);
         targetVec.copy(fpvTmpVec);
       },
-      getFpvLookTarget: (fpvTarget, targetVec) => {
-        const driftAngle = b1.userData.driftAngle ?? 0;
-        const lookDist = 25;
-        const lookDrop = 8;
-        const camY = b1.userData.cameraLocalY ?? 1.8;
-        fpvTmpVec.set(0, camY, 0);
-        fpvTarget.localToWorld(fpvTmpVec);
-        targetVec.set(
-          fpvTmpVec.x + Math.cos(driftAngle) * lookDist,
-          fpvTmpVec.y - lookDrop,
-          fpvTmpVec.z + Math.sin(driftAngle) * lookDist
-        );
-      },
       getFpvUp: (fpvTarget, upVec) => {
-        fpvTarget.getWorldQuaternion(fpvTmpQuat);
+        // Rig is child of node. Read node's world up (parent of rig is the
+        // GLB sub-root, but node itself is parent of rig; b.rotation.x/z tilt
+        // is applied to the b group, which is the GRANDPARENT of the rig).
+        // Use b's world up to capture the basket pitch/roll.
+        fpvTarget.parent.parent.getWorldQuaternion(fpvTmpQuat);
         upVec.set(0, 1, 0).applyQuaternion(fpvTmpQuat);
       }
     });

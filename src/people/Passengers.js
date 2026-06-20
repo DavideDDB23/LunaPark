@@ -29,7 +29,7 @@ const ANIM_BONES = [
   'FootL', 'FootR',
 ];
 
-export const ACTIONS_SEATED_GENERAL = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'wave', 'point', 'photo', 'cheer', 'relax'];
+export const ACTIONS_SEATED_GENERAL = ['rest', 'rest', 'lookL', 'lookR', 'lookUp', 'wave', 'point', 'cheer', 'relax'];
 export const ACTIONS_SEATED_CHAT_L = ['chatL', 'chatL', 'rest', 'lookR'];   // neighbour sits to this rider's left
 export const ACTIONS_SEATED_CHAT_R = ['chatR', 'chatR', 'rest', 'lookL'];
 export const ACTIONS_STANDING = ['standRest', 'standRest', 'standWave', 'standCheer', 'standPoint', 'standLook'];

@@ -138,6 +138,19 @@ function buildOneBalloon(model, index) {
     b.userData.basketWidthZ = basketWidthZ;
     b.userData.cameraLocalY = (localBottomY + getPassengerWorldHeight() * 0.16) - node.position.y;
 
+    // ── FPV camera-rig: positioned at passenger eye height inside the basket,
+    //    as a child of `node` (the balloon's GLB sub-root = b.userData.fpvTarget).
+    //    No Y-flip: the balloon doesn't yaw (b.rotation.y is never set in tick),
+    //    so the rig's local -Z gives a stable horizontal gaze direction. The rig
+    //    inherits the basket's pitch/roll oscillations (b.rotation.x and .z in tick).
+    {
+      const cameraRig = new THREE.Group();
+      cameraRig.name = 'cameraRig';
+      cameraRig.position.set(0, b.userData.cameraLocalY, 0);
+      node.add(cameraRig);
+      b.userData.cameraRig = cameraRig;
+    }
+
     // ── Create warm interior basket light ──
     basketLight = new THREE.PointLight(0xffddaa, 0.0, 6.0, 1.5);
     // Position it inside the basket, slightly below the rim
