@@ -47,24 +47,49 @@ Ecco come riscrivo la sezione, unendo README + report:
 
 ## Controls
 
+### Camera Navigation
+
 | Input | Action |
 |---|---|
-| Left-click on ground/ride | Fly camera to that location |
-| Left-click on ride's control panel | Start / stop ride |
-| Left-click on lamppost | Toggle lamppost (Auto/Off/On) |
-| Left-click on stage spotlight | Toggle spotlight on/off |
+| Left-click on ground/ride/object | Fly camera smoothly to that point (1.2 s) |
+| Left drag (hold) | Orbit camera around target |
+| Right drag | Pan camera |
+| Scroll wheel (not over ride) | Zoom in/out |
+| `1` | Overview: bird's-eye view of entire park |
+| `2` | Ferris Wheel close-up |
+| `3` | Carousel close-up |
+| `4` | Roller Coaster — full loop visible |
+| `5` | Tagada close-up |
+| `6` | Stage close-up |
+| `C` | Enter first-person view (FPV) aboard nearest ride |
+| `ESC` | Exit FPV or shooting gallery aim mode |
+
+### Rides
+
+| Input | Action |
+|---|---|
+| Left-click on ride's control panel | Start / stop that ride (speed eases in/out) |
 | Scroll wheel on ride | Adjust ride speed (0.2× – 1.5×) |
-| `1` – `6` | Fly to preset viewpoints |
-| Click ride button (bottom bar) | Enter FPV ride camera |
-| `T` (near shooting gallery) | Enter FPV aim mode |
-| `F` | Launch fireworks show |
-| `Space` | Pause / resume day/night |
-| `ESC` | Exit FPV / aim mode |
-| Drag (left mouse) | Orbit camera |
-| Right-drag | Pan camera |
-| Scroll (not on ride) | Zoom in/out |
-| Time slider (HUD) | Set time of day (0–24h) |
-| Colour picker (HUD) | Change ride decoration lights |
+| Bottom hotbar buttons | Enter FPV mode for the labelled ride directly |
+
+### Lighting and Environment
+
+| Input | Action |
+|---|---|
+| Left-click on lamppost | Toggle lamppost (3 states: Auto / Manual-off / Manual-on) |
+| Left-click on stage spotlight | Toggle spotlight (same 3-state cycle) |
+| `Space` | Pause / resume day/night auto-advance |
+| Time slider (HUD) | Set time of day (0–24 h) |
+| Colour picker (HUD) | Change colour of all ride decoration lights |
+
+### Shooting Gallery
+
+| Input | Action |
+|---|---|
+| `T` (near shooting booth) | Enter FPV aim mode (pointer lock) |
+| Mouse movement (in aim mode) | Rotate aim reticle |
+| Left-click (in aim mode) | Shoot — hit targets score points |
+| `ESC` (in aim mode) | Exit shooting gallery |
 
 ---
 
