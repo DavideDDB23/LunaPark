@@ -29,7 +29,7 @@ import TWEEN from '@tweenjs/tween.js';
 import { loadGLB } from '../utils/loaders.js';
 import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import {
   loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from './utils/easings.js';
+import { Easings } from './utils/Easings.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';

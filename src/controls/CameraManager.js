@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 
 const PRESETS = {
 

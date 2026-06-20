@@ -3,7 +3,7 @@ import TWEEN from '@tweenjs/tween.js';
 import { loadVisitorTemplates, makeRider, updateRider, pose, getPassengerWorldHeight, applyChairSeatedLegs, positionRiderOnHip } from '../people/Passengers.js';
 import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { RideBase } from './RideBase.js';
 import { createPlatformTexture, createCanopyTexture } from '../utils/textures.js';

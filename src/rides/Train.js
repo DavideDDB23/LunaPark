@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
 import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { loadGLB } from '../utils/loaders.js';
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight, positionRiderOnHip } from '../people/Passengers.js';

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 
 class ControlPanel {
   constructor({ initialRunning = true, onToggle, rampUp = 0.5, rampDown = 0.5 } = {}) {

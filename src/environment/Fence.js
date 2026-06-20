@@ -4,7 +4,7 @@ import { loadGLB, sanitizeMaterials } from '../utils/loaders.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { eventBus } from '../utils/EventBus.js';
 import TWEEN from '@tweenjs/tween.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 
 const FENCE_URL = 'assets/models/environment/fence.glb';
 const HALF = 100;

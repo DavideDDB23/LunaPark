@@ -4,7 +4,7 @@ import { loadGLB, loadColorTexture, loadLinearTexture } from '../utils/loaders.j
 import { loadVisitorTemplates, makeRider, updateRider, getPassengerWorldHeight, positionRiderOnHip } from '../people/Passengers.js';
 import { buildControlPanel } from '../ui/ControlPanel.js';
 import { eventBus } from '../utils/EventBus.js';
-import { Easings } from '../utils/easings.js';
+import { Easings } from '../utils/Easings.js';
 import { isNightNow } from '../lighting/DayNightCycle.js';
 import { RideBase } from './RideBase.js';
 import { createEmissiveBulb, createPointLight, nightMixLerp } from '../utils/rideUtils.js';
