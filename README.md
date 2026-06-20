@@ -43,10 +43,6 @@ Open `http://localhost:8080` in a modern browser (Chrome/Firefox/Edge).
 
 ## Controls
 
-Ecco come riscrivo la sezione, unendo README + report:
-
-## Controls
-
 ### Camera Navigation
 
 | Input | Action |
