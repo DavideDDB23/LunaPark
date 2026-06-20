@@ -218,7 +218,7 @@ class ControlPanel {
       this.beaconMat.emissiveIntensity = THREE.MathUtils.lerp(this.beaconMat.emissiveIntensity, 0.0, 0.1);
     }
 
-    // Rotary dials removed
+
 
     // Animate emergency button press
     if (this.eStopButton) {

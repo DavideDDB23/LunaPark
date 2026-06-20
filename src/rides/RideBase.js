@@ -68,8 +68,7 @@ export class RideBase {
   }
 
   /**
-   * No-op retained for call-site compatibility. Tween tracking was removed
-   * because rides are never torn down in this single-page app.
+   * No-op retained for call-site compatibility.
    */
   trackTween(tween) {
     return tween;

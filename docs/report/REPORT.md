@@ -19,7 +19,6 @@
 6. [Technical Implementation — NPCs, Camera, and Interactions](#6-technical-implementation--npcs-camera-and-interactions)
 7. [Mapping to Course Topics](#7-mapping-to-course-topics)
 8. [User Manual](#8-user-manual)
-9. [Performance Notes](#9-performance-notes)
 
 ---
 
@@ -84,7 +83,7 @@ src/
 ├── environment/
 │   ├── Ground.js, Paths.js, Fence.js, River.js, Rocks.js, Benches.js
 │   ├── FoodStalls.js, Props.js (entrance gate), Stage.js, Vegetation.js
-│   ├── Lampposts.js, PathLights.js, ExternalScenery.js
+│   ├── Lampposts.js (×12 lampposts, ×6 path spotlights)
 │   ├── Water.js            Custom GLSL wave + caustic shader
 │   ├── Sky.js              HDR crossfade sky-sphere shader
 │   ├── Fish.js             Animated clownfish with skeleton
@@ -96,6 +95,7 @@ src/
 │   ├── Visitors.js         NPC pathfinding, procedural gait (~900 lines)
 │   └── Passengers.js       Rider template system, seated poses, IK
 ├── rides/
+│   ├── RideBase.js         Shared controller base class (FPV interface, bloom layers, tween lifecycle)
 │   ├── FerrisWheel.js, Carousel.js, Coaster.js, Tagada.js
 │   ├── Balloon.js, Train.js, ShootingGallery.js
 ├── ui/
@@ -107,7 +107,10 @@ src/
     ├── EventBus.js         Pub/sub for decoupled component communication
     ├── NavGrid.js          Occupancy grid + A* for NPC pathfinding
     ├── loaders.js          GLB/HDR/texture loader wrappers
-    └── Easings.js          Shared easing functions for tweens
+    ├── easings.js          Shared easing functions for tweens
+    ├── rideUtils.js        Emissive bulbs, point lights, nightMixLerp helpers
+    ├── riverConstants.js   River centre-line / half-width functions
+    └── textures.js         Procedural canvas-texture generators (platform, canopy)
 ```
 
 ---
@@ -389,9 +392,39 @@ Three hot air balloons drift freely above the park in assigned zones. Their hori
 
 Each balloon carries 2–3 passengers. A camera rig at head height enables FPV mode from the basket.
 
-### 4.8 Shooting Gallery — Pointer-Lock Aim
+### 4.8 RideBase — Shared Controller Architecture
 
-The shooting gallery uses the browser's **Pointer Lock API** for a first-person aim experience. The user clicks the booth to enter aim mode; mouse movements rotate the aim reticle. Left-clicking fires a ray from the screen centre against target meshes. Each hit spins the target (a brief TWEEN), increments the score with a distance-based multiplier, and resets after 2 s. A 30-second countdown timer governs each game round.
+Although every ride is implemented in its own file, all six ride controllers share the same lifecycle, state, and external API through a common base class `RideBase` (`src/rides/RideBase.js`). Centralising this infrastructure in one place removed large amounts of duplicated code that would otherwise have been copy-pasted across the ride modules and, more importantly, gives the rest of the application a single contract for talking to a ride.
+
+The class owns three categories of state that every ride needs:
+
+- **`running` / `speedMultiplier`** — the on/off flag and a per-ride scaling factor applied to every animation that uses the base speed. The speed multiplier is exposed to the user via the scroll-wheel handler (Section 6.4) and clamped to the same `[0.2, 1.5]` range for every ride.
+- **`nightMix ∈ [0, 1]`** — a single exponential-interpolation factor that smoothly fades every night-only effect in and out. The interpolation is encapsulated in the helper `nightMixLerp(current, isNight, delta, rate)` from `src/utils/rideUtils.js`, which uses the standard `current + (target − current) × (1 − exp(−rate·delta))` form so that the transition speed is framerate-independent. Each ride reuses the same `nightMix` value, ensuring that all night transitions across the scene happen at the same perceptual rate.
+- **Bloom-layer membership** — every ride meshes (excluding the control panel) are pushed onto Three.js light layer 2 via `applyBloomLayers()`. This is how the post-processing `UnrealBloomPass` selectively picks up only the rides' emissive bulbs and not the static environment.
+
+Three further responsibilities are exposed as overridable hooks:
+
+- **FPV interface** — every controller subclass implements `getFpvTarget()`, `getFpvCameraPos(target, out)`, `getFpvLookTarget(target, out)`, `getFpvUp(target, out)`, and `getFpvOffset()`. `CameraManager.enterFPV(closestRide)` invokes these polymorphically, so adding a new FPV-equipped ride is a matter of subclassing `RideBase` and filling in the five methods — no changes to the camera system are required. For example, the Ferris Wheel returns its `gondolaMounts[0].cameraRig` as the target and an offset of `(0, 1.5, 0)` for head height; the panoramic train returns the locomotive's `cameraRig` and a forward-looking direction derived from the parent wagon's world quaternion.
+- **Tween lifecycle** — `trackTween(t)` registers a `TWEEN.Tween` with the controller. When the ride is stopped (or the controller is disposed of), all tracked tweens are stopped and removed, preventing callbacks from firing against stale state. This is used for the colour-picker transitions and any one-off animation a ride kicks off.
+- **EventBus hygiene** — `addEventBusListener(event, cb)` wraps the standard `eventBus.on()` call so that, on disposal, every listener the controller registered is automatically unsubscribed. This protects against the classic "listener fired after the scene was torn down" bug that would otherwise produce `Cannot read property of undefined` errors on ride stop.
+
+The common `tickSpeed(controlPanel, delta)` method returns the current eased speed factor in `[0, 1]`. It encapsulates the `smoothstep` ramp-up and ramp-down curves and keeps the `RAMP_UP` / `RAMP_DOWN` semantics consistent across rides. Most rides keep the default 0.5 s ramp; the panoramic train and the Ferris wheel use 1.5 s up / 2.0 s down for a heavier feel that matches their physical scale.
+
+### 4.9 Shooting Gallery — FPS Aim with Controller
+
+The shooting gallery (`ShootingGallery.js`) provides a first-person aim experience and is the most architecturally elaborate ride, refactored around a dedicated `ShootingGalleryController` class that owns all of its state, including the player position, target list, muzzle state, and aim history.
+
+**Booth and operator setup.** When the gallery is built, a procedurally constructed booth and a "cowboy" operator (a Quaternius character clone in a cowboy outfit) are positioned behind the counter. The cowboy's right-hand bone (`Fist.R` or `HandR`, with fallbacks to `LowerArmR`) is located by name lookup and a `9mm_pistol_low_poly_gun.glb` clone is attached to it as a child Object3D, so the gun follows the operator's hand throughout his idle animation. The same GLB is also instantiated a second time as the player-held **FPS gun** parented to the camera rig: when the user enters aim mode, the FPS gun becomes visible at the lower right of the screen and follows the mouse-controlled yaw and pitch.
+
+**Aim mode and Pointer Lock.** Clicking the booth enters aim mode: `canvas.requestPointerLock()` hides the cursor, the camera is teleported to the operator's front view, and the FPS gun's rotation tracks `aimYaw` and `aimPitch` deltas. The gun base orientation is `Y = π` (facing the targets in −Z) and the relative yaw/pitch from the mouse is applied in the `'YXZ'` Euler order. A first-frame clamp is applied so the player cannot spin past the booth (the unclamped implementation that previously let the user look behind the booth was reverted — see Section 5.4 for the design rationale).
+
+**Muzzle flash and recoil.** A `THREE.PointLight` (the `muzzleLight`, orange `0xff9922`, range 4 units, decay 1.5) is positioned at the gun's muzzle and lights up on every shot. Its intensity is integrated each frame as `muzzleFlashIntensity = max(0, muzzleFlashIntensity − dt·65)`, producing a fast exponential decay that matches the duration of a real muzzle flash. A `CanvasTexture` of a yellow-orange radial gradient with seven radial rays is rendered into a `THREE.Sprite` with `AdditiveBlending` and `depthWrite = false`; the sprite's `scale` and the material's `opacity` are bound to the same intensity so the visible flash grows and fades in lockstep with the light. When the player fires, a `recoilX` / `recoilY` kick is added to the gun rotation and decayed at `dt · 8`; a `cameraShake` vector is summed into the camera position so the viewpoint itself jumps slightly, giving the shot a tactile feel.
+
+**Targets.** Ten targets are spawned on a row across the back of the booth, evenly spaced at `bound = ±2.8` units from the centre. Each target oscillates left and right at a randomised speed and direction (`t.speed × t.direction`) and wraps around when it reaches the edge. On a hit, the target is given an initial angular velocity `omega` and `hitTime = now`; its rotation is integrated with a damped pendulum equation `α = −g·sin(θ) − damping·ω` over four sub-steps per frame, producing a believable physical "flipping back" animation. Each target mesh's `emissiveIntensity` decays from `8.0` toward zero over the recovery, making the target glow for the duration of the spin.
+
+**Scoring and timer.** When a bullet ray hits a target, the controller computes a distance-based multiplier (closer targets score more) and emits a score event. A `timer` counter runs for 30 s; on expiry the controller calls `exitAimMode()` and freezes the score. The reticle, score, and timer are all rendered into a CSS-positioned `<canvas>` HUD overlay drawn on top of the WebGL canvas.
+
+**Exit.** `ESC` releases the pointer lock via `document.exitPointerLock()`; the controller tweens the camera back to the pre-aim orbit position over 0.8 s.
 
 ---
 
@@ -411,15 +444,16 @@ The sun's colour animates from saturated orange-gold at sunrise to near-white at
 
 #### 5.1.3 Moonlight
 
-A secondary `DirectionalLight` sits opposite the sun with a cool blue-grey colour (`0x4466aa`) and max intensity `0.40` at midnight. It does not cast shadows.
+A secondary `DirectionalLight` sits opposite the sun with a cool blue-grey colour (`0x4466aa`). Its intensity ramps in as the sun sets (`smoothstep(moonHeight, 0.0, 0.3) × 6.0`), reaching a peak of approximately 6.0 at full moon elevation. It does not cast shadows.
 
 #### 5.1.4 Artificial Night Lighting
 
-Four categories activate at night:
+Five categories activate at night:
 1. **12 Lamppost PointLights** with quadratic distance attenuation
-2. **Stage Spotlight** (SpotLight) targeting the stage platform
+2. **Stage Spotlight** (SpotLight) targeting the stage platform (mounted on the roof edge)
 3. **6 Path Spotlights** at intersections for navigational legibility
 4. **Per-ride Decoration PointLights** with phase-staggered sinusoidal pulsing and runtime colour configurability
+5. **Fence String Lights** — emissive bulbs strung along the park perimeter fence, day/night aware and recolourable via the HUD colour picker (eventBus + TWEEN transition)
 
 ### 5.2 Day/Night Cycle
 
@@ -546,7 +580,7 @@ Seated leg pose (`applyChairSeatedLegs`) sets ~90° hip and knee flexion for car
 
 **Preset viewpoints**: Six hardcoded positions (keys 1–6) providing instant access to the full park overview, Ferris wheel close-up, carousel, roller coaster loop, Tagada, and stage.
 
-**First-person view (FPV)**: Pressing C enters FPV mode aboard the nearest ride. The camera is attached to ride-specific nodes (gondola seat, coaster cart, Tagada disc, train cabin, balloon basket) and updated each frame from the node's world transform. ESC exits FPV with a 0.8 s tween back to the pre-FPV position.
+**First-person view (FPV)**: Pressing C enters FPV mode aboard the nearest ride. The camera is attached to ride-specific nodes (gondola seat, coaster cart, Tagada disc, train cabin, balloon basket) and updated each frame from the node's world transform. ESC exits FPV with a 0.8 s tween back to the pre-FPV position. The FPV interface is defined on the shared `RideBase` class: every ride controller exposes `getFpvTarget()`, `getFpvCameraPos()`, `getFpvLookTarget()`, `getFpvUp()`, and `getFpvOffset()`, which `CameraManager` invokes polymorphically — adding a new FPV-equipped ride only requires implementing these five methods on its controller subclass.
 
 ### 6.4 User Interactions
 
@@ -691,41 +725,3 @@ python3 -m http.server 8080
 5. Press **Space** to freeze time and inspect a specific lighting condition.
 6. Use the **Ride Speed accordion** in the HUD to slow down a ride for a closer look at animations.
 
----
-
-## 9. Performance Notes
-
-### A.1 Expected Frame Rate
-
-Tests on a MacBook Pro M2 Pro:
-
-| Scene Condition | Approximate FPS |
-|---|---|
-| Daytime, all rides stopped, overview | ~60 FPS |
-| Daytime, all rides running | ~60 FPS |
-| Night, all rides running, lampposts on | ~55–60 FPS |
-| Night, all rides running, fireworks active | ~50–60 FPS |
-| FPV inside roller coaster | ~60 FPS |
-
-### A.2 Draw Call Budget
-
-Three.js issues approximately **200–400 draw calls** per frame. Main contributors: GLB ride models (40–80), NPC meshes (50), environment props (60–100), custom shader materials (3), shadow map pass (+100–200).
-
-### A.3 Triangle Budget
-
-Approximately **355,000 triangles** total (roller coaster GLB: ~120k, Ferris wheel: ~40k, NPC visitors: ~50k, carousel horses: ~20k, environment: ~80k, procedural geometry: ~30k).
-
-### A.4 GPU Bottlenecks
-
-- **PCF shadow map (4096²)** : ~64 MB. Main GPU memory consumer.
-- **UnrealBloomPass**: Two full-resolution Gaussian blur passes + composite.
-- **Water shader**: 5,120 quads (30,720 vertices) with 4 sine-wave evaluations per vertex.
-- **Fireworks GPU particles**: ~300 particles per burst, short-lived (<3 s).
-
-### A.5 GPU Memory Estimate
-
-Approximately **272 MB** total (4 HDR textures: ~128 MB, shadow map: ~64 MB, PBR textures: ~30 MB, GLB geometry: ~20 MB, framebuffer + bloom targets: ~30 MB).
-
----
-
-*End of Report*

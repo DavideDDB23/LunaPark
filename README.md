@@ -68,16 +68,25 @@ Open `http://localhost:8080` in a modern browser (Chrome/Firefox/Edge).
 ```
 LunaPark.nosync/
 ├── index.html                ← Entry point
-├── js/
+├── src/
 │   ├── main.js               ← Scene init, render loop, HUD wiring
-│   ├── camera/
-│   │   └── CameraManager.js  ← Orbit, fly-to, FPV, preset viewpoints
-│   ├── environment/
+│   ├── App.js                ← Application bootstrap, event wiring
+│   ├── controls/
+│   │   └── InteractionManager.js  ← Raycaster, click/wheel handlers
+│   ├── ui/
+│   │   ├── Hud.js            ← HUD components (time arc, sliders)
+│   │   ├── ControlPanel.js   ← 3D ride control panel (semaphore + lever)
+│   │   ├── RideSign.js       ← Ride name signboards
+│   │   └── RideHint.js       ← Floating interaction hints
+│   ├── rides/
+│   │   ├── RideBase.js       ← Shared ride controller base
 │   │   ├── FerrisWheel.js    ← Counter-rotating gondolas
 │   │   ├── Carousel.js       ← Bobbing horses, cone canopy
 │   │   ├── Coaster.js        ← Spline track, station state machine
 │   │   ├── Tagada.js         ← Compound oscillation, spinning disc
-│   │   ├── ControlPanel.js   ← Semaphore + lever (shared by all rides)
+│   │   ├── Train.js          ← Railway ride
+│   │   ├── Balloon.js        ← Hot air balloon navigation
+│   │   ├── ShootingGallery.js← Pointer-lock shooting game
 │   │   ├── Visitors.js       ← A* pathfinding, procedural walk
 │   │   ├── Passengers.js     ← Ride rider system
 │   │   ├── Stage.js          ← Octagonal stage, performers, spotlight
@@ -87,20 +96,23 @@ LunaPark.nosync/
 │   │   ├── Lampposts.js      ← Auto-on at night
 │   │   ├── PathLights.js     ← Path intersection spotlights
 │   │   ├── Vegetation.js     ← Trees, bushes, plants
-│   │   └── ...               ← Ground, Paths, Fence, Rocks, Benches, etc.
+│   │   ├── Fireworks.js      ← Firework show system
+│   │   └── rideUtils.js      ← Shared ride helpers (bulbs, lights)
 │   ├── lighting/
 │   │   ├── DayNightCycle.js  ← Sun/moon orbit, exposure, lamp control
 │   │   └── LightManager.js   ← Hemisphere + directional (sun)
+│   ├── people/
+│   │   └── Passengers.js     ← Rider positioning & animation
 │   └── utils/
 │       ├── EventBus.js       ← Pub/sub event system
-│       ├── InteractionManager.js ← Raycaster, click/wheel handlers
-│       └── loaders.js        ← GLB/OBJ/HDR/texture loaders
+│       ├── Easings.js        ← Custom easing functions
+│       ├── loaders.js        ← GLB/OBJ/HDR/texture loaders
+│       └── textures.js       ← Procedural texture generators
 ├── assets/
 │   ├── models/               ← GLB models (rides, props, Quaternius pack)
 │   ├── textures/             ← PBR texture sets (grass, asphalt, wood, metal)
 │   └── *.hdr                 ← HDR sky presets (day, night, sunrise, sunset)
-├── docs/                     ← Development documentation
-└── tests/                    ← Playwright test pages
+└── docs/                     ← Development documentation & report
 ```
 
 ---

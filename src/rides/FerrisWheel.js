@@ -10,8 +10,6 @@
 //     ├─ wheel          → the rotating ring + spokes
 //     ├─ cabin          → 10 SEPARATE gondola nodes (polySurfaceXXX), each its own mesh
 //     ├─ block/stairs/fence/trash → static ride dressing
-//     ├─ plane          → an imported ground plane (removed — the park has its own grass)
-//     └─ directional/ambient light → imported lights (removed — day/night owns lighting)
 //
 // The model is authored Z-up with a -90°X orientation matrix on the root and a large
 // world scale (wheel radius ~26 units), so we never trust the raw numbers: the hub centre,

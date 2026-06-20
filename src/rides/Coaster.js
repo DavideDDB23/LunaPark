@@ -502,8 +502,6 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
   }
 
 
-  // (cart lights removed)
-
   // ── Passengers: exactly two riders per carriage, on the left & right seats ──
   // The pivot is parented to the DOLLY (not the cart body), so riders inherit the
   // track's upright orientation, not the cart mesh's internal GLTF rotation.
@@ -559,7 +557,7 @@ export async function buildCoaster({ position = [45, 0, 45], camera, renderer, a
     }
   }
 
-  // ── FPV camera-rig: Centrata perfettamente nel cart e ancorata al DOLLY ──
+  // ── FPV camera-rig: Perfectly centered in the cart and anchored to the DOLLY ──
   {
     const firstCar = cars[0];
     const r0 = firstCar.riders[0];
