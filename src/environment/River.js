@@ -10,7 +10,7 @@ export const SPOTLIGHT_X_COORDS = [-85, -73, -61, -49, -37, -25, -13, 13, 25, 37
 
 export function distanceFromRiver(x, z) {
   return Math.abs(z - riverCenter(x)) - riverHalfWidth(x);
-} (refactor: extract RideBase, rideUtils, textures, riverConstants; remove ExternalScenery; restructure rides, App.js, CameraManager)
+}
 
 function buildRiverBed() {
   const segments = 200;
