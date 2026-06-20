@@ -67,7 +67,7 @@ Shadow mapping is enabled globally with `THREE.PCFSoftShadowMap`, which applies 
 | **Passengers** | Seated riders on all rides (gondolas, carousel horses, coaster seats, Tagada disc, train wagons, balloon baskets) |
 | **Particles** | Night fireworks: GPU particle system with 3 burst types (spherical, corona, willow) |
 | **Camera** | Click-to-fly, 6 preset viewpoints (keys 1–6), FPV aboard any ride, OrbitControls |
-| **HUD** | Main control panel (time arc, wind slider, time slider, auto-advance toggle, lighting colour picker, collapsible ride speed accordion), floating help panel, FPS counter, ride hotbar |
+| **HUD** | Time-of-day arc, digital clock, manual slider, auto-advance toggle, FPS counter, ride hotbar, colour picker |
 
 ### 1.5 Module Structure
 
@@ -602,9 +602,7 @@ Seated leg pose (`applyChairSeatedLegs`) sets ~90° hip and knee flexion for car
 | Toggle ride on/off | Left-click on control panel | Raycaster → ControlPanel.toggle() → speed ramp TWEEN |
 | Toggle lamppost | Left-click on lamppost | Raycaster → 3-state cycle (Auto/Manual-off/Manual-on) |
 | Toggle stage spotlight | Left-click on stage faretto | Same 3-state mechanism |
-| Adjust ride speed | HUD Ride Speed accordion | Sliders per ride (Sky Wheel, Carousel, etc.), clamped [0.2×, 1.5×] |
-| Adjust wind speed | HUD Wind slider | Adjusts drift intensity for hot air balloons |
-| Toggle help panel | HUD '?' button | Opens floating help overlay with keybindings |
+| Adjust ride speed | Scroll wheel over ride | speed clamped [0.2×, 1.5×] |
 | Preset viewpoints 1–6 | Keys 1–6 | CameraManager.flyToPreset(n) TWEEN |
 | Enter FPV | Key C near ride | CameraManager.enterFPV(closestRide) |
 | Exit FPV / aim mode | ESC | CameraManager.exitFPV() → tween back |
@@ -663,7 +661,7 @@ python3 -m http.server 8080
 | Left-click on ground/ride/object | Fly camera smoothly to that point (1.2 s) |
 | Left drag (hold) | Orbit camera around target |
 | Right drag | Pan camera |
-| Scroll wheel | Zoom in/out |
+| Scroll wheel (not over ride) | Zoom in/out |
 | Key 1 | Overview: bird's-eye view of entire park |
 | Key 2 | Ferris Wheel close-up |
 | Key 3 | Carousel close-up |
@@ -678,7 +676,7 @@ python3 -m http.server 8080
 | Input | Action |
 |---|---|
 | Left-click on ride's control panel | Start/stop that ride (speed eases in/out) |
-| Ride speed sliders (HUD) | Adjust ride speed (range: 0.2× – 1.5×) |
+| Scroll wheel while hovering over ride | Adjust ride speed (range: 0.2× – 1.5×) |
 | Bottom hotbar buttons | Enter FPV mode for the labelled ride directly |
 
 #### Lighting and Environment
@@ -704,16 +702,12 @@ python3 -m http.server 8080
 
 | Element | Location | Description |
 |---|---|---|
-| Main Panel | Top-left | Collapsible panel containing primary environment controls |
-| Time arc | Top-left (Main Panel) | Semicircular arc showing sun/moon position |
-| Digital clock | Top-left (Main Panel) | Current in-game time as HH:MM |
-| Wind slider | Top-left (Main Panel) | Adjusts the wind speed affecting the hot air balloons |
-| Time slider | Top-left (Main Panel) | Drag to manually set the time of day (0–24 h) |
-| Auto-advance toggle | Top-left (Main Panel) | Button to pause/resume automatic time |
-| Colour picker | Top-left (Main Panel) | Changes emissive colour of all ride bulbs |
-| Ride Speed accordion | Top-left (Main Panel) | Expandable section with individual speed sliders for each ride |
-| Help panel | Top-right (Floating) | Toggled via '?' button, shows complete controls and keybindings |
+| Time arc | Top-right | Semicircular arc showing sun/moon position |
+| Digital clock | Top-right | Current in-game time as HH:MM |
+| Time slider | Top-right | Drag to manually set the hour |
+| Auto-advance toggle | Top-right | Button to pause/resume automatic time |
 | FPS counter | Bottom-right | Real-time frames-per-second display |
+| Colour picker | Left panel | Changes emissive colour of all ride bulbs |
 | Ride hotbar | Bottom centre | Row of buttons to enter FPV per ride |
 
 ### 8.4 Usage Tips
@@ -723,5 +717,5 @@ python3 -m http.server 8080
 3. Click a **control panel** to start a ride, then press **C** for FPV.
 4. Use the **colour picker at night** with rides running for the best visual effect.
 5. Press **Space** to freeze time and inspect a specific lighting condition.
-6. Use the **Ride Speed accordion** in the HUD to slow down a ride for a closer look at animations.
+6. **Scroll over a ride** to slow it down for a closer look at animations.
 
